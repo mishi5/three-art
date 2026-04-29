@@ -3,12 +3,14 @@ import type { AudioInput } from "./audio/AudioInput";
 import { JointAnchors } from "./pose/JointAnchors";
 import { PoseInput } from "./pose/PoseInput";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "./types";
+import { PointCloud } from "./visuals/PointCloud";
 
 export class App {
   readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
   readonly renderer: THREE.WebGLRenderer;
   readonly jointAnchors = new JointAnchors();
+  readonly pointCloud: PointCloud;
   private poseInput: PoseInput | null = null;
   private audioInput: AudioInput | null = null;
   private rafId: number | null = null;
@@ -20,6 +22,8 @@ export class App {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.handleResize();
+    this.pointCloud = new PointCloud(this.renderer.getPixelRatio());
+    this.scene.add(this.pointCloud.object3D);
     window.addEventListener("resize", this.handleResize);
   }
 
@@ -54,9 +58,10 @@ export class App {
     tick();
   }
 
-  /** サブモジュール更新フック（後の Task で PointCloud/FragmentField を呼ぶ）*/
-  protected update(_audio: AudioFeatures): void {
-    /* override or extend */
+  /** サブモジュール更新フック（後の Task で FragmentField を呼ぶ）*/
+  protected update(audio: AudioFeatures): void {
+    const t = performance.now() / 1000;
+    this.pointCloud.update(this.jointAnchors.getSmoothed(), audio, t);
   }
 
   stop(): void {
