@@ -1,6 +1,20 @@
+# JavaScript / Node
 node_modules/
 dist/
+
+# macOS
+.DS_Store
+
+# Debug logs
+*.log
+logs/
+
+# User notes
+docs/user_memo/
+
+# Claude Code (local settings)
+.claude/settings.local.json
+
+# Working dirs
 .superpowers/
 .worktrees/
-*.log
-.DS_Store
