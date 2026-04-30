@@ -4,6 +4,7 @@ import { JointAnchors } from "./pose/JointAnchors";
 import { PoseInput } from "./pose/PoseInput";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "./types";
 import { PointCloud } from "./visuals/PointCloud";
+import { FragmentField } from "./visuals/FragmentField";
 
 export class App {
   readonly scene = new THREE.Scene();
@@ -11,6 +12,7 @@ export class App {
   readonly renderer: THREE.WebGLRenderer;
   readonly jointAnchors = new JointAnchors();
   readonly pointCloud: PointCloud;
+  readonly fragmentField: FragmentField;
   private poseInput: PoseInput | null = null;
   private audioInput: AudioInput | null = null;
   private rafId: number | null = null;
@@ -24,6 +26,8 @@ export class App {
     this.handleResize();
     this.pointCloud = new PointCloud(this.renderer.getPixelRatio());
     this.scene.add(this.pointCloud.object3D);
+    this.fragmentField = new FragmentField(this.renderer.getPixelRatio());
+    this.scene.add(this.fragmentField.object3D);
     window.addEventListener("resize", this.handleResize);
   }
 
@@ -58,10 +62,12 @@ export class App {
     tick();
   }
 
-  /** サブモジュール更新フック（後の Task で FragmentField を呼ぶ）*/
+  /** サブモジュール更新フック */
   protected update(audio: AudioFeatures): void {
     const t = performance.now() / 1000;
-    this.pointCloud.update(this.jointAnchors.getSmoothed(), audio, t);
+    const joints = this.jointAnchors.getSmoothed();
+    this.pointCloud.update(joints, audio, t);
+    this.fragmentField.update(joints, audio, t);
   }
 
   stop(): void {
