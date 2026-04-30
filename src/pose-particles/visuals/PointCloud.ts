@@ -1,10 +1,73 @@
 import * as THREE from "three";
 import { NUM_JOINTS, type AudioFeatures, type Joints } from "../types";
-import vertexShader from "./shaders/pointCloud.vert.glsl" with { type: "text" };
-import fragmentShader from "./shaders/pointCloud.frag.glsl" with { type: "text" };
 
 const POINTS_PER_JOINT = 400;
 const SIGMA = 0.08; // メートル
+
+const vertexShader = /* glsl */ `
+  #define MAX_JOINTS 13
+
+  uniform vec3 uJoints[MAX_JOINTS];
+  uniform float uTime;
+  uniform float uVolume;
+  uniform float uBass;
+  uniform float uTreble;
+  uniform float uPixelRatio;
+
+  attribute float aJointIndex;
+  attribute vec3 aOffset;
+  attribute float aSeed;
+
+  varying float vAlpha;
+
+  vec3 selectJoint(int jointIdx) {
+    if (jointIdx == 0)  return uJoints[0];
+    if (jointIdx == 1)  return uJoints[1];
+    if (jointIdx == 2)  return uJoints[2];
+    if (jointIdx == 3)  return uJoints[3];
+    if (jointIdx == 4)  return uJoints[4];
+    if (jointIdx == 5)  return uJoints[5];
+    if (jointIdx == 6)  return uJoints[6];
+    if (jointIdx == 7)  return uJoints[7];
+    if (jointIdx == 8)  return uJoints[8];
+    if (jointIdx == 9)  return uJoints[9];
+    if (jointIdx == 10) return uJoints[10];
+    if (jointIdx == 11) return uJoints[11];
+    return uJoints[12];
+  }
+
+  void main() {
+    int jointIdx = int(aJointIndex + 0.5);
+    vec3 jointPos = selectJoint(jointIdx);
+
+    float radius = 1.0 + uBass * 1.5;
+    vec3 offset = aOffset * radius;
+
+    float shimmer = sin(uTime * 30.0 + aSeed * 100.0) * uTreble * 0.02;
+    offset += normalize(aOffset + 0.0001) * shimmer;
+
+    vec3 pos = jointPos + offset;
+    vec4 mv = modelViewMatrix * vec4(pos, 1.0);
+    gl_Position = projectionMatrix * mv;
+    gl_PointSize = (3.0 + uVolume * 5.0) * uPixelRatio * (1.0 / -mv.z);
+
+    float d = length(aOffset);
+    vAlpha = (1.0 - smoothstep(0.0, 0.15, d)) * (0.5 + uTreble * 0.5);
+  }
+`;
+
+const fragmentShader = /* glsl */ `
+  precision mediump float;
+  varying float vAlpha;
+
+  void main() {
+    vec2 uv = gl_PointCoord - 0.5;
+    float d = length(uv);
+    float circle = 1.0 - smoothstep(0.4, 0.5, d);
+    if (circle < 0.01) discard;
+    gl_FragColor = vec4(vec3(1.0), circle * vAlpha);
+  }
+`;
 
 function gaussian(): number {
   // Box–Muller
@@ -35,7 +98,6 @@ export class PointCloud {
         seeds[i] = Math.random();
       }
     }
-    // dummy position attribute（Three.js は position を要求）
     geom.setAttribute("position", new THREE.BufferAttribute(new Float32Array(total * 3), 3));
     geom.setAttribute("aOffset", new THREE.BufferAttribute(offsets, 3));
     geom.setAttribute("aJointIndex", new THREE.BufferAttribute(indices, 1));
