@@ -72,8 +72,9 @@ export class App {
   protected update(audio: AudioFeatures): void {
     const t = performance.now() / 1000;
     const joints = this.jointAnchors.getSmoothed();
-    this.pointCloud.update(joints, audio, t);
-    this.fragmentField.update(joints, audio, t);
+    const vis = this.jointAnchors.getVisibility();
+    this.pointCloud.update(joints, vis, audio, t);
+    this.fragmentField.update(joints, vis, audio, t);
   }
 
   stop(): void {

@@ -8,6 +8,7 @@ const vertexShader = /* glsl */ `
   #define MAX_JOINTS 13
 
   uniform vec3 uJoints[MAX_JOINTS];
+  uniform float uVisibility[MAX_JOINTS];
   uniform float uTime;
   uniform float uVolume;
   uniform float uMid;
@@ -46,12 +47,12 @@ const vertexShader = /* glsl */ `
     vec3 drift = curlNoise(base * 0.5 + uTime * 0.1) * (0.3 + uMid * 0.5);
     vec3 pos = base + drift;
 
-    // 13 joints: inverse-square pull
+    // 13 joints: inverse-square pull, weighted by visibility
     vec3 force = vec3(0.0);
     for (int i = 0; i < MAX_JOINTS; i++) {
       vec3 toJoint = uJoints[i] - pos;
       float d2 = dot(toJoint, toJoint) + 0.05;
-      force += toJoint / d2;
+      force += toJoint / d2 * uVisibility[i];
     }
     pos += force * 0.02;
 
@@ -105,6 +106,7 @@ export class FragmentField {
       blending: THREE.AdditiveBlending,
       uniforms: {
         uJoints: { value: jointVecs },
+        uVisibility: { value: new Array(NUM_JOINTS).fill(0) },
         uTime: { value: 0 },
         uVolume: { value: 0 },
         uMid: { value: 0 },
@@ -116,11 +118,15 @@ export class FragmentField {
     this.object3D.frustumCulled = false;
   }
 
-  update(joints: Joints, audio: AudioFeatures, timeSec: number): void {
+  update(joints: Joints, visibility: Float32Array, audio: AudioFeatures, timeSec: number): void {
     const u = this.material.uniforms;
     const arr = u.uJoints!.value as THREE.Vector3[];
     for (let i = 0; i < NUM_JOINTS; i++) {
       arr[i]!.set(joints[i * 3]!, joints[i * 3 + 1]!, joints[i * 3 + 2]!);
+    }
+    const vis = u.uVisibility!.value as number[];
+    for (let i = 0; i < NUM_JOINTS; i++) {
+      vis[i] = visibility[i] ?? 0;
     }
     u.uTime!.value = timeSec;
     u.uVolume!.value = audio.volume;

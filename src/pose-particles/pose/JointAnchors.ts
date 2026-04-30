@@ -14,6 +14,8 @@ const DEFAULT_LERP = 0.25;
 export class JointAnchors {
   private smoothed: Joints = makeEmptyJoints();
   private latest: Joints = makeEmptyJoints();
+  private latestVis: Float32Array = new Float32Array(NUM_JOINTS);
+  private smoothedVis: Float32Array = new Float32Array(NUM_JOINTS);
   private hasLatest = false;
 
   /** MediaPipe の結果（または同型）を取り込む */
@@ -29,6 +31,7 @@ export class JointAnchors {
       this.latest[i * 3 + 0] = lm.x;
       this.latest[i * 3 + 1] = -lm.y; // y 反転
       this.latest[i * 3 + 2] = lm.z;
+      this.latestVis[i] = lm.visibility ?? 1;
     }
     this.hasLatest = true;
   }
@@ -41,9 +44,19 @@ export class JointAnchors {
       const tgt = this.latest[i] ?? 0;
       this.smoothed[i] = cur + (tgt - cur) * factor;
     }
+    for (let i = 0; i < NUM_JOINTS; i++) {
+      const cur = this.smoothedVis[i] ?? 0;
+      const tgt = this.latestVis[i] ?? 0;
+      this.smoothedVis[i] = cur + (tgt - cur) * factor;
+    }
   }
 
   getSmoothed(): Joints {
     return this.smoothed;
+  }
+
+  /** 関節ごとの平滑化された visibility（0..1）。シェーダで alpha や引力に乗せる */
+  getVisibility(): Float32Array {
+    return this.smoothedVis;
   }
 }

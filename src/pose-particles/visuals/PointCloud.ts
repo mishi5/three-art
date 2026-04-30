@@ -8,6 +8,7 @@ const vertexShader = /* glsl */ `
   #define MAX_JOINTS 13
 
   uniform vec3 uJoints[MAX_JOINTS];
+  uniform float uVisibility[MAX_JOINTS];
   uniform float uTime;
   uniform float uVolume;
   uniform float uBass;
@@ -36,9 +37,26 @@ const vertexShader = /* glsl */ `
     return uJoints[12];
   }
 
+  float selectVisibility(int jointIdx) {
+    if (jointIdx == 0)  return uVisibility[0];
+    if (jointIdx == 1)  return uVisibility[1];
+    if (jointIdx == 2)  return uVisibility[2];
+    if (jointIdx == 3)  return uVisibility[3];
+    if (jointIdx == 4)  return uVisibility[4];
+    if (jointIdx == 5)  return uVisibility[5];
+    if (jointIdx == 6)  return uVisibility[6];
+    if (jointIdx == 7)  return uVisibility[7];
+    if (jointIdx == 8)  return uVisibility[8];
+    if (jointIdx == 9)  return uVisibility[9];
+    if (jointIdx == 10) return uVisibility[10];
+    if (jointIdx == 11) return uVisibility[11];
+    return uVisibility[12];
+  }
+
   void main() {
     int jointIdx = int(aJointIndex + 0.5);
     vec3 jointPos = selectJoint(jointIdx);
+    float vis = selectVisibility(jointIdx);
 
     float radius = 1.0 + uBass * 1.5;
     vec3 offset = aOffset * radius;
@@ -52,7 +70,9 @@ const vertexShader = /* glsl */ `
     gl_PointSize = (3.0 + uVolume * 5.0) * uPixelRatio * (1.0 / -mv.z);
 
     float d = length(aOffset);
-    vAlpha = (1.0 - smoothstep(0.0, 0.15, d)) * (0.5 + uTreble * 0.5);
+    // smoothstep on visibility: full alpha above 0.5, fade below
+    float visGate = smoothstep(0.2, 0.6, vis);
+    vAlpha = (1.0 - smoothstep(0.0, 0.15, d)) * (0.5 + uTreble * 0.5) * visGate;
   }
 `;
 
@@ -114,6 +134,7 @@ export class PointCloud {
       blending: THREE.AdditiveBlending,
       uniforms: {
         uJoints: { value: this.toVec3Array(this.jointsUniform) },
+        uVisibility: { value: new Array(NUM_JOINTS).fill(0) },
         uTime: { value: 0 },
         uVolume: { value: 0 },
         uBass: { value: 0 },
@@ -134,11 +155,15 @@ export class PointCloud {
     return arr;
   }
 
-  update(joints: Joints, audio: AudioFeatures, timeSec: number): void {
+  update(joints: Joints, visibility: Float32Array, audio: AudioFeatures, timeSec: number): void {
     const u = this.material.uniforms;
     const arr = u.uJoints!.value as THREE.Vector3[];
     for (let i = 0; i < NUM_JOINTS; i++) {
       arr[i]!.set(joints[i * 3]!, joints[i * 3 + 1]!, joints[i * 3 + 2]!);
+    }
+    const vis = u.uVisibility!.value as number[];
+    for (let i = 0; i < NUM_JOINTS; i++) {
+      vis[i] = visibility[i] ?? 0;
     }
     u.uTime!.value = timeSec;
     u.uVolume!.value = audio.volume;
