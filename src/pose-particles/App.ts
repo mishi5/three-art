@@ -15,6 +15,7 @@ export class App {
   readonly fragmentField: FragmentField;
   private poseInput: PoseInput | null = null;
   private audioInput: AudioInput | null = null;
+  private audioCtx: AudioContext | null = null;
   private rafId: number | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -44,6 +45,11 @@ export class App {
       this.jointAnchors.update(result);
     });
     await this.poseInput.start();
+  }
+
+  getOrCreateAudioContext(): AudioContext {
+    if (!this.audioCtx) this.audioCtx = new AudioContext();
+    return this.audioCtx;
   }
 
   setAudio(audio: AudioInput | null): void {
