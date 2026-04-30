@@ -39,6 +39,15 @@ void main() {
   vec3 drift = curlNoise(base * 0.5 + uTime * 0.1) * (0.3 + uMid * 0.5);
   vec3 pos = base + drift;
 
+  // 13 関節からの逆二乗合力で吸い寄せ
+  vec3 force = vec3(0.0);
+  for (int i = 0; i < MAX_JOINTS; i++) {
+    vec3 toJoint = uJoints[i] - pos;
+    float d2 = dot(toJoint, toJoint) + 0.05;
+    force += toJoint / d2;
+  }
+  pos += force * 0.02;
+
   vec4 mv = modelViewMatrix * vec4(pos, 1.0);
   gl_Position = projectionMatrix * mv;
   gl_PointSize = (1.5 + uVolume * 1.5) * uPixelRatio * (1.0 / -mv.z);
