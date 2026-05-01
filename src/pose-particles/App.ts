@@ -185,10 +185,13 @@ export class App {
     if (this.diagHud.style.display !== "none") {
       const camPos = this.camera.position;
       const cm = this.centroidMarker.position;
-      const pcMode = (this.pointCloud as unknown as { material: THREE.ShaderMaterial }).material.uniforms.uMode?.value;
+      const pcMat = (this.pointCloud as unknown as { material: THREE.ShaderMaterial }).material;
+      const pcMode = pcMat.uniforms.uMode?.value;
+      const pcKeys = Object.keys(pcMat.uniforms);
       const ffVis = this.fragmentField.object3D.visible;
       this.diagHud.textContent =
-        `mode = ${this.settings.mode}    uMode (GPU) = ${pcMode}\n` +
+        `mode = ${this.settings.mode}    uMode value = ${pcMode}\n` +
+        `material.uniforms keys (${pcKeys.length}): ${pcKeys.join(", ")}\n` +
         `FragmentField.visible = ${ffVis}\n` +
         `camera.z = ${camPos.z.toFixed(2)}  fov=${this.camera.fov}  aspect=${this.camera.aspect.toFixed(2)}\n` +
         `shape: radius=${this.settings.shape.radius}  bassPulse=${this.settings.shape.bassPulse}\n` +
