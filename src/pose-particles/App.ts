@@ -167,6 +167,15 @@ export class App {
     this.fragmentField.object3D.visible = isBones;
     this.skeletonGuide.update(joints, vis, center);
     if (!isBones) this.skeletonGuide.object3D.visible = false;
+
+    // Dynamic camera distance: bones mode wants tight framing on a tiny
+    // re-centred body; cube/sphere modes need the camera far enough back
+    // that the shape (which can extend to ±radius) is fully visible
+    // without clipping or sitting on the camera near-plane.
+    const targetZ = isBones
+      ? 1.0
+      : Math.max(2.0, this.settings.shape.radius * 3.0 * (1.0 + this.settings.shape.bassPulse));
+    this.camera.position.z += (targetZ - this.camera.position.z) * 0.15;
     // diagnostic: origin stays at world (0,0,0); centroid sits at where the
     // visibility-weighted centroid actually is. If centering is being applied
     // to PointCloud uniformly, the cluster should sit on top of the red origin.
