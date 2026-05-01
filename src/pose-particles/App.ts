@@ -16,6 +16,8 @@ export class App {
   readonly pointCloud: PointCloud;
   readonly fragmentField: FragmentField;
   readonly skeletonGuide: SkeletonGuide;
+  readonly originMarker: THREE.Mesh;
+  readonly centroidMarker: THREE.Mesh;
   private poseInput: PoseInput | null = null;
   private debugOverlay: DebugOverlay | null = null;
   private audioInput: AudioInput | null = null;
@@ -35,6 +37,24 @@ export class App {
     this.scene.add(this.fragmentField.object3D);
     this.skeletonGuide = new SkeletonGuide();
     this.scene.add(this.skeletonGuide.object3D);
+
+    // diagnostic markers (toggled with B together with the skeleton)
+    this.originMarker = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 0.08, 0.08),
+      new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false }),
+    );
+    this.originMarker.renderOrder = 1000;
+    this.originMarker.visible = false;
+    this.scene.add(this.originMarker);
+
+    this.centroidMarker = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 0.08, 0.08),
+      new THREE.MeshBasicMaterial({ color: 0xffff00, depthTest: false }),
+    );
+    this.centroidMarker.renderOrder = 1000;
+    this.centroidMarker.visible = false;
+    this.scene.add(this.centroidMarker);
+
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("resize", this.handleResize);
   }
@@ -65,7 +85,9 @@ export class App {
   private onKeyDown = (e: KeyboardEvent): void => {
     if (e.key === "b" || e.key === "B") {
       const visible = this.skeletonGuide.toggle();
-      console.log(`[App] 3D skeleton guide: ${visible ? "ON" : "OFF"}`);
+      this.originMarker.visible = visible;
+      this.centroidMarker.visible = visible;
+      console.log(`[App] 3D debug overlays (skeleton + origin + centroid): ${visible ? "ON" : "OFF"}`);
     }
   };
 
@@ -101,6 +123,10 @@ export class App {
     this.pointCloud.update(joints, vis, center, audio, t);
     this.fragmentField.update(joints, vis, center, audio, t);
     this.skeletonGuide.update(joints, vis, center);
+    // diagnostic: origin stays at world (0,0,0); centroid sits at where the
+    // visibility-weighted centroid actually is. If centering is being applied
+    // to PointCloud uniformly, the cluster should sit on top of the red origin.
+    this.centroidMarker.position.set(center[0] ?? 0, center[1] ?? 0, center[2] ?? 0);
 
     // Diagnostic: log what's actually flowing into the shaders every ~2s.
     if (this.debugFrameCounter++ % 120 === 0) {
