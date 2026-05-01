@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { NUM_JOINTS, type AudioFeatures, type Joints } from "../types";
+import type { Settings } from "../settings";
 
 const FRAGMENT_COUNT = 10000;
 const FIELD_SIZE = 3.0; // メートル
@@ -14,6 +15,11 @@ const vertexShader = /* glsl */ `
   uniform float uVolume;
   uniform float uMid;
   uniform float uPixelRatio;
+  uniform float uDriftBase;
+  uniform float uMidDrift;
+  uniform float uJointPull;
+  uniform float uNoiseScale;
+  uniform float uTimeSpeed;
 
   attribute vec3 aBasePosition;
   attribute float aSeed;
@@ -45,7 +51,7 @@ const vertexShader = /* glsl */ `
 
   void main() {
     vec3 base = aBasePosition;
-    vec3 drift = curlNoise(base * 0.5 + uTime * 0.1) * (0.3 + uMid * 0.5);
+    vec3 drift = curlNoise(base * uNoiseScale + uTime * uTimeSpeed) * (uDriftBase + uMid * uMidDrift);
     vec3 pos = base + drift;
 
     // 13 joints: inverse-square pull, weighted by visibility, recentred
@@ -55,7 +61,7 @@ const vertexShader = /* glsl */ `
       float d2 = dot(toJoint, toJoint) + 0.05;
       force += toJoint / d2 * uVisibility[i];
     }
-    pos += force * 0.02;
+    pos += force * uJointPull;
 
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_Position = projectionMatrix * mv;
@@ -113,6 +119,11 @@ export class FragmentField {
         uVolume: { value: 0 },
         uMid: { value: 0 },
         uPixelRatio: { value: pixelRatio },
+        uDriftBase: { value: 0.3 },
+        uMidDrift: { value: 0.5 },
+        uJointPull: { value: 0.02 },
+        uNoiseScale: { value: 0.5 },
+        uTimeSpeed: { value: 0.1 },
       },
     });
 
@@ -120,7 +131,14 @@ export class FragmentField {
     this.object3D.frustumCulled = false;
   }
 
-  update(joints: Joints, visibility: Float32Array, center: Float32Array, audio: AudioFeatures, timeSec: number): void {
+  update(
+    joints: Joints,
+    visibility: Float32Array,
+    center: Float32Array,
+    audio: AudioFeatures,
+    settings: Settings,
+    timeSec: number,
+  ): void {
     const u = this.material.uniforms;
     const arr = u.uJoints!.value as THREE.Vector3[];
     for (let i = 0; i < NUM_JOINTS; i++) {
@@ -134,5 +152,10 @@ export class FragmentField {
     u.uTime!.value = timeSec;
     u.uVolume!.value = audio.volume;
     u.uMid!.value = audio.mid;
+    u.uDriftBase!.value = settings.fragmentField.driftBase;
+    u.uMidDrift!.value = settings.fragmentField.midDrift;
+    u.uJointPull!.value = settings.fragmentField.jointPull;
+    u.uNoiseScale!.value = settings.fragmentField.noiseScale;
+    u.uTimeSpeed!.value = settings.fragmentField.timeSpeed;
   }
 }

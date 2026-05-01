@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { NUM_JOINTS, type AudioFeatures, type Joints } from "../types";
+import type { Settings } from "../settings";
 
 const POINTS_PER_JOINT = 400;
 const SIGMA = 0.08; // メートル
@@ -15,6 +16,11 @@ const vertexShader = /* glsl */ `
   uniform float uBass;
   uniform float uTreble;
   uniform float uPixelRatio;
+  uniform float uBassExpansion;
+  uniform float uTrebleShimmer;
+  uniform float uAmbientShimmer;
+  uniform float uBaseSize;
+  uniform float uVolumeSize;
 
   attribute float aJointIndex;
   attribute vec3 aOffset;
@@ -59,16 +65,17 @@ const vertexShader = /* glsl */ `
     vec3 jointPos = selectJoint(jointIdx) - uCenter;
     float vis = selectVisibility(jointIdx);
 
-    float radius = 1.0 + uBass * 1.5;
+    float radius = 1.0 + uBass * uBassExpansion;
     vec3 offset = aOffset * radius;
 
-    float shimmer = sin(uTime * 30.0 + aSeed * 100.0) * uTreble * 0.02;
+    float shimmerAmp = uTreble * uTrebleShimmer + uAmbientShimmer;
+    float shimmer = sin(uTime * 30.0 + aSeed * 100.0) * shimmerAmp;
     offset += normalize(aOffset + 0.0001) * shimmer;
 
     vec3 pos = jointPos + offset;
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_Position = projectionMatrix * mv;
-    gl_PointSize = (3.0 + uVolume * 5.0) * uPixelRatio * (1.0 / -mv.z);
+    gl_PointSize = (uBaseSize + uVolume * uVolumeSize) * uPixelRatio * (1.0 / -mv.z);
 
     float d = length(aOffset);
     // smoothstep on visibility: full alpha above 0.5, fade below
@@ -142,6 +149,11 @@ export class PointCloud {
         uBass: { value: 0 },
         uTreble: { value: 0 },
         uPixelRatio: { value: pixelRatio },
+        uBassExpansion: { value: 1.5 },
+        uTrebleShimmer: { value: 0.02 },
+        uAmbientShimmer: { value: 0.0 },
+        uBaseSize: { value: 3.0 },
+        uVolumeSize: { value: 5.0 },
       },
     });
 
@@ -157,7 +169,14 @@ export class PointCloud {
     return arr;
   }
 
-  update(joints: Joints, visibility: Float32Array, center: Float32Array, audio: AudioFeatures, timeSec: number): void {
+  update(
+    joints: Joints,
+    visibility: Float32Array,
+    center: Float32Array,
+    audio: AudioFeatures,
+    settings: Settings,
+    timeSec: number,
+  ): void {
     const u = this.material.uniforms;
     const arr = u.uJoints!.value as THREE.Vector3[];
     for (let i = 0; i < NUM_JOINTS; i++) {
@@ -172,5 +191,10 @@ export class PointCloud {
     u.uVolume!.value = audio.volume;
     u.uBass!.value = audio.bass;
     u.uTreble!.value = audio.treble;
+    u.uBassExpansion!.value = settings.pointCloud.bassExpansion;
+    u.uTrebleShimmer!.value = settings.pointCloud.trebleShimmer;
+    u.uAmbientShimmer!.value = settings.pointCloud.ambientShimmer;
+    u.uBaseSize!.value = settings.pointCloud.baseSize;
+    u.uVolumeSize!.value = settings.pointCloud.volumeSize;
   }
 }

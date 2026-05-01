@@ -7,6 +7,8 @@ import { PointCloud } from "./visuals/PointCloud";
 import { FragmentField } from "./visuals/FragmentField";
 import { SkeletonGuide } from "./visuals/SkeletonGuide";
 import { DebugOverlay } from "./ui/DebugOverlay";
+import { SettingsPanel } from "./ui/SettingsPanel";
+import { makeDefaultSettings, type Settings } from "./settings";
 
 export class App {
   readonly scene = new THREE.Scene();
@@ -19,6 +21,8 @@ export class App {
   readonly originMarker: THREE.Mesh;
   readonly centroidMarker: THREE.Mesh;
   private diagHud: HTMLDivElement;
+  readonly settings: Settings = makeDefaultSettings();
+  private settingsPanel: SettingsPanel;
   private poseInput: PoseInput | null = null;
   private debugOverlay: DebugOverlay | null = null;
   private audioInput: AudioInput | null = null;
@@ -72,6 +76,8 @@ export class App {
       border: 1px solid rgba(255,255,255,0.2);
     `;
     document.body.appendChild(this.diagHud);
+
+    this.settingsPanel = new SettingsPanel(this.settings);
 
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("resize", this.handleResize);
@@ -144,8 +150,16 @@ export class App {
     const joints = this.jointAnchors.getSmoothed();
     const vis = this.jointAnchors.getVisibility();
     const center = this.jointAnchors.getCenter();
-    this.pointCloud.update(joints, vis, center, audio, t);
-    this.fragmentField.update(joints, vis, center, audio, t);
+    const g = this.settings.audioGain;
+    const gainedAudio: AudioFeatures = {
+      volume: audio.volume * g.volume,
+      bass: audio.bass * g.bass,
+      mid: audio.mid * g.mid,
+      treble: audio.treble * g.treble,
+      fft: audio.fft,
+    };
+    this.pointCloud.update(joints, vis, center, gainedAudio, this.settings, t);
+    this.fragmentField.update(joints, vis, center, gainedAudio, this.settings, t);
     this.skeletonGuide.update(joints, vis, center);
     // diagnostic: origin stays at world (0,0,0); centroid sits at where the
     // visibility-weighted centroid actually is. If centering is being applied
@@ -193,6 +207,7 @@ export class App {
     this.poseInput?.stop();
     this.audioInput?.stop();
     this.debugOverlay?.dispose();
+    this.settingsPanel.dispose();
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("keydown", this.onKeyDown);
   }
