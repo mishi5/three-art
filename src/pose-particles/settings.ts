@@ -86,7 +86,8 @@ export function makeDefaultSettings(): Settings {
       timeSpeed: 0.1,
     },
     shape: {
-      radius: 1.0,
+      // ~0.4m fits comfortably in view at camera z=1.0, FOV 50°.
+      radius: 0.4,
       bassPulse: 0.5,
     },
     color: {

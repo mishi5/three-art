@@ -160,7 +160,13 @@ export class App {
     };
     this.pointCloud.update(joints, vis, center, gainedAudio, this.settings, t);
     this.fragmentField.update(joints, vis, center, gainedAudio, this.settings, t);
+    // bones mode = body-driven art with floating fragments around it.
+    // cube/sphere mode = single shape at the centre, fragments and skeleton
+    // guides have no role and would be visual noise.
+    const isBones = this.settings.mode === "bones";
+    this.fragmentField.object3D.visible = isBones;
     this.skeletonGuide.update(joints, vis, center);
+    if (!isBones) this.skeletonGuide.object3D.visible = false;
     // diagnostic: origin stays at world (0,0,0); centroid sits at where the
     // visibility-weighted centroid actually is. If centering is being applied
     // to PointCloud uniformly, the cluster should sit on top of the red origin.

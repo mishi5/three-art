@@ -104,22 +104,32 @@ const vertexShader = /* glsl */ `
       float visGate = smoothstep(0.2, 0.6, vis);
       visAlpha = (1.0 - smoothstep(0.0, 0.15, d)) * visGate;
     } else if (uMode < 1.5) {
-      // cube: uniform fill of a centred cube
+      // cube: particles uniformly on the SURFACE of a centred cube
+      // Pick a face uniformly (6 faces) using a separate hash, then place
+      // randomly on that face.
+      float faceHash = fract(aSeed * 13.717 + aJointIndex * 0.41);
       vec3 r = hash3unit(aSeed * 7.0 + aJointIndex + 1.0);
-      vec3 cubePos = (r - 0.5) * 2.0 * uShapeRadius * (1.0 + uBass * uShapeBassPulse);
-      cubePos += normalize(r - 0.5 + 0.0001) * shimmer;
-      pos = cubePos;
-      visAlpha = 0.7;
+      vec2 uv = (r.xy - 0.5) * 2.0;       // [-1, 1]^2
+      vec3 cubePos;
+      if (faceHash < 0.16667)      cubePos = vec3( 1.0, uv.x, uv.y);
+      else if (faceHash < 0.33333) cubePos = vec3(-1.0, uv.x, uv.y);
+      else if (faceHash < 0.50000) cubePos = vec3(uv.x,  1.0, uv.y);
+      else if (faceHash < 0.66667) cubePos = vec3(uv.x, -1.0, uv.y);
+      else if (faceHash < 0.83333) cubePos = vec3(uv.x, uv.y,  1.0);
+      else                         cubePos = vec3(uv.x, uv.y, -1.0);
+      float scale = uShapeRadius * (1.0 + uBass * uShapeBassPulse);
+      pos = cubePos * scale + normalize(cubePos + 0.0001) * shimmer;
+      visAlpha = 0.85;
     } else {
-      // sphere: uniformly distributed within a sphere
+      // sphere: particles uniformly on the SURFACE of a sphere
       vec3 r = hash3unit(aSeed * 7.0 + aJointIndex + 1.0);
       float theta = r.x * 6.2831853;
       float cosPhi = 2.0 * r.y - 1.0;
       float sinPhi = sqrt(max(0.0, 1.0 - cosPhi * cosPhi));
-      float radius = pow(r.z, 1.0 / 3.0) * uShapeRadius * (1.0 + uBass * uShapeBassPulse);
       vec3 dir = vec3(sinPhi * cos(theta), sinPhi * sin(theta), cosPhi);
+      float radius = uShapeRadius * (1.0 + uBass * uShapeBassPulse);
       pos = dir * radius + dir * shimmer;
-      visAlpha = 0.7;
+      visAlpha = 0.85;
     }
 
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
