@@ -22,6 +22,7 @@ export class App {
   readonly originMarker: THREE.Mesh;
   readonly centroidMarker: THREE.Mesh;
   private diagHud: HTMLDivElement;
+  private debugVisible = false;
   readonly settings: Settings = loadSettings();
   private settingsPanel: SettingsPanel;
   private orbit: OrbitControls;
@@ -127,12 +128,17 @@ export class App {
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
+    // Don't hijack keys when the user is typing into the GUI inputs.
+    const target = e.target as HTMLElement | null;
+    if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
     if (e.key === "b" || e.key === "B") {
-      const visible = this.skeletonGuide.toggle();
-      this.originMarker.visible = visible;
-      this.centroidMarker.visible = visible;
-      this.diagHud.style.display = visible ? "block" : "none";
-      console.log(`[App] 3D debug overlays: ${visible ? "ON" : "OFF"}`);
+      this.debugVisible = !this.debugVisible;
+      this.originMarker.visible = this.debugVisible;
+      this.centroidMarker.visible = this.debugVisible;
+      this.diagHud.style.display = this.debugVisible ? "block" : "none";
+      // Skeleton only meaningful in bones mode; reflect both flags.
+      this.skeletonGuide.object3D.visible = this.debugVisible && this.settings.mode === "bones";
+      console.log(`[App] 3D debug overlays: ${this.debugVisible ? "ON" : "OFF"}`);
     }
   };
 
@@ -197,7 +203,9 @@ export class App {
     const isBones = this.settings.mode === "bones";
     this.fragmentField.object3D.visible = isBones;
     this.skeletonGuide.update(joints, vis, center);
-    if (!isBones) this.skeletonGuide.object3D.visible = false;
+    // Skeleton visibility = debug toggle AND bones mode (no body to draw in
+    // cube/sphere). The single source of truth lives on this.debugVisible.
+    this.skeletonGuide.object3D.visible = this.debugVisible && isBones;
 
     // When the user changes mode, snap the camera to a sensible default
     // distance for that mode so the new shape is fully visible. Once they're
