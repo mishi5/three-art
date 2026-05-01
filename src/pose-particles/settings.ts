@@ -67,6 +67,64 @@ export interface Settings {
   };
 }
 
+const STORAGE_KEY = "pose-particles.settings.v1";
+
+/**
+ * Read settings from localStorage if present, otherwise return defaults.
+ * Missing keys (from older snapshots) are filled in from defaults.
+ */
+export function loadSettings(): Settings {
+  const defaults = makeDefaultSettings();
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return defaults;
+    const parsed = JSON.parse(raw) as Partial<Settings>;
+    return deepMerge(defaults, parsed);
+  } catch {
+    return defaults;
+  }
+}
+
+export function saveSettings(s: Settings): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+  } catch {
+    // ignore quota / privacy mode errors
+  }
+}
+
+export function clearSettings(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** Deep-merge `over` into a fresh copy of `base`, preserving base structure. */
+function deepMerge<T>(base: T, over: Partial<T>): T {
+  if (typeof base !== "object" || base === null) return base;
+  const out: Record<string, unknown> = { ...(base as Record<string, unknown>) };
+  for (const key of Object.keys(over as object)) {
+    const baseVal = (base as Record<string, unknown>)[key];
+    const overVal = (over as Record<string, unknown>)[key];
+    if (overVal === undefined) continue;
+    if (
+      baseVal !== null &&
+      typeof baseVal === "object" &&
+      !Array.isArray(baseVal) &&
+      overVal !== null &&
+      typeof overVal === "object" &&
+      !Array.isArray(overVal)
+    ) {
+      out[key] = deepMerge(baseVal, overVal as Partial<typeof baseVal>);
+    } else {
+      out[key] = overVal;
+    }
+  }
+  return out as T;
+}
+
 export function makeDefaultSettings(): Settings {
   return {
     mode: "bones",

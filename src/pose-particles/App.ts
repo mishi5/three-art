@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { AudioInput } from "./audio/AudioInput";
 import { JointAnchors } from "./pose/JointAnchors";
 import { PoseInput } from "./pose/PoseInput";
@@ -8,7 +9,7 @@ import { FragmentField } from "./visuals/FragmentField";
 import { SkeletonGuide } from "./visuals/SkeletonGuide";
 import { DebugOverlay } from "./ui/DebugOverlay";
 import { SettingsPanel } from "./ui/SettingsPanel";
-import { makeDefaultSettings, type Settings } from "./settings";
+import { loadSettings, type Settings, type RenderMode } from "./settings";
 
 export class App {
   readonly scene = new THREE.Scene();
@@ -21,8 +22,10 @@ export class App {
   readonly originMarker: THREE.Mesh;
   readonly centroidMarker: THREE.Mesh;
   private diagHud: HTMLDivElement;
-  readonly settings: Settings = makeDefaultSettings();
+  readonly settings: Settings = loadSettings();
   private settingsPanel: SettingsPanel;
+  private orbit: OrbitControls;
+  private lastMode: RenderMode | null = null;
   private poseInput: PoseInput | null = null;
   private debugOverlay: DebugOverlay | null = null;
   private audioInput: AudioInput | null = null;
@@ -78,6 +81,18 @@ export class App {
     document.body.appendChild(this.diagHud);
 
     this.settingsPanel = new SettingsPanel(this.settings);
+
+    // Mouse + keyboard camera control. Defaults: left-drag = rotate,
+    // right-drag = pan, wheel = zoom. Damping for smoothness.
+    this.orbit = new OrbitControls(this.camera, this.renderer.domElement);
+    this.orbit.enableDamping = true;
+    this.orbit.dampingFactor = 0.08;
+    this.orbit.target.set(0, 0, 0);
+    this.orbit.minDistance = 0.3;
+    this.orbit.maxDistance = 30;
+    // Standard arrow-key panning is handled by OrbitControls already
+    // (listens on window when enabled).
+    this.orbit.listenToKeyEvents(window);
 
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("resize", this.handleResize);
@@ -168,14 +183,19 @@ export class App {
     this.skeletonGuide.update(joints, vis, center);
     if (!isBones) this.skeletonGuide.object3D.visible = false;
 
-    // Dynamic camera distance: bones mode wants tight framing on a tiny
-    // re-centred body; cube/sphere modes need the camera far enough back
-    // that the shape (which can extend to ±radius) is fully visible
-    // without clipping or sitting on the camera near-plane.
-    const targetZ = isBones
-      ? 1.0
-      : Math.max(2.0, this.settings.shape.radius * 3.0 * (1.0 + this.settings.shape.bassPulse));
-    this.camera.position.z += (targetZ - this.camera.position.z) * 0.15;
+    // When the user changes mode, snap the camera to a sensible default
+    // distance for that mode so the new shape is fully visible. Once they're
+    // in a mode, OrbitControls owns the camera (mouse drag / wheel / keys).
+    if (this.settings.mode !== this.lastMode) {
+      const targetZ = isBones
+        ? 1.0
+        : Math.max(2.0, this.settings.shape.radius * 3.0 * (1.0 + this.settings.shape.bassPulse));
+      this.camera.position.set(0, 0, targetZ);
+      this.orbit.target.set(0, 0, 0);
+      this.orbit.update();
+      this.lastMode = this.settings.mode;
+    }
+    this.orbit.update();
     // diagnostic: origin stays at world (0,0,0); centroid sits at where the
     // visibility-weighted centroid actually is. If centering is being applied
     // to PointCloud uniformly, the cluster should sit on top of the red origin.

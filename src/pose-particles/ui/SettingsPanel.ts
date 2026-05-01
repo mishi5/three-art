@@ -1,11 +1,13 @@
 import GUI from "lil-gui";
 import type { Settings } from "../settings";
-import { RENDER_MODES } from "../settings";
+import { RENDER_MODES, makeDefaultSettings, saveSettings, clearSettings } from "../settings";
 
 export class SettingsPanel {
   private gui: GUI;
+  private settings: Settings;
 
   constructor(settings: Settings) {
+    this.settings = settings;
     this.gui = new GUI({ title: "Settings", width: 300 });
 
     // Mode (top-level, no folder so it's hard to miss)
@@ -45,7 +47,20 @@ export class SettingsPanel {
     ff.add(settings.fragmentField, "noiseScale", 0.05, 3, 0.05).name("noise scale");
     ff.add(settings.fragmentField, "timeSpeed", 0, 1, 0.01).name("noise speed");
 
-    // Place under the existing top-right control panel.
+    // Preset save / load / reset
+    const presets = this.gui.addFolder("Preset");
+    const actions = {
+      reset: () => this.applyPreset(makeDefaultSettings(), { clearStorage: true }),
+      exportJson: () => this.exportJson(),
+      importJson: () => this.importJson(),
+    };
+    presets.add(actions, "reset").name("reset to defaults");
+    presets.add(actions, "exportJson").name("export preset (.json)");
+    presets.add(actions, "importJson").name("import preset (.json)");
+
+    // Auto-save to localStorage on any change.
+    this.gui.onChange(() => saveSettings(settings));
+
     const dom = this.gui.domElement;
     dom.style.position = "fixed";
     dom.style.top = "180px";
@@ -55,7 +70,74 @@ export class SettingsPanel {
     dom.style.overflowY = "auto";
   }
 
+  /** Replaces the live settings object's contents with another set, then refreshes the GUI. */
+  applyPreset(next: Settings, opts: { clearStorage?: boolean } = {}): void {
+    deepAssign(this.settings as unknown as Record<string, unknown>, next as unknown as Record<string, unknown>);
+    this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
+    if (opts.clearStorage) clearSettings();
+    else saveSettings(this.settings);
+  }
+
+  private exportJson(): void {
+    const json = JSON.stringify(this.settings, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    a.download = `pose-particles-preset-${ts}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  private importJson(): void {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json,.json";
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      file.text().then((text) => {
+        try {
+          const parsed = JSON.parse(text) as Partial<Settings>;
+          deepAssign(
+            this.settings as unknown as Record<string, unknown>,
+            parsed as unknown as Record<string, unknown>,
+          );
+          this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
+          saveSettings(this.settings);
+        } catch (e) {
+          alert("preset import failed: " + (e instanceof Error ? e.message : String(e)));
+        }
+      });
+    });
+    input.click();
+  }
+
   dispose(): void {
     this.gui.destroy();
+  }
+}
+
+/** In-place deep assign: copies `over` into `target`, preserving target identity. */
+function deepAssign(target: Record<string, unknown>, over: Record<string, unknown>): void {
+  for (const key of Object.keys(over)) {
+    const overVal = over[key];
+    if (overVal === undefined) continue;
+    const tVal = target[key];
+    if (
+      tVal !== null &&
+      typeof tVal === "object" &&
+      !Array.isArray(tVal) &&
+      overVal !== null &&
+      typeof overVal === "object" &&
+      !Array.isArray(overVal)
+    ) {
+      deepAssign(tVal as Record<string, unknown>, overVal as Record<string, unknown>);
+    } else {
+      target[key] = overVal;
+    }
   }
 }
