@@ -78,7 +78,12 @@ export class App {
   private handleResize = (): void => {
     const w = window.innerWidth;
     const h = window.innerHeight;
-    this.renderer.setSize(w, h, false);
+    // updateStyle = true (default) so the canvas CSS size matches the viewport.
+    // Passing false here was a bug: with pixelRatio=2 the drawing buffer became
+    // 2× larger but CSS was unset, so the canvas was displayed at 2× CSS size
+    // and only its upper-left quadrant fit in the viewport — pushing the world
+    // origin to the visible bottom-right corner.
+    this.renderer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   };
