@@ -28,7 +28,9 @@ export class App {
   constructor(canvas: HTMLCanvasElement) {
     this.scene.background = new THREE.Color(0x000000);
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.01, 100);
-    this.camera.position.set(0, 0, 2.5);
+    // 体（centering 後の visible 関節が原点まわり ±0.25m くらい）が画面の
+    // 過半を占めるよう、カメラを近づける（2.5m → 1.0m）。
+    this.camera.position.set(0, 0, 1.0);
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.handleResize();
