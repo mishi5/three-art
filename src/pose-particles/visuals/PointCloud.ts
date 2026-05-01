@@ -21,12 +21,35 @@ const vertexShader = /* glsl */ `
   uniform float uAmbientShimmer;
   uniform float uBaseSize;
   uniform float uVolumeSize;
+  uniform int uMode;            // 0=bones, 1=cube, 2=sphere
+  uniform float uShapeRadius;
+  uniform float uShapeBassPulse;
+  uniform float uHueBase;
+  uniform float uHueSpread;
+  uniform float uBassHueShift;
+  uniform float uSaturation;
+  uniform float uTrebleBoost;
 
   attribute float aJointIndex;
   attribute vec3 aOffset;
   attribute float aSeed;
 
   varying float vAlpha;
+  varying vec3 vColor;
+
+  vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+  }
+
+  vec3 hash3unit(float seed) {
+    return vec3(
+      fract(sin(seed * 12.9898) * 43758.5453),
+      fract(sin(seed * 78.2330) * 12345.6789),
+      fract(sin(seed * 39.3460) * 98765.4321)
+    );
+  }
 
   vec3 selectJoint(int jointIdx) {
     if (jointIdx == 0)  return uJoints[0];
@@ -62,38 +85,67 @@ const vertexShader = /* glsl */ `
 
   void main() {
     int jointIdx = int(aJointIndex + 0.5);
-    vec3 jointPos = selectJoint(jointIdx) - uCenter;
-    float vis = selectVisibility(jointIdx);
-
-    float radius = 1.0 + uBass * uBassExpansion;
-    vec3 offset = aOffset * radius;
+    vec3 pos;
+    float vis;
+    float visAlpha;
 
     float shimmerAmp = uTreble * uTrebleShimmer + uAmbientShimmer;
     float shimmer = sin(uTime * 30.0 + aSeed * 100.0) * shimmerAmp;
-    offset += normalize(aOffset + 0.0001) * shimmer;
 
-    vec3 pos = jointPos + offset;
+    if (uMode == 0) {
+      // bones: per-joint gaussian cluster
+      vec3 jointPos = selectJoint(jointIdx) - uCenter;
+      vis = selectVisibility(jointIdx);
+      float radius = 1.0 + uBass * uBassExpansion;
+      vec3 offset = aOffset * radius;
+      offset += normalize(aOffset + 0.0001) * shimmer;
+      pos = jointPos + offset;
+      float d = length(aOffset);
+      float visGate = smoothstep(0.2, 0.6, vis);
+      visAlpha = (1.0 - smoothstep(0.0, 0.15, d)) * visGate;
+    } else if (uMode == 1) {
+      // cube: uniform fill of a centred cube
+      vec3 r = hash3unit(aSeed * 7.0 + aJointIndex + 1.0);
+      vec3 cubePos = (r - 0.5) * 2.0 * uShapeRadius * (1.0 + uBass * uShapeBassPulse);
+      cubePos += normalize(r - 0.5 + 0.0001) * shimmer;
+      pos = cubePos;
+      visAlpha = 0.7;
+    } else {
+      // sphere: uniformly distributed within a sphere
+      vec3 r = hash3unit(aSeed * 7.0 + aJointIndex + 1.0);
+      float theta = r.x * 6.2831853;
+      float cosPhi = 2.0 * r.y - 1.0;
+      float sinPhi = sqrt(max(0.0, 1.0 - cosPhi * cosPhi));
+      float radius = pow(r.z, 1.0 / 3.0) * uShapeRadius * (1.0 + uBass * uShapeBassPulse);
+      vec3 dir = vec3(sinPhi * cos(theta), sinPhi * sin(theta), cosPhi);
+      pos = dir * radius + dir * shimmer;
+      visAlpha = 0.7;
+    }
+
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_Position = projectionMatrix * mv;
     gl_PointSize = (uBaseSize + uVolume * uVolumeSize) * uPixelRatio * (1.0 / -mv.z);
 
-    float d = length(aOffset);
-    // smoothstep on visibility: full alpha above 0.5, fade below
-    float visGate = smoothstep(0.2, 0.6, vis);
-    vAlpha = (1.0 - smoothstep(0.0, 0.15, d)) * (0.5 + uTreble * 0.5) * visGate;
+    // Per-particle colour (HSV).
+    float hue = fract(uHueBase + (aSeed - 0.5) * uHueSpread + uBass * uBassHueShift);
+    float bright = 1.0 + uTreble * uTrebleBoost;
+    vColor = hsv2rgb(vec3(hue, uSaturation, bright));
+    // Treble drives a small alpha boost on top of the layout-derived alpha.
+    vAlpha = visAlpha * (0.5 + uTreble * 0.5);
   }
 `;
 
 const fragmentShader = /* glsl */ `
   precision mediump float;
   varying float vAlpha;
+  varying vec3 vColor;
 
   void main() {
     vec2 uv = gl_PointCoord - 0.5;
     float d = length(uv);
     float circle = 1.0 - smoothstep(0.4, 0.5, d);
     if (circle < 0.01) discard;
-    gl_FragColor = vec4(vec3(1.0), circle * vAlpha);
+    gl_FragColor = vec4(vColor, circle * vAlpha);
   }
 `;
 
@@ -154,6 +206,14 @@ export class PointCloud {
         uAmbientShimmer: { value: 0.0 },
         uBaseSize: { value: 3.0 },
         uVolumeSize: { value: 5.0 },
+        uMode: { value: 0 },
+        uShapeRadius: { value: 1.0 },
+        uShapeBassPulse: { value: 0.5 },
+        uHueBase: { value: 0.6 },
+        uHueSpread: { value: 0.0 },
+        uBassHueShift: { value: 0.0 },
+        uSaturation: { value: 0.0 },
+        uTrebleBoost: { value: 0.3 },
       },
     });
 
@@ -196,5 +256,13 @@ export class PointCloud {
     u.uAmbientShimmer!.value = settings.pointCloud.ambientShimmer;
     u.uBaseSize!.value = settings.pointCloud.baseSize;
     u.uVolumeSize!.value = settings.pointCloud.volumeSize;
+    u.uMode!.value = settings.mode === "bones" ? 0 : settings.mode === "cube" ? 1 : 2;
+    u.uShapeRadius!.value = settings.shape.radius;
+    u.uShapeBassPulse!.value = settings.shape.bassPulse;
+    u.uHueBase!.value = settings.color.hueBase;
+    u.uHueSpread!.value = settings.color.hueSpread;
+    u.uBassHueShift!.value = settings.color.bassHueShift;
+    u.uSaturation!.value = settings.color.saturation;
+    u.uTrebleBoost!.value = settings.color.trebleBoost;
   }
 }

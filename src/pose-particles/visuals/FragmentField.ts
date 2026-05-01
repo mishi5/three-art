@@ -20,11 +20,25 @@ const vertexShader = /* glsl */ `
   uniform float uJointPull;
   uniform float uNoiseScale;
   uniform float uTimeSpeed;
+  uniform float uHueBase;
+  uniform float uHueSpread;
+  uniform float uBassHueShift;
+  uniform float uBass;
+  uniform float uTreble;
+  uniform float uSaturation;
+  uniform float uTrebleBoost;
 
   attribute vec3 aBasePosition;
   attribute float aSeed;
 
   varying float vAlpha;
+  varying vec3 vColor;
+
+  vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+  }
 
   vec3 hash3(vec3 p) {
     p = vec3(
@@ -67,19 +81,24 @@ const vertexShader = /* glsl */ `
     gl_Position = projectionMatrix * mv;
     gl_PointSize = (1.5 + uVolume * 1.5) * uPixelRatio * (1.0 / -mv.z);
     vAlpha = 0.4 + uVolume * 0.4;
+
+    float hue = fract(uHueBase + (aSeed - 0.5) * uHueSpread + uBass * uBassHueShift);
+    float bright = 0.85 * (1.0 + uTreble * uTrebleBoost);
+    vColor = hsv2rgb(vec3(hue, uSaturation, bright));
   }
 `;
 
 const fragmentShader = /* glsl */ `
   precision mediump float;
   varying float vAlpha;
+  varying vec3 vColor;
 
   void main() {
     vec2 uv = gl_PointCoord - 0.5;
     float d = length(uv);
     float circle = 1.0 - smoothstep(0.35, 0.5, d);
     if (circle < 0.01) discard;
-    gl_FragColor = vec4(vec3(0.85), circle * vAlpha);
+    gl_FragColor = vec4(vColor, circle * vAlpha);
   }
 `;
 
@@ -124,6 +143,13 @@ export class FragmentField {
         uJointPull: { value: 0.02 },
         uNoiseScale: { value: 0.5 },
         uTimeSpeed: { value: 0.1 },
+        uHueBase: { value: 0.6 },
+        uHueSpread: { value: 0.0 },
+        uBassHueShift: { value: 0.0 },
+        uBass: { value: 0 },
+        uTreble: { value: 0 },
+        uSaturation: { value: 0.0 },
+        uTrebleBoost: { value: 0.3 },
       },
     });
 
@@ -152,10 +178,17 @@ export class FragmentField {
     u.uTime!.value = timeSec;
     u.uVolume!.value = audio.volume;
     u.uMid!.value = audio.mid;
+    u.uBass!.value = audio.bass;
+    u.uTreble!.value = audio.treble;
     u.uDriftBase!.value = settings.fragmentField.driftBase;
     u.uMidDrift!.value = settings.fragmentField.midDrift;
     u.uJointPull!.value = settings.fragmentField.jointPull;
     u.uNoiseScale!.value = settings.fragmentField.noiseScale;
     u.uTimeSpeed!.value = settings.fragmentField.timeSpeed;
+    u.uHueBase!.value = settings.color.hueBase;
+    u.uHueSpread!.value = settings.color.hueSpread;
+    u.uBassHueShift!.value = settings.color.bassHueShift;
+    u.uSaturation!.value = settings.color.saturation;
+    u.uTrebleBoost!.value = settings.color.trebleBoost;
   }
 }
