@@ -18,6 +18,7 @@ export class App {
   readonly skeletonGuide: SkeletonGuide;
   readonly originMarker: THREE.Mesh;
   readonly centroidMarker: THREE.Mesh;
+  private diagHud: HTMLDivElement;
   private poseInput: PoseInput | null = null;
   private debugOverlay: DebugOverlay | null = null;
   private audioInput: AudioInput | null = null;
@@ -38,22 +39,37 @@ export class App {
     this.skeletonGuide = new SkeletonGuide();
     this.scene.add(this.skeletonGuide.object3D);
 
-    // diagnostic markers (toggled with B together with the skeleton)
+    // diagnostic markers (toggled with B together with the skeleton).
+    // BIG so they cannot be hidden by the particle haze.
     this.originMarker = new THREE.Mesh(
-      new THREE.BoxGeometry(0.08, 0.08, 0.08),
-      new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false }),
+      new THREE.BoxGeometry(0.3, 0.3, 0.3),
+      new THREE.MeshBasicMaterial({ color: 0xff0000, depthTest: false, wireframe: true }),
     );
     this.originMarker.renderOrder = 1000;
     this.originMarker.visible = false;
     this.scene.add(this.originMarker);
 
     this.centroidMarker = new THREE.Mesh(
-      new THREE.BoxGeometry(0.08, 0.08, 0.08),
-      new THREE.MeshBasicMaterial({ color: 0xffff00, depthTest: false }),
+      new THREE.BoxGeometry(0.3, 0.3, 0.3),
+      new THREE.MeshBasicMaterial({ color: 0xffff00, depthTest: false, wireframe: true }),
     );
     this.centroidMarker.renderOrder = 1000;
     this.centroidMarker.visible = false;
     this.scene.add(this.centroidMarker);
+
+    // On-screen HUD that prints what we're feeding the markers each frame,
+    // so we can see the actual values without diving into the console.
+    this.diagHud = document.createElement("div");
+    this.diagHud.style.cssText = `
+      position: fixed; left: 16px; top: 16px;
+      padding: 6px 10px;
+      background: rgba(0,0,0,0.6); color: #fff;
+      font: 11px/1.4 monospace; white-space: pre;
+      z-index: 70;
+      display: none;
+      border: 1px solid rgba(255,255,255,0.2);
+    `;
+    document.body.appendChild(this.diagHud);
 
     window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("resize", this.handleResize);
@@ -87,7 +103,8 @@ export class App {
       const visible = this.skeletonGuide.toggle();
       this.originMarker.visible = visible;
       this.centroidMarker.visible = visible;
-      console.log(`[App] 3D debug overlays (skeleton + origin + centroid): ${visible ? "ON" : "OFF"}`);
+      this.diagHud.style.display = visible ? "block" : "none";
+      console.log(`[App] 3D debug overlays: ${visible ? "ON" : "OFF"}`);
     }
   };
 
@@ -127,6 +144,23 @@ export class App {
     // visibility-weighted centroid actually is. If centering is being applied
     // to PointCloud uniformly, the cluster should sit on top of the red origin.
     this.centroidMarker.position.set(center[0] ?? 0, center[1] ?? 0, center[2] ?? 0);
+
+    // Live HUD that mirrors what the markers and shaders receive.
+    if (this.diagHud.style.display !== "none") {
+      const camPos = this.camera.position;
+      const camRot = this.camera.rotation;
+      const cm = this.centroidMarker.position;
+      const om = this.originMarker.position;
+      this.diagHud.textContent =
+        `camera.position = (${camPos.x.toFixed(2)}, ${camPos.y.toFixed(2)}, ${camPos.z.toFixed(2)})\n` +
+        `camera.rotation = (${camRot.x.toFixed(2)}, ${camRot.y.toFixed(2)}, ${camRot.z.toFixed(2)})\n` +
+        `aspect=${this.camera.aspect.toFixed(3)}  fov=${this.camera.fov}\n` +
+        `originMarker pos = (${om.x.toFixed(2)}, ${om.y.toFixed(2)}, ${om.z.toFixed(2)})  -- expected (0,0,0)\n` +
+        `centroidMarker pos = (${cm.x.toFixed(3)}, ${cm.y.toFixed(3)}, ${cm.z.toFixed(3)})\n` +
+        `JointAnchors.center = (${(center[0] ?? 0).toFixed(3)}, ${(center[1] ?? 0).toFixed(3)}, ${(center[2] ?? 0).toFixed(3)})\n` +
+        `nose joints[0..2] = (${(joints[0] ?? 0).toFixed(3)}, ${(joints[1] ?? 0).toFixed(3)}, ${(joints[2] ?? 0).toFixed(3)})  vis=${(vis[0] ?? 0).toFixed(2)}\n` +
+        `nose - center     = (${((joints[0] ?? 0) - (center[0] ?? 0)).toFixed(3)}, ${((joints[1] ?? 0) - (center[1] ?? 0)).toFixed(3)}, ${((joints[2] ?? 0) - (center[2] ?? 0)).toFixed(3)})`;
+    }
 
     // Diagnostic: log what's actually flowing into the shaders every ~2s.
     if (this.debugFrameCounter++ % 120 === 0) {
