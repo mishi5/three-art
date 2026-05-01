@@ -9,7 +9,7 @@ import { FragmentField } from "./visuals/FragmentField";
 import { SkeletonGuide } from "./visuals/SkeletonGuide";
 import { DebugOverlay } from "./ui/DebugOverlay";
 import { SettingsPanel } from "./ui/SettingsPanel";
-import { loadSettings, type Settings, type RenderMode } from "./settings";
+import { loadSettings, type Settings, type RenderMode, type MotionTarget } from "./settings";
 
 export class App {
   readonly scene = new THREE.Scene();
@@ -165,7 +165,18 @@ export class App {
     const joints = this.jointAnchors.getSmoothed();
     const vis = this.jointAnchors.getVisibility();
     const center = this.jointAnchors.getCenter();
-    const g = this.settings.audioGain;
+    const motion = this.jointAnchors.getMotion();
+
+    // Build a per-frame "live" settings copy and route body motion into a
+    // chosen target as a multiplicative boost. The user's persisted settings
+    // stay untouched (so the GUI keeps showing their tuned value).
+    const live = cloneSettings(this.settings);
+    if (live.motion.target !== "off") {
+      const factor = 1 + motion * live.motion.strength;
+      applyMotionTo(live, live.motion.target, factor);
+    }
+
+    const g = live.audioGain;
     const gainedAudio: AudioFeatures = {
       volume: audio.volume * g.volume,
       bass: audio.bass * g.bass,
@@ -173,8 +184,13 @@ export class App {
       treble: audio.treble * g.treble,
       fft: audio.fft,
     };
-    this.pointCloud.update(joints, vis, center, gainedAudio, this.settings, t);
-    this.fragmentField.update(joints, vis, center, gainedAudio, this.settings, t);
+    this.pointCloud.update(joints, vis, center, gainedAudio, live, t);
+    this.fragmentField.update(joints, vis, center, gainedAudio, live, t);
+
+    // Auto-rotate camera (handled by OrbitControls). Apply each frame so the
+    // GUI slider takes effect live and motion can boost it via live.camera.
+    this.orbit.autoRotate = live.camera.autoRotateSpeed !== 0;
+    this.orbit.autoRotateSpeed = live.camera.autoRotateSpeed;
     // bones mode = body-driven art with floating fragments around it.
     // cube/sphere mode = single shape at the centre, fragments and skeleton
     // guides have no role and would be visual noise.
@@ -246,5 +262,43 @@ export class App {
     this.settingsPanel.dispose();
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("keydown", this.onKeyDown);
+  }
+}
+
+function cloneSettings(s: Settings): Settings {
+  return {
+    mode: s.mode,
+    audioGain: { ...s.audioGain },
+    pointCloud: { ...s.pointCloud },
+    fragmentField: { ...s.fragmentField },
+    shape: { ...s.shape },
+    color: { ...s.color },
+    camera: { ...s.camera },
+    motion: { ...s.motion },
+  };
+}
+
+function applyMotionTo(s: Settings, target: MotionTarget, factor: number): void {
+  switch (target) {
+    case "off":                          return;
+    case "audioGain.volume":             s.audioGain.volume *= factor; break;
+    case "audioGain.bass":               s.audioGain.bass *= factor; break;
+    case "audioGain.mid":                s.audioGain.mid *= factor; break;
+    case "audioGain.treble":             s.audioGain.treble *= factor; break;
+    case "color.saturation":             s.color.saturation = Math.min(1, s.color.saturation * factor); break;
+    case "color.hueSpread":              s.color.hueSpread = Math.min(1, s.color.hueSpread * factor); break;
+    case "color.bassHueShift":           s.color.bassHueShift = Math.min(1, s.color.bassHueShift * factor); break;
+    case "shape.radius":                 s.shape.radius *= factor; break;
+    case "shape.bassPulse":              s.shape.bassPulse *= factor; break;
+    case "pointCloud.bassExpansion":     s.pointCloud.bassExpansion *= factor; break;
+    case "pointCloud.trebleShimmer":     s.pointCloud.trebleShimmer *= factor; break;
+    case "pointCloud.ambientShimmer":    s.pointCloud.ambientShimmer *= factor; break;
+    case "pointCloud.volumeSize":        s.pointCloud.volumeSize *= factor; break;
+    case "fragmentField.driftBase":      s.fragmentField.driftBase *= factor; break;
+    case "fragmentField.midDrift":       s.fragmentField.midDrift *= factor; break;
+    case "fragmentField.jointPull":      s.fragmentField.jointPull *= factor; break;
+    case "fragmentField.noiseScale":     s.fragmentField.noiseScale *= factor; break;
+    case "fragmentField.timeSpeed":      s.fragmentField.timeSpeed *= factor; break;
+    case "camera.autoRotateSpeed":       s.camera.autoRotateSpeed *= factor; break;
   }
 }

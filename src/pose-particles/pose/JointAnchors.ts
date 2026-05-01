@@ -17,6 +17,8 @@ export class JointAnchors {
   private latestVis: Float32Array = new Float32Array(NUM_JOINTS);
   private smoothedVis: Float32Array = new Float32Array(NUM_JOINTS);
   private smoothedCenter: Float32Array = new Float32Array(3);
+  private prevSmoothed: Joints = makeEmptyJoints();
+  private smoothedMotion: number = 0;
   private hasLatest = false;
 
   /** MediaPipe の結果（または同型）を取り込む */
@@ -68,6 +70,22 @@ export class JointAnchors {
       this.smoothedCenter[1] = (this.smoothedCenter[1] ?? 0) + (cy - (this.smoothedCenter[1] ?? 0)) * cf;
       this.smoothedCenter[2] = (this.smoothedCenter[2] ?? 0) + (cz - (this.smoothedCenter[2] ?? 0)) * cf;
     }
+
+    // Motion magnitude: total joint displacement since last tick, weighted by
+    // visibility (so an extrapolated leg flickering doesn't dominate). Smoothed.
+    let m = 0;
+    for (let i = 0; i < NUM_JOINTS; i++) {
+      const v = this.smoothedVis[i] ?? 0;
+      if (v < 0.4) continue;
+      const dx = (this.smoothed[i * 3] ?? 0) - (this.prevSmoothed[i * 3] ?? 0);
+      const dy = (this.smoothed[i * 3 + 1] ?? 0) - (this.prevSmoothed[i * 3 + 1] ?? 0);
+      const dz = (this.smoothed[i * 3 + 2] ?? 0) - (this.prevSmoothed[i * 3 + 2] ?? 0);
+      m += Math.sqrt(dx * dx + dy * dy + dz * dz) * v;
+    }
+    // Snapshot for next tick
+    this.prevSmoothed.set(this.smoothed);
+    // Smooth (heavier smoothing than position so it doesn't twitch wildly)
+    this.smoothedMotion = this.smoothedMotion * 0.85 + m * 0.15;
   }
 
   getSmoothed(): Joints {
@@ -82,5 +100,11 @@ export class JointAnchors {
   /** 見える関節の重心（visibility 加重平均）。シェーダで全関節からこれを引き算して画面中央に再配置する */
   getCenter(): Float32Array {
     return this.smoothedCenter;
+  }
+
+  /** 平滑化した「体の動きの大きさ」。可視関節の毎フレーム変位の合計 (m/frame)。
+   *  静止時は ~0、ゆるい動きで ~0.05、大きな動きで ~0.3 程度。 */
+  getMotion(): number {
+    return this.smoothedMotion;
   }
 }

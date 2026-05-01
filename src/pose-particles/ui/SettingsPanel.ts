@@ -1,6 +1,6 @@
 import GUI from "lil-gui";
 import type { Settings } from "../settings";
-import { RENDER_MODES, makeDefaultSettings, saveSettings, clearSettings } from "../settings";
+import { RENDER_MODES, MOTION_TARGETS, makeDefaultSettings, saveSettings, clearSettings } from "../settings";
 
 export class SettingsPanel {
   private gui: GUI;
@@ -46,6 +46,13 @@ export class SettingsPanel {
     ff.add(settings.fragmentField, "jointPull", 0, 0.2, 0.005).name("joint pull");
     ff.add(settings.fragmentField, "noiseScale", 0.05, 3, 0.05).name("noise scale");
     ff.add(settings.fragmentField, "timeSpeed", 0, 1, 0.01).name("noise speed");
+
+    const cam = this.gui.addFolder("Camera");
+    cam.add(settings.camera, "autoRotateSpeed", -10, 10, 0.1).name("auto rotate (0=off)");
+
+    const motion = this.gui.addFolder("Motion influence");
+    motion.add(settings.motion, "target", [...MOTION_TARGETS]).name("target param");
+    motion.add(settings.motion, "strength", 0, 30, 0.1).name("strength");
 
     // Preset save / load / reset
     const presets = this.gui.addFolder("Preset");

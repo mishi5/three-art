@@ -8,6 +8,31 @@ export type RenderMode = "bones" | "cube" | "sphere";
 
 export const RENDER_MODES: ReadonlyArray<RenderMode> = ["bones", "cube", "sphere"];
 
+/** Parameters that body motion can be routed into as a multiplicative boost. */
+export const MOTION_TARGETS = [
+  "off",
+  "audioGain.volume",
+  "audioGain.bass",
+  "audioGain.mid",
+  "audioGain.treble",
+  "color.saturation",
+  "color.hueSpread",
+  "color.bassHueShift",
+  "shape.radius",
+  "shape.bassPulse",
+  "pointCloud.bassExpansion",
+  "pointCloud.trebleShimmer",
+  "pointCloud.ambientShimmer",
+  "pointCloud.volumeSize",
+  "fragmentField.driftBase",
+  "fragmentField.midDrift",
+  "fragmentField.jointPull",
+  "fragmentField.noiseScale",
+  "fragmentField.timeSpeed",
+  "camera.autoRotateSpeed",
+] as const;
+export type MotionTarget = typeof MOTION_TARGETS[number];
+
 /** Numeric mode passed to shaders (must match shader switch). */
 export function modeToInt(mode: RenderMode): number {
   return mode === "bones" ? 0 : mode === "cube" ? 1 : 2;
@@ -64,6 +89,16 @@ export interface Settings {
     saturation: number;
     /** Treble-driven brightness boost. */
     trebleBoost: number;
+  };
+  camera: {
+    /** OrbitControls autoRotate speed. 0 = off, positive = clockwise, negative = counter. */
+    autoRotateSpeed: number;
+  };
+  motion: {
+    /** Which parameter the body's motion magnitude multiplies. "off" disables. */
+    target: MotionTarget;
+    /** How strongly motion boosts the chosen parameter. param *= 1 + motion * strength. */
+    strength: number;
   };
 }
 
@@ -154,6 +189,13 @@ export function makeDefaultSettings(): Settings {
       bassHueShift: 0.0,
       saturation: 0.6,
       trebleBoost: 0.3,
+    },
+    camera: {
+      autoRotateSpeed: 0.0,
+    },
+    motion: {
+      target: "off",
+      strength: 5.0,
     },
   };
 }
