@@ -5,6 +5,7 @@ import { PoseInput } from "./pose/PoseInput";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "./types";
 import { PointCloud } from "./visuals/PointCloud";
 import { FragmentField } from "./visuals/FragmentField";
+import { DebugOverlay } from "./ui/DebugOverlay";
 
 export class App {
   readonly scene = new THREE.Scene();
@@ -14,6 +15,7 @@ export class App {
   readonly pointCloud: PointCloud;
   readonly fragmentField: FragmentField;
   private poseInput: PoseInput | null = null;
+  private debugOverlay: DebugOverlay | null = null;
   private audioInput: AudioInput | null = null;
   private audioCtx: AudioContext | null = null;
   private rafId: number | null = null;
@@ -43,8 +45,16 @@ export class App {
   async startPose(): Promise<void> {
     this.poseInput = new PoseInput((result) => {
       this.jointAnchors.update(result);
+      this.debugOverlay?.setResult(result);
     });
     await this.poseInput.start();
+    this.debugOverlay = new DebugOverlay(this.poseInput.getVideo());
+  }
+
+  /** デバッグオーバーレイの表示モードを循環（off → video → skeleton → both）。
+   *  キーボードの D キーでも切り替わる。*/
+  cycleDebug(): void {
+    this.debugOverlay?.cycleMode();
   }
 
   getOrCreateAudioContext(): AudioContext {
@@ -68,13 +78,33 @@ export class App {
     tick();
   }
 
+  private debugFrameCounter = 0;
+
   /** サブモジュール更新フック */
   protected update(audio: AudioFeatures): void {
     const t = performance.now() / 1000;
     const joints = this.jointAnchors.getSmoothed();
     const vis = this.jointAnchors.getVisibility();
-    this.pointCloud.update(joints, vis, audio, t);
-    this.fragmentField.update(joints, vis, audio, t);
+    const center = this.jointAnchors.getCenter();
+    this.pointCloud.update(joints, vis, center, audio, t);
+    this.fragmentField.update(joints, vis, center, audio, t);
+
+    // Diagnostic: log what's actually flowing into the shaders every ~2s.
+    if (this.debugFrameCounter++ % 120 === 0) {
+      const names = ["nose","Lshoulder","Rshoulder","Lelbow","Relbow","Lwrist","Rwrist","Lhip","Rhip","Lknee","Rknee","Lankle","Rankle"];
+      const lines = names.map((n, i) => {
+        const x = joints[i*3]!.toFixed(2);
+        const y = joints[i*3+1]!.toFixed(2);
+        const z = joints[i*3+2]!.toFixed(2);
+        const v = vis[i]!.toFixed(2);
+        return `${n.padEnd(10)} (${x},${y},${z}) vis=${v}`;
+      });
+      console.log(
+        "[App.update] center=(",
+        center[0]!.toFixed(2), center[1]!.toFixed(2), center[2]!.toFixed(2), ")\n" +
+        lines.join("\n")
+      );
+    }
   }
 
   stop(): void {
@@ -82,6 +112,7 @@ export class App {
     this.rafId = null;
     this.poseInput?.stop();
     this.audioInput?.stop();
+    this.debugOverlay?.dispose();
     window.removeEventListener("resize", this.handleResize);
   }
 }

@@ -22,9 +22,13 @@ export class PoseInput {
     this.video.playsInline = true;
     this.video.muted = true;
     this.video.autoplay = true;
-    // 表示しない（抽象化された身体を貫徹）
+    // 表示しない（DebugOverlay が必要なら取り出して使う）
     this.video.style.display = "none";
     document.body.appendChild(this.video);
+  }
+
+  getVideo(): HTMLVideoElement {
+    return this.video;
   }
 
   async start(): Promise<void> {

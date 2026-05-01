@@ -9,6 +9,7 @@ const vertexShader = /* glsl */ `
 
   uniform vec3 uJoints[MAX_JOINTS];
   uniform float uVisibility[MAX_JOINTS];
+  uniform vec3 uCenter;
   uniform float uTime;
   uniform float uVolume;
   uniform float uBass;
@@ -55,7 +56,7 @@ const vertexShader = /* glsl */ `
 
   void main() {
     int jointIdx = int(aJointIndex + 0.5);
-    vec3 jointPos = selectJoint(jointIdx);
+    vec3 jointPos = selectJoint(jointIdx) - uCenter;
     float vis = selectVisibility(jointIdx);
 
     float radius = 1.0 + uBass * 1.5;
@@ -135,6 +136,7 @@ export class PointCloud {
       uniforms: {
         uJoints: { value: this.toVec3Array(this.jointsUniform) },
         uVisibility: { value: new Array(NUM_JOINTS).fill(0) },
+        uCenter: { value: new THREE.Vector3() },
         uTime: { value: 0 },
         uVolume: { value: 0 },
         uBass: { value: 0 },
@@ -155,7 +157,7 @@ export class PointCloud {
     return arr;
   }
 
-  update(joints: Joints, visibility: Float32Array, audio: AudioFeatures, timeSec: number): void {
+  update(joints: Joints, visibility: Float32Array, center: Float32Array, audio: AudioFeatures, timeSec: number): void {
     const u = this.material.uniforms;
     const arr = u.uJoints!.value as THREE.Vector3[];
     for (let i = 0; i < NUM_JOINTS; i++) {
@@ -165,6 +167,7 @@ export class PointCloud {
     for (let i = 0; i < NUM_JOINTS; i++) {
       vis[i] = visibility[i] ?? 0;
     }
+    (u.uCenter!.value as THREE.Vector3).set(center[0] ?? 0, center[1] ?? 0, center[2] ?? 0);
     u.uTime!.value = timeSec;
     u.uVolume!.value = audio.volume;
     u.uBass!.value = audio.bass;
