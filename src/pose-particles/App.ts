@@ -5,6 +5,7 @@ import { PoseInput } from "./pose/PoseInput";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "./types";
 import { PointCloud } from "./visuals/PointCloud";
 import { FragmentField } from "./visuals/FragmentField";
+import { SkeletonGuide } from "./visuals/SkeletonGuide";
 import { DebugOverlay } from "./ui/DebugOverlay";
 
 export class App {
@@ -14,6 +15,7 @@ export class App {
   readonly jointAnchors = new JointAnchors();
   readonly pointCloud: PointCloud;
   readonly fragmentField: FragmentField;
+  readonly skeletonGuide: SkeletonGuide;
   private poseInput: PoseInput | null = null;
   private debugOverlay: DebugOverlay | null = null;
   private audioInput: AudioInput | null = null;
@@ -31,6 +33,9 @@ export class App {
     this.scene.add(this.pointCloud.object3D);
     this.fragmentField = new FragmentField(this.renderer.getPixelRatio());
     this.scene.add(this.fragmentField.object3D);
+    this.skeletonGuide = new SkeletonGuide();
+    this.scene.add(this.skeletonGuide.object3D);
+    window.addEventListener("keydown", this.onKeyDown);
     window.addEventListener("resize", this.handleResize);
   }
 
@@ -56,6 +61,13 @@ export class App {
   cycleDebug(): void {
     this.debugOverlay?.cycleMode();
   }
+
+  private onKeyDown = (e: KeyboardEvent): void => {
+    if (e.key === "b" || e.key === "B") {
+      const visible = this.skeletonGuide.toggle();
+      console.log(`[App] 3D skeleton guide: ${visible ? "ON" : "OFF"}`);
+    }
+  };
 
   getOrCreateAudioContext(): AudioContext {
     if (!this.audioCtx) this.audioCtx = new AudioContext();
@@ -88,6 +100,7 @@ export class App {
     const center = this.jointAnchors.getCenter();
     this.pointCloud.update(joints, vis, center, audio, t);
     this.fragmentField.update(joints, vis, center, audio, t);
+    this.skeletonGuide.update(joints, vis, center);
 
     // Diagnostic: log what's actually flowing into the shaders every ~2s.
     if (this.debugFrameCounter++ % 120 === 0) {
@@ -114,5 +127,6 @@ export class App {
     this.audioInput?.stop();
     this.debugOverlay?.dispose();
     window.removeEventListener("resize", this.handleResize);
+    window.removeEventListener("keydown", this.onKeyDown);
   }
 }
