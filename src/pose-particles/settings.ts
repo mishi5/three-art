@@ -91,9 +91,9 @@ export function makeDefaultSettings(): Settings {
     },
     color: {
       hueBase: 0.6,
-      hueSpread: 0.0,
+      hueSpread: 0.4,
       bassHueShift: 0.0,
-      saturation: 0.0,
+      saturation: 0.6,
       trebleBoost: 0.3,
     },
   };

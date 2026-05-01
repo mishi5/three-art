@@ -21,7 +21,7 @@ const vertexShader = /* glsl */ `
   uniform float uAmbientShimmer;
   uniform float uBaseSize;
   uniform float uVolumeSize;
-  uniform int uMode;            // 0=bones, 1=cube, 2=sphere
+  uniform float uMode;          // 0=bones, 1=cube, 2=sphere (float for WebGL1 portability)
   uniform float uShapeRadius;
   uniform float uShapeBassPulse;
   uniform float uHueBase;
@@ -92,7 +92,7 @@ const vertexShader = /* glsl */ `
     float shimmerAmp = uTreble * uTrebleShimmer + uAmbientShimmer;
     float shimmer = sin(uTime * 30.0 + aSeed * 100.0) * shimmerAmp;
 
-    if (uMode == 0) {
+    if (uMode < 0.5) {
       // bones: per-joint gaussian cluster
       vec3 jointPos = selectJoint(jointIdx) - uCenter;
       vis = selectVisibility(jointIdx);
@@ -103,7 +103,7 @@ const vertexShader = /* glsl */ `
       float d = length(aOffset);
       float visGate = smoothstep(0.2, 0.6, vis);
       visAlpha = (1.0 - smoothstep(0.0, 0.15, d)) * visGate;
-    } else if (uMode == 1) {
+    } else if (uMode < 1.5) {
       // cube: uniform fill of a centred cube
       vec3 r = hash3unit(aSeed * 7.0 + aJointIndex + 1.0);
       vec3 cubePos = (r - 0.5) * 2.0 * uShapeRadius * (1.0 + uBass * uShapeBassPulse);
@@ -206,7 +206,7 @@ export class PointCloud {
         uAmbientShimmer: { value: 0.0 },
         uBaseSize: { value: 3.0 },
         uVolumeSize: { value: 5.0 },
-        uMode: { value: 0 },
+        uMode: { value: 0.0 },
         uShapeRadius: { value: 1.0 },
         uShapeBassPulse: { value: 0.5 },
         uHueBase: { value: 0.6 },
@@ -256,7 +256,7 @@ export class PointCloud {
     u.uAmbientShimmer!.value = settings.pointCloud.ambientShimmer;
     u.uBaseSize!.value = settings.pointCloud.baseSize;
     u.uVolumeSize!.value = settings.pointCloud.volumeSize;
-    u.uMode!.value = settings.mode === "bones" ? 0 : settings.mode === "cube" ? 1 : 2;
+    u.uMode!.value = settings.mode === "bones" ? 0.0 : settings.mode === "cube" ? 1.0 : 2.0;
     u.uShapeRadius!.value = settings.shape.radius;
     u.uShapeBassPulse!.value = settings.shape.bassPulse;
     u.uHueBase!.value = settings.color.hueBase;

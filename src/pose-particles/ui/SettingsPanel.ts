@@ -18,10 +18,10 @@ export class SettingsPanel {
     audio.add(settings.audioGain, "treble", 0, 5, 0.05);
 
     const color = this.gui.addFolder("Color");
+    color.add(settings.color, "saturation", 0, 1, 0.01).name("saturation (0=mono)");
     color.add(settings.color, "hueBase", 0, 1, 0.01).name("hue base");
     color.add(settings.color, "hueSpread", 0, 1, 0.01).name("hue spread (rainbow)");
     color.add(settings.color, "bassHueShift", 0, 1, 0.01).name("bass hue shift");
-    color.add(settings.color, "saturation", 0, 1, 0.01).name("saturation");
     color.add(settings.color, "trebleBoost", 0, 2, 0.05).name("treble brightness");
 
     const pc = this.gui.addFolder("PointCloud (体の点群)");
