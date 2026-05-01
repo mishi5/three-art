@@ -184,18 +184,16 @@ export class App {
     // Live HUD that mirrors what the markers and shaders receive.
     if (this.diagHud.style.display !== "none") {
       const camPos = this.camera.position;
-      const camRot = this.camera.rotation;
       const cm = this.centroidMarker.position;
-      const om = this.originMarker.position;
+      const pcMode = (this.pointCloud as unknown as { material: THREE.ShaderMaterial }).material.uniforms.uMode?.value;
+      const ffVis = this.fragmentField.object3D.visible;
       this.diagHud.textContent =
-        `camera.position = (${camPos.x.toFixed(2)}, ${camPos.y.toFixed(2)}, ${camPos.z.toFixed(2)})\n` +
-        `camera.rotation = (${camRot.x.toFixed(2)}, ${camRot.y.toFixed(2)}, ${camRot.z.toFixed(2)})\n` +
-        `aspect=${this.camera.aspect.toFixed(3)}  fov=${this.camera.fov}\n` +
-        `originMarker pos = (${om.x.toFixed(2)}, ${om.y.toFixed(2)}, ${om.z.toFixed(2)})  -- expected (0,0,0)\n` +
-        `centroidMarker pos = (${cm.x.toFixed(3)}, ${cm.y.toFixed(3)}, ${cm.z.toFixed(3)})\n` +
-        `JointAnchors.center = (${(center[0] ?? 0).toFixed(3)}, ${(center[1] ?? 0).toFixed(3)}, ${(center[2] ?? 0).toFixed(3)})\n` +
-        `nose joints[0..2] = (${(joints[0] ?? 0).toFixed(3)}, ${(joints[1] ?? 0).toFixed(3)}, ${(joints[2] ?? 0).toFixed(3)})  vis=${(vis[0] ?? 0).toFixed(2)}\n` +
-        `nose - center     = (${((joints[0] ?? 0) - (center[0] ?? 0)).toFixed(3)}, ${((joints[1] ?? 0) - (center[1] ?? 0)).toFixed(3)}, ${((joints[2] ?? 0) - (center[2] ?? 0)).toFixed(3)})`;
+        `mode = ${this.settings.mode}    uMode (GPU) = ${pcMode}\n` +
+        `FragmentField.visible = ${ffVis}\n` +
+        `camera.z = ${camPos.z.toFixed(2)}  fov=${this.camera.fov}  aspect=${this.camera.aspect.toFixed(2)}\n` +
+        `shape: radius=${this.settings.shape.radius}  bassPulse=${this.settings.shape.bassPulse}\n` +
+        `centroidMarker = (${cm.x.toFixed(3)}, ${cm.y.toFixed(3)}, ${cm.z.toFixed(3)})\n` +
+        `nose joints[0..2] = (${(joints[0] ?? 0).toFixed(3)}, ${(joints[1] ?? 0).toFixed(3)}, ${(joints[2] ?? 0).toFixed(3)}) vis=${(vis[0] ?? 0).toFixed(2)}`;
     }
 
     // Diagnostic: log what's actually flowing into the shaders every ~2s.

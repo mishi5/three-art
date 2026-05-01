@@ -9,7 +9,10 @@ export class SettingsPanel {
     this.gui = new GUI({ title: "Settings", width: 300 });
 
     // Mode (top-level, no folder so it's hard to miss)
-    this.gui.add(settings, "mode", [...RENDER_MODES]).name("render mode");
+    this.gui
+      .add(settings, "mode", [...RENDER_MODES])
+      .name("render mode")
+      .onChange((v: string) => console.log("[SettingsPanel] mode →", v, "settings.mode =", settings.mode));
 
     const audio = this.gui.addFolder("Audio gain (0..5)");
     audio.add(settings.audioGain, "volume", 0, 5, 0.05);
