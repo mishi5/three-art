@@ -7,6 +7,7 @@ import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "./types";
 import { PointCloud } from "./visuals/PointCloud";
 import { FragmentField } from "./visuals/FragmentField";
 import { SkeletonGuide } from "./visuals/SkeletonGuide";
+import { EdgeOverlay } from "./visuals/EdgeOverlay";
 import { DebugOverlay } from "./ui/DebugOverlay";
 import { SettingsPanel } from "./ui/SettingsPanel";
 import { loadSettings, type Settings, type RenderMode, type MotionTarget } from "./settings";
@@ -19,6 +20,7 @@ export class App {
   readonly pointCloud: PointCloud;
   readonly fragmentField: FragmentField;
   readonly skeletonGuide: SkeletonGuide;
+  readonly edgeOverlay: EdgeOverlay;
   readonly originMarker: THREE.Mesh;
   readonly centroidMarker: THREE.Mesh;
   private diagHud: HTMLDivElement;
@@ -49,6 +51,8 @@ export class App {
     this.scene.add(this.fragmentField.object3D);
     this.skeletonGuide = new SkeletonGuide();
     this.scene.add(this.skeletonGuide.object3D);
+    this.edgeOverlay = new EdgeOverlay();
+    this.scene.add(this.edgeOverlay.object3D);
 
     // diagnostic markers (toggled with B together with the skeleton).
     // BIG so they cannot be hidden by the particle haze.
@@ -201,6 +205,7 @@ export class App {
     };
     this.pointCloud.update(joints, vis, center, gainedAudio, live, t);
     this.fragmentField.update(joints, vis, center, gainedAudio, live, t);
+    this.edgeOverlay.update(joints, center, gainedAudio, live, t);
 
     // Auto-rotate camera (handled by OrbitControls). Apply each frame so the
     // GUI slider takes effect live and motion can boost it via live.camera.
@@ -294,6 +299,7 @@ function cloneSettings(s: Settings): Settings {
     camera: { ...s.camera },
     motion: { ...s.motion },
     outlier: { ...s.outlier },
+    edges: { ...s.edges },
   };
 }
 

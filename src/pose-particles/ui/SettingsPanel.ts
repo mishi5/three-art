@@ -51,9 +51,15 @@ export class SettingsPanel {
     const cam = this.gui.addFolder("Camera");
     cam.add(settings.camera, "autoRotateSpeed", -10, 10, 0.1).name("auto rotate (0=off)");
 
-    const outlier = this.gui.addFolder("Outliers (silhouette chaos)");
+    const outlier = this.gui.addFolder("Outliers (spike chaos)");
     outlier.add(settings.outlier, "fraction", 0, 0.5, 0.01).name("fraction (~10%)");
-    outlier.add(settings.outlier, "boost", 1, 8, 0.1).name("position/size boost");
+    outlier.add(settings.outlier, "boost", 1, 8, 0.1).name("spike amplitude");
+
+    const edges = this.gui.addFolder("Edges (sub-render)");
+    edges.add(settings.edges, "enabled").name("enabled");
+    edges.add(settings.edges, "anchorCount", 16, 256, 1).name("anchor count");
+    edges.add(settings.edges, "kNeighbors", 1, 5, 1).name("k neighbours");
+    edges.add(settings.edges, "alpha", 0, 1, 0.01).name("opacity");
 
     const motion = this.gui.addFolder("Motion influence");
     motion.add(settings.motion, "target", [...MOTION_TARGETS]).name("target param");

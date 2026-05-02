@@ -109,6 +109,16 @@ export interface Settings {
     /** Multiplier on offset/size/shimmer for outlier particles. 1=off, 3=triple. */
     boost: number;
   };
+  edges: {
+    /** Draw edges between anchor points (sub-render layer). */
+    enabled: boolean;
+    /** Number of anchor points (16..256). */
+    anchorCount: number;
+    /** k-nearest neighbours each anchor connects to. 1..5. */
+    kNeighbors: number;
+    /** Edge brightness 0..1. */
+    alpha: number;
+  };
 }
 
 const STORAGE_KEY = "pose-particles.settings.v1";
@@ -209,6 +219,12 @@ export function makeDefaultSettings(): Settings {
     outlier: {
       fraction: 0.1,
       boost: 3.0,
+    },
+    edges: {
+      enabled: false,
+      anchorCount: 64,
+      kNeighbors: 2,
+      alpha: 0.5,
     },
     audioSmoothing: 0.5,
   };

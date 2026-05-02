@@ -91,10 +91,16 @@ const vertexShader = /* glsl */ `
     float vis;
     float visAlpha;
 
-    // Outlier boost: ~uOutlierFraction of particles get a multiplier on
-    // their position offset / size, breaking up the silhouette.
-    // Soft step at the threshold so the transition isn't a hard binary.
-    float outlier = mix(1.0, uOutlierBoost, smoothstep(uOutlierThreshold - 0.04, uOutlierThreshold, aSeed));
+    // Outlier spike: ~uOutlierFraction of particles oscillate independently,
+    // shooting outward and retracting at their own per-particle frequency.
+    // Each picked particle pulses 1× → boost× → 1× over time, so the
+    // silhouette grows and pulls back in trembling spikes rather than
+    // looking like a static second shell.
+    float outlierMask = smoothstep(uOutlierThreshold - 0.04, uOutlierThreshold, aSeed);
+    float spikeFreq = 1.0 + aSeed * 4.0;       // 1..5 Hz, per-particle
+    float spikePhase = aSeed * 217.13;         // de-sync phases
+    float spikeWave = sin(uTime * spikeFreq + spikePhase) * 0.5 + 0.5;  // 0..1
+    float outlier = 1.0 + outlierMask * (uOutlierBoost - 1.0) * spikeWave;
 
     float shimmerAmp = uTreble * uTrebleShimmer + uAmbientShimmer;
     float shimmer = sin(uTime * 30.0 + aSeed * 100.0) * shimmerAmp * outlier;
