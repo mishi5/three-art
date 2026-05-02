@@ -29,6 +29,8 @@ const vertexShader = /* glsl */ `
   uniform float uBassHueShift;
   uniform float uSaturation;
   uniform float uTrebleBoost;
+  uniform float uOutlierThreshold;  // aSeed > this => outlier
+  uniform float uOutlierBoost;      // multiplier applied to offsets / size on outliers
 
   attribute float aJointIndex;
   attribute vec3 aOffset;
@@ -89,15 +91,20 @@ const vertexShader = /* glsl */ `
     float vis;
     float visAlpha;
 
+    // Outlier boost: ~uOutlierFraction of particles get a multiplier on
+    // their position offset / size, breaking up the silhouette.
+    // Soft step at the threshold so the transition isn't a hard binary.
+    float outlier = mix(1.0, uOutlierBoost, smoothstep(uOutlierThreshold - 0.04, uOutlierThreshold, aSeed));
+
     float shimmerAmp = uTreble * uTrebleShimmer + uAmbientShimmer;
-    float shimmer = sin(uTime * 30.0 + aSeed * 100.0) * shimmerAmp;
+    float shimmer = sin(uTime * 30.0 + aSeed * 100.0) * shimmerAmp * outlier;
 
     if (uMode < 0.5) {
       // bones: per-joint gaussian cluster
       vec3 jointPos = selectJoint(jointIdx) - uCenter;
       vis = selectVisibility(jointIdx);
       float radius = 1.0 + uBass * uBassExpansion;
-      vec3 offset = aOffset * radius;
+      vec3 offset = aOffset * radius * outlier;
       offset += normalize(aOffset + 0.0001) * shimmer;
       pos = jointPos + offset;
       float d = length(aOffset);
@@ -117,7 +124,7 @@ const vertexShader = /* glsl */ `
       else if (faceHash < 0.66667) cubePos = vec3(uv.x, -1.0, uv.y);
       else if (faceHash < 0.83333) cubePos = vec3(uv.x, uv.y,  1.0);
       else                         cubePos = vec3(uv.x, uv.y, -1.0);
-      float scale = uShapeRadius * (1.0 + uBass * uShapeBassPulse);
+      float scale = uShapeRadius * (1.0 + uBass * uShapeBassPulse) * outlier;
       pos = cubePos * scale + normalize(cubePos + 0.0001) * shimmer;
       visAlpha = 0.85;
     } else {
@@ -127,14 +134,14 @@ const vertexShader = /* glsl */ `
       float cosPhi = 2.0 * r.y - 1.0;
       float sinPhi = sqrt(max(0.0, 1.0 - cosPhi * cosPhi));
       vec3 dir = vec3(sinPhi * cos(theta), sinPhi * sin(theta), cosPhi);
-      float radius = uShapeRadius * (1.0 + uBass * uShapeBassPulse);
+      float radius = uShapeRadius * (1.0 + uBass * uShapeBassPulse) * outlier;
       pos = dir * radius + dir * shimmer;
       visAlpha = 0.85;
     }
 
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_Position = projectionMatrix * mv;
-    gl_PointSize = (uBaseSize + uVolume * uVolumeSize) * uPixelRatio * (1.0 / -mv.z);
+    gl_PointSize = (uBaseSize + uVolume * uVolumeSize) * outlier * uPixelRatio * (1.0 / -mv.z);
 
     // Per-particle colour (HSV).
     float hue = fract(uHueBase + (aSeed - 0.5) * uHueSpread + uBass * uBassHueShift);
@@ -224,6 +231,8 @@ export class PointCloud {
         uBassHueShift: { value: 0.0 },
         uSaturation: { value: 0.0 },
         uTrebleBoost: { value: 0.3 },
+        uOutlierThreshold: { value: 0.9 },
+        uOutlierBoost: { value: 1.0 },
       },
     });
 
@@ -274,5 +283,7 @@ export class PointCloud {
     u.uBassHueShift!.value = settings.color.bassHueShift;
     u.uSaturation!.value = settings.color.saturation;
     u.uTrebleBoost!.value = settings.color.trebleBoost;
+    u.uOutlierThreshold!.value = 1.0 - Math.max(0, Math.min(1, settings.outlier.fraction));
+    u.uOutlierBoost!.value = settings.outlier.boost;
   }
 }

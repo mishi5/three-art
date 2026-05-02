@@ -21,6 +21,7 @@ export class SettingsPanel {
     audio.add(settings.audioGain, "bass", 0, 5, 0.05);
     audio.add(settings.audioGain, "mid", 0, 5, 0.05);
     audio.add(settings.audioGain, "treble", 0, 5, 0.05);
+    audio.add(settings, "audioSmoothing", 0, 0.95, 0.01).name("smoothing (0=instant)");
 
     const color = this.gui.addFolder("Color");
     color.add(settings.color, "saturation", 0, 1, 0.01).name("saturation (0=mono)");
@@ -49,6 +50,10 @@ export class SettingsPanel {
 
     const cam = this.gui.addFolder("Camera");
     cam.add(settings.camera, "autoRotateSpeed", -10, 10, 0.1).name("auto rotate (0=off)");
+
+    const outlier = this.gui.addFolder("Outliers (silhouette chaos)");
+    outlier.add(settings.outlier, "fraction", 0, 0.5, 0.01).name("fraction (~10%)");
+    outlier.add(settings.outlier, "boost", 1, 8, 0.1).name("position/size boost");
 
     const motion = this.gui.addFolder("Motion influence");
     motion.add(settings.motion, "target", [...MOTION_TARGETS]).name("target param");

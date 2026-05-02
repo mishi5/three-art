@@ -48,6 +48,9 @@ export interface Settings {
     mid: number;
     treble: number;
   };
+  /** 0..0.95, low-pass smoothing applied to audio AFTER gain so flicker
+   *  on the eye is dampened. 0=instant follow, 0.9 is heavy smoothing. */
+  audioSmoothing: number;
   pointCloud: {
     /** Bass-driven radial expansion of each joint cluster (bones mode only). */
     bassExpansion: number;
@@ -99,6 +102,12 @@ export interface Settings {
     target: MotionTarget;
     /** How strongly motion boosts the chosen parameter. param *= 1 + motion * strength. */
     strength: number;
+  };
+  outlier: {
+    /** Fraction (0..1) of particles tagged as outliers. ~0.1 = 10%. */
+    fraction: number;
+    /** Multiplier on offset/size/shimmer for outlier particles. 1=off, 3=triple. */
+    boost: number;
   };
 }
 
@@ -197,5 +206,10 @@ export function makeDefaultSettings(): Settings {
       target: "off",
       strength: 5.0,
     },
+    outlier: {
+      fraction: 0.1,
+      boost: 3.0,
+    },
+    audioSmoothing: 0.5,
   };
 }

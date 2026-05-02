@@ -23,6 +23,7 @@ export class App {
   readonly centroidMarker: THREE.Mesh;
   private diagHud: HTMLDivElement;
   private debugVisible = false;
+  private smoothedAudio = { volume: 0, bass: 0, mid: 0, treble: 0 };
   readonly settings: Settings = loadSettings();
   private settingsPanel: SettingsPanel;
   private orbit: OrbitControls;
@@ -183,11 +184,19 @@ export class App {
     }
 
     const g = live.audioGain;
+    // Apply gain, then a per-band low-pass smoothing so spikes don't hammer
+    // the eye. follow=1 means instant follow, follow→0 means frozen.
+    const sm = Math.max(0, Math.min(0.95, live.audioSmoothing));
+    const follow = 1 - sm;
+    this.smoothedAudio.volume += (audio.volume * g.volume - this.smoothedAudio.volume) * follow;
+    this.smoothedAudio.bass   += (audio.bass   * g.bass   - this.smoothedAudio.bass)   * follow;
+    this.smoothedAudio.mid    += (audio.mid    * g.mid    - this.smoothedAudio.mid)    * follow;
+    this.smoothedAudio.treble += (audio.treble * g.treble - this.smoothedAudio.treble) * follow;
     const gainedAudio: AudioFeatures = {
-      volume: audio.volume * g.volume,
-      bass: audio.bass * g.bass,
-      mid: audio.mid * g.mid,
-      treble: audio.treble * g.treble,
+      volume: this.smoothedAudio.volume,
+      bass:   this.smoothedAudio.bass,
+      mid:    this.smoothedAudio.mid,
+      treble: this.smoothedAudio.treble,
       fft: audio.fft,
     };
     this.pointCloud.update(joints, vis, center, gainedAudio, live, t);
@@ -277,12 +286,14 @@ function cloneSettings(s: Settings): Settings {
   return {
     mode: s.mode,
     audioGain: { ...s.audioGain },
+    audioSmoothing: s.audioSmoothing,
     pointCloud: { ...s.pointCloud },
     fragmentField: { ...s.fragmentField },
     shape: { ...s.shape },
     color: { ...s.color },
     camera: { ...s.camera },
     motion: { ...s.motion },
+    outlier: { ...s.outlier },
   };
 }
 
