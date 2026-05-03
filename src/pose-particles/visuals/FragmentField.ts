@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { NUM_JOINTS, type AudioFeatures, type Joints } from "../types";
 import type { Settings } from "../settings";
+import { axisToInt, effectiveTwistStrength, twistPhase } from "./twist";
 
 const FRAGMENT_COUNT = 10000;
 const FIELD_SIZE = 3.0; // メートル
@@ -27,6 +28,9 @@ const vertexShader = /* glsl */ `
   uniform float uTreble;
   uniform float uSaturation;
   uniform float uTrebleBoost;
+  uniform float uTwistStrength;
+  uniform float uTwistPhase;
+  uniform float uTwistAxis;
 
   attribute vec3 aBasePosition;
   attribute float aSeed;
@@ -38,6 +42,23 @@ const vertexShader = /* glsl */ `
     vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
     vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
     return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+  }
+
+  vec3 applyTwist(vec3 p, float strength, float phase, float axis) {
+    if (strength == 0.0 && phase == 0.0) return p;
+    float s;
+    if (axis < 0.5)      s = p.x;
+    else if (axis < 1.5) s = p.y;
+    else                 s = p.z;
+    float a = strength * s + phase;
+    float c = cos(a);
+    float sn = sin(a);
+    if (axis < 0.5) {
+      return vec3(p.x, p.y * c - p.z * sn, p.y * sn + p.z * c);
+    } else if (axis < 1.5) {
+      return vec3(p.x * c - p.z * sn, p.y, p.x * sn + p.z * c);
+    }
+    return vec3(p.x * c - p.y * sn, p.x * sn + p.y * c, p.z);
   }
 
   vec3 hash3(vec3 p) {
@@ -76,6 +97,9 @@ const vertexShader = /* glsl */ `
       force += toJoint / d2 * uVisibility[i];
     }
     pos += force * uJointPull;
+
+    // twist around body centre (uCenter)
+    pos = applyTwist(pos - uCenter, uTwistStrength, uTwistPhase, uTwistAxis) + uCenter;
 
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_Position = projectionMatrix * mv;
@@ -150,6 +174,9 @@ export class FragmentField {
         uTreble: { value: 0 },
         uSaturation: { value: 0.0 },
         uTrebleBoost: { value: 0.3 },
+        uTwistStrength: { value: 0 },
+        uTwistPhase: { value: 0 },
+        uTwistAxis: { value: 1 },
       },
     });
 
@@ -190,5 +217,8 @@ export class FragmentField {
     u.uBassHueShift!.value = settings.color.bassHueShift;
     u.uSaturation!.value = settings.color.saturation;
     u.uTrebleBoost!.value = settings.color.trebleBoost;
+    u.uTwistStrength!.value = effectiveTwistStrength(settings.twist, audio.bass);
+    u.uTwistPhase!.value = twistPhase(settings.twist, timeSec);
+    u.uTwistAxis!.value = axisToInt(settings.twist.axis);
   }
 }

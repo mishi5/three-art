@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { NUM_JOINTS, type AudioFeatures, type Joints } from "../types";
 import type { Settings } from "../settings";
+import { axisToInt, effectiveTwistStrength, twistPhase } from "./twist";
 
 const POINTS_PER_JOINT = 400;
 const SIGMA = 0.08; // メートル
@@ -31,6 +32,9 @@ const vertexShader = /* glsl */ `
   uniform float uTrebleBoost;
   uniform float uOutlierThreshold;  // aSeed > this => outlier
   uniform float uOutlierBoost;      // multiplier applied to offsets / size on outliers
+  uniform float uTwistStrength;     // 0 disables twist
+  uniform float uTwistPhase;
+  uniform float uTwistAxis;         // 0=x, 1=y, 2=z
 
   attribute float aJointIndex;
   attribute vec3 aOffset;
@@ -43,6 +47,29 @@ const vertexShader = /* glsl */ `
     vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
     vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
     return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+  }
+
+  // Twist: rotate around the chosen axis by an angle proportional to the
+  // coordinate value on that axis (plus a time-driven phase). Preserves the
+  // axis-aligned coordinate, rotates the orthogonal pair in 2D.
+  vec3 applyTwist(vec3 p, float strength, float phase, float axis) {
+    if (strength == 0.0 && phase == 0.0) return p;
+    float s;
+    if (axis < 0.5)      s = p.x;
+    else if (axis < 1.5) s = p.y;
+    else                 s = p.z;
+    float a = strength * s + phase;
+    float c = cos(a);
+    float sn = sin(a);
+    if (axis < 0.5) {
+      // x-axis: rotate (y,z)
+      return vec3(p.x, p.y * c - p.z * sn, p.y * sn + p.z * c);
+    } else if (axis < 1.5) {
+      // y-axis: rotate (x,z)
+      return vec3(p.x * c - p.z * sn, p.y, p.x * sn + p.z * c);
+    }
+    // z-axis: rotate (x,y)
+    return vec3(p.x * c - p.y * sn, p.x * sn + p.y * c, p.z);
   }
 
   vec3 hash3unit(float seed) {
@@ -145,6 +172,8 @@ const vertexShader = /* glsl */ `
       visAlpha = 0.85;
     }
 
+    pos = applyTwist(pos, uTwistStrength, uTwistPhase, uTwistAxis);
+
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_Position = projectionMatrix * mv;
     gl_PointSize = (uBaseSize + uVolume * uVolumeSize) * outlier * uPixelRatio * (1.0 / -mv.z);
@@ -239,6 +268,9 @@ export class PointCloud {
         uTrebleBoost: { value: 0.3 },
         uOutlierThreshold: { value: 0.9 },
         uOutlierBoost: { value: 1.0 },
+        uTwistStrength: { value: 0 },
+        uTwistPhase: { value: 0 },
+        uTwistAxis: { value: 1 },
       },
     });
 
@@ -291,5 +323,8 @@ export class PointCloud {
     u.uTrebleBoost!.value = settings.color.trebleBoost;
     u.uOutlierThreshold!.value = 1.0 - Math.max(0, Math.min(1, settings.outlier.fraction));
     u.uOutlierBoost!.value = settings.outlier.boost;
+    u.uTwistStrength!.value = effectiveTwistStrength(settings.twist, audio.bass);
+    u.uTwistPhase!.value = twistPhase(settings.twist, timeSec);
+    u.uTwistAxis!.value = axisToInt(settings.twist.axis);
   }
 }

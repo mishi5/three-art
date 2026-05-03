@@ -4,6 +4,8 @@
  * Defaults are chosen to feel a bit more reactive than the spec's hard-coded
  * values; everything can be cranked up further from the GUI.
  */
+import { makeDefaultTwist, type TwistSettings } from "./visuals/twist";
+
 export type RenderMode = "bones" | "cube" | "sphere";
 
 export const RENDER_MODES: ReadonlyArray<RenderMode> = ["bones", "cube", "sphere"];
@@ -30,6 +32,7 @@ export const MOTION_TARGETS = [
   "fragmentField.noiseScale",
   "fragmentField.timeSpeed",
   "camera.autoRotateSpeed",
+  "twist.strength",
 ] as const;
 export type MotionTarget = typeof MOTION_TARGETS[number];
 
@@ -119,6 +122,8 @@ export interface Settings {
     /** Edge brightness 0..1. */
     alpha: number;
   };
+  /** Per-axis rotational twist applied to all particle positions. */
+  twist: TwistSettings;
 }
 
 const STORAGE_KEY = "pose-particles.settings.v1";
@@ -226,6 +231,7 @@ export function makeDefaultSettings(): Settings {
       kNeighbors: 2,
       alpha: 0.5,
     },
+    twist: makeDefaultTwist(),
     audioSmoothing: 0.5,
   };
 }

@@ -1,6 +1,7 @@
 import GUI from "lil-gui";
 import type { Settings } from "../settings";
 import { RENDER_MODES, MOTION_TARGETS, makeDefaultSettings, saveSettings, clearSettings } from "../settings";
+import { TWIST_AXES } from "../visuals/twist";
 
 export class SettingsPanel {
   private gui: GUI;
@@ -60,6 +61,13 @@ export class SettingsPanel {
     edges.add(settings.edges, "anchorCount", 16, 256, 1).name("anchor count");
     edges.add(settings.edges, "kNeighbors", 1, 5, 1).name("k neighbours");
     edges.add(settings.edges, "alpha", 0, 1, 0.01).name("opacity");
+
+    const twist = this.gui.addFolder("Twist (ねじれ)");
+    twist.add(settings.twist, "enabled").name("enabled");
+    twist.add(settings.twist, "axis", [...TWIST_AXES]).name("axis");
+    twist.add(settings.twist, "strength", 0, 10, 0.05).name("strength (rad/m)");
+    twist.add(settings.twist, "bassDrive", 0, 3, 0.05).name("bass drive");
+    twist.add(settings.twist, "phaseSpeed", -3, 3, 0.05).name("phase speed (rad/s)");
 
     const motion = this.gui.addFolder("Motion influence");
     motion.add(settings.motion, "target", [...MOTION_TARGETS]).name("target param");
