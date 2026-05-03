@@ -300,6 +300,7 @@ function cloneSettings(s: Settings): Settings {
     motion: { ...s.motion },
     outlier: { ...s.outlier },
     edges: { ...s.edges },
+    twist: { ...s.twist },
   };
 }
 
@@ -325,5 +326,6 @@ function applyMotionTo(s: Settings, target: MotionTarget, factor: number): void 
     case "fragmentField.noiseScale":     s.fragmentField.noiseScale *= factor; break;
     case "fragmentField.timeSpeed":      s.fragmentField.timeSpeed *= factor; break;
     case "camera.autoRotateSpeed":       s.camera.autoRotateSpeed *= factor; break;
+    case "twist.strength":               s.twist.strength *= factor; break;
   }
 }
