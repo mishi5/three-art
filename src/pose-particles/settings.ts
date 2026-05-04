@@ -5,6 +5,7 @@
  * values; everything can be cranked up further from the GUI.
  */
 import { makeDefaultTwist, type TwistSettings } from "./visuals/twist";
+import { makeDefaultBlur, type BlurSettings } from "./visuals/blur";
 
 export type RenderMode = "bones" | "cube" | "sphere";
 
@@ -33,6 +34,7 @@ export const MOTION_TARGETS = [
   "fragmentField.timeSpeed",
   "camera.autoRotateSpeed",
   "twist.strength",
+  "blur.strength",
 ] as const;
 export type MotionTarget = typeof MOTION_TARGETS[number];
 
@@ -124,6 +126,8 @@ export interface Settings {
   };
   /** Per-axis rotational twist applied to all particle positions. */
   twist: TwistSettings;
+  /** Post-process Gaussian blur applied to the final rendered image. */
+  blur: BlurSettings;
 }
 
 const STORAGE_KEY = "pose-particles.settings.v1";
@@ -232,6 +236,7 @@ export function makeDefaultSettings(): Settings {
       alpha: 0.5,
     },
     twist: makeDefaultTwist(),
+    blur: makeDefaultBlur(),
     audioSmoothing: 0.5,
   };
 }

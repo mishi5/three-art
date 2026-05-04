@@ -8,6 +8,7 @@ import { PointCloud } from "./visuals/PointCloud";
 import { FragmentField } from "./visuals/FragmentField";
 import { SkeletonGuide } from "./visuals/SkeletonGuide";
 import { EdgeOverlay } from "./visuals/EdgeOverlay";
+import { BlurPipeline } from "./visuals/BlurPipeline";
 import { DebugOverlay } from "./ui/DebugOverlay";
 import { SettingsPanel } from "./ui/SettingsPanel";
 import { loadSettings, type Settings, type RenderMode, type MotionTarget } from "./settings";
@@ -21,6 +22,7 @@ export class App {
   readonly fragmentField: FragmentField;
   readonly skeletonGuide: SkeletonGuide;
   readonly edgeOverlay: EdgeOverlay;
+  readonly blurPipeline: BlurPipeline;
   readonly originMarker: THREE.Mesh;
   readonly centroidMarker: THREE.Mesh;
   private diagHud: HTMLDivElement;
@@ -44,6 +46,7 @@ export class App {
     this.camera.position.set(0, 0, 1.0);
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.blurPipeline = new BlurPipeline(this.renderer, this.scene, this.camera);
     this.handleResize();
     this.pointCloud = new PointCloud(this.renderer.getPixelRatio());
     this.scene.add(this.pointCloud.object3D);
@@ -115,6 +118,7 @@ export class App {
     this.renderer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.blurPipeline.setSize(w, h);
   };
 
   async startPose(): Promise<void> {
@@ -163,7 +167,7 @@ export class App {
       this.jointAnchors.tick();
       const audio: AudioFeatures = this.audioInput?.read() ?? DEFAULT_AUDIO_FEATURES;
       this.update(audio);
-      this.renderer.render(this.scene, this.camera);
+      this.blurPipeline.render();
     };
     tick();
   }
@@ -234,6 +238,7 @@ export class App {
       this.lastMode = this.settings.mode;
     }
     this.orbit.update();
+    this.blurPipeline.update(live.blur, this.smoothedAudio.bass);
     // diagnostic: origin stays at world (0,0,0); centroid sits at where the
     // visibility-weighted centroid actually is. If centering is being applied
     // to PointCloud uniformly, the cluster should sit on top of the red origin.
@@ -301,6 +306,7 @@ function cloneSettings(s: Settings): Settings {
     outlier: { ...s.outlier },
     edges: { ...s.edges },
     twist: { ...s.twist },
+    blur: { ...s.blur },
   };
 }
 
@@ -327,5 +333,6 @@ function applyMotionTo(s: Settings, target: MotionTarget, factor: number): void 
     case "fragmentField.timeSpeed":      s.fragmentField.timeSpeed *= factor; break;
     case "camera.autoRotateSpeed":       s.camera.autoRotateSpeed *= factor; break;
     case "twist.strength":               s.twist.strength *= factor; break;
+    case "blur.strength":                s.blur.strength *= factor; break;
   }
 }

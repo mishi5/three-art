@@ -69,6 +69,12 @@ export class SettingsPanel {
     twist.add(settings.twist, "bassDrive", 0, 3, 0.05).name("bass drive");
     twist.add(settings.twist, "phaseSpeed", -3, 3, 0.05).name("phase speed (rad/s)");
 
+    const blur = this.gui.addFolder("Blur (post-process)");
+    blur.add(settings.blur, "enabled").name("enabled");
+    blur.add(settings.blur, "strength", 0, 30, 0.1).name("strength (px)");
+    blur.add(settings.blur, "iterations", 1, 6, 1).name("iterations");
+    blur.add(settings.blur, "bassDrive", 0, 3, 0.05).name("bass drive");
+
     const motion = this.gui.addFolder("Motion influence");
     motion.add(settings.motion, "target", [...MOTION_TARGETS]).name("target param");
     motion.add(settings.motion, "strength", 0, 30, 0.1).name("strength");
