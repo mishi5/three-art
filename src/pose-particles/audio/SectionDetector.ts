@@ -2,11 +2,20 @@ import type { BandFrame, BandTimeSeries, Section, SectionBoundary } from "../aut
 export type { BandFrame, BandTimeSeries, Section, SectionBoundary };
 
 export interface DetectorOptions {
+  /**
+   * Sensitivity (0..1). 曲の絶対 novelty スケールに依存しないよう、
+   * percentile-based threshold として解釈する:
+   *  - 0   → percentile 1.0 (max) → ほぼ境界 0 個
+   *  - 0.5 → percentile 0.75 → smoothed novelty の上位 25% を境界候補
+   *  - 1.0 → percentile 0.5 (median) → 上位 50% を境界候補
+   * 加えて `ABS_THRESHOLD_MIN` で synthetic noise / 無音曲を弾く。
+   */
   noveltyThreshold: number;
   minSectionSec: number;
 }
 
 const SMOOTH_WINDOW = 20; // 20 frames * 50ms ≈ 1 秒
+const ABS_THRESHOLD_MIN = 0.001; // synthetic noise / 完全な無音曲の保護
 
 /**
  * 帯域 3 軸 [bass, mid, treble] を単位ベクトル化。ノルム 0 の場合は 0 ベクトル。
@@ -148,7 +157,17 @@ export function detect(series: BandTimeSeries, opts: DetectorOptions): {
     prev = cur;
   }
   const smoothed = smooth(novelty, SMOOTH_WINDOW);
-  const peakIdx = findPeaks(smoothed, opts.noveltyThreshold);
+
+  // Percentile-based threshold (sensitivity 0..1 → percentile 1.0..0.5)。
+  // 曲の絶対 novelty スケールに依存せず、上位 N% を境界候補にする。
+  const sensitivity = Math.max(0, Math.min(1, opts.noveltyThreshold));
+  const sortedAsc = [...smoothed].sort((a, b) => a - b);
+  const pctIdx = Math.floor(sortedAsc.length * (1 - sensitivity * 0.5));
+  const idx = Math.max(0, Math.min(sortedAsc.length - 1, pctIdx));
+  const pctThreshold = sortedAsc[idx] ?? 0;
+  const threshold = Math.max(pctThreshold, ABS_THRESHOLD_MIN);
+
+  const peakIdx = findPeaks(smoothed, threshold);
   const peakTs = peakIdx.map((i) => frames[i]!.t);
   const merged = mergeNearby(peakTs, opts.minSectionSec);
 
@@ -156,8 +175,7 @@ export function detect(series: BandTimeSeries, opts: DetectorOptions): {
     .filter((t) => t > opts.minSectionSec / 2 && t < series.duration - opts.minSectionSec / 2)
     .map((t) => ({ t, source: "auto" }));
 
-  // Tuning aid: 実音源の novelty スケールは曲によって異なる。Console に
-  // 統計を出してユーザが noveltyThreshold スライダを合わせる目安にする。
+  // Tuning aid: percentile-based でも実値が見えると安心なので Console に出す。
   if (smoothed.length > 0) {
     let max = 0, sum = 0;
     for (const v of smoothed) {
@@ -168,8 +186,9 @@ export function detect(series: BandTimeSeries, opts: DetectorOptions): {
     // eslint-disable-next-line no-console
     console.log(
       `[SectionDetector] smoothed novelty: max=${max.toFixed(5)}, ` +
-      `mean=${mean.toFixed(5)}, threshold=${opts.noveltyThreshold}, ` +
-      `peaks=${peakIdx.length}, boundaries=${boundaries.length}`,
+      `mean=${mean.toFixed(5)}, sensitivity=${sensitivity.toFixed(2)}, ` +
+      `threshold=${threshold.toFixed(5)}, peaks=${peakIdx.length}, ` +
+      `boundaries=${boundaries.length}`,
     );
   }
 

@@ -17,9 +17,10 @@ function makeSeries(blocks: Array<{ duration: number; bass: number; mid: number;
   return { duration: t, frames, sampleRate: 44100 };
 }
 
-// Threshold は SMOOTH_WINDOW=20 で step transition の novelty が ~0.024 に
-// 平滑化される前提で 0.02 に設定。実音源用デフォルトは settings.ts 側で別。
-const OPTS: DetectorOptions = { noveltyThreshold: 0.02, minSectionSec: 1.0 };
+// noveltyThreshold は sensitivity (0..1, percentile-based) として解釈される。
+// 0.5 = 上位 25% を境界候補。synthetic step transitions では 1 frame に
+// novelty が集中し ABS_THRESHOLD_MIN (0.001) で peak が検出される。
+const OPTS: DetectorOptions = { noveltyThreshold: 0.5, minSectionSec: 1.0 };
 
 describe("SectionDetector.detect", () => {
   test("単一帯域だけが鳴る曲は境界 0 個 = セクション 1 個", () => {
@@ -43,16 +44,16 @@ describe("SectionDetector.detect", () => {
     expect(closest.source).toBe("auto");
   });
 
-  test("noveltyThreshold を上げると境界数が減る (または同じ)", () => {
+  test("sensitivity を上げると境界数が増える (または同じ)", () => {
     const series = makeSeries([
       { duration: 5, bass: 0.9, mid: 0, treble: 0 },
       { duration: 5, bass: 0,   mid: 0.9, treble: 0 },
       { duration: 5, bass: 0,   mid: 0, treble: 0.9 },
       { duration: 5, bass: 0.9, mid: 0, treble: 0 },
     ]);
-    const lo = detect(series, { ...OPTS, noveltyThreshold: 0.01 }).boundaries.length;
-    const hi = detect(series, { ...OPTS, noveltyThreshold: 0.5 }).boundaries.length;
-    expect(hi).toBeLessThanOrEqual(lo);
+    const fewSensitivity = detect(series, { ...OPTS, noveltyThreshold: 0.0 }).boundaries.length;
+    const manySensitivity = detect(series, { ...OPTS, noveltyThreshold: 1.0 }).boundaries.length;
+    expect(fewSensitivity).toBeLessThanOrEqual(manySensitivity);
   });
 
   test("minSectionSec で過剰検出が抑制される", () => {
@@ -66,7 +67,7 @@ describe("SectionDetector.detect", () => {
       });
     }
     const series = makeSeries(blocks);
-    const r = detect(series, { noveltyThreshold: 0.01, minSectionSec: 5 });
+    const r = detect(series, { noveltyThreshold: 1.0, minSectionSec: 5 });
     expect(r.boundaries.length).toBeLessThanOrEqual(6);
   });
 
@@ -79,7 +80,7 @@ describe("SectionDetector.detect", () => {
       blocks.push({ duration: 0.45, bass: 0,   mid: 0,   treble: 0   }); // silence
     }
     const series = makeSeries(blocks);
-    const r = detect(series, { noveltyThreshold: 0.02, minSectionSec: 4.0 });
+    const r = detect(series, { noveltyThreshold: 0.5, minSectionSec: 4.0 });
     expect(r.boundaries.length).toBeLessThanOrEqual(1);
   });
 

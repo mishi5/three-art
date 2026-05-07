@@ -167,11 +167,12 @@ export function loadSettings(): Settings {
  * 0.4 → 0.005 に変更したため、範囲外の古い値はデフォルトにリセットする。
  */
 function migrate(s: Settings): Settings {
-  // 旧 slider 範囲 (0..1) のままの値を新 slider 範囲 (0..0.05) にリセット。
-  // 0.05 以下でも、現実音源の典型 peak (~0.005 以下) に対して大きすぎる
-  // 0.005 超の値もユーザの暗黙的な意図ではないと判定してデフォルトに戻す。
-  if (s.auto.noveltyThreshold > 0.005) {
-    s.auto.noveltyThreshold = 0.001;
+  // noveltyThreshold は当初 absolute threshold (0..0.05) として運用していたが、
+  // 実音源のスケール依存性が問題で percentile-based の sensitivity (0..1) に
+  // 仕様変更した。0.06 未満の保存値はおそらく旧仕様のものと判定し、新仕様の
+  // デフォルト 0.7 にリセットする。
+  if (s.auto.noveltyThreshold < 0.06) {
+    s.auto.noveltyThreshold = 0.7;
   }
   return s;
 }
@@ -268,11 +269,10 @@ export function makeDefaultSettings(): Settings {
     auto: {
       enabled: false,
       transitionSec: 1.5,
-      // 実音源では SMOOTH_WINDOW=20 frame の SMA で平滑化されるため、
-      // peak novelty は曲により ~0.0005-0.005 のオーダーになる。0.001 を
-      // 実用的なデフォルトとし、解析時に console に統計を出してユーザが
-      // 合わせやすくする (synthetic test 用は 0.02、レイヤが異なる)。
-      noveltyThreshold: 0.001,
+      // sensitivity (0..1) として percentile-based に解釈される。0.7 で
+      // smoothed novelty の上位 35% (= 1 - 0.7*0.5) を境界候補とする。
+      // 曲の絶対値スケールに依存しないため、曲を変えてもチューニング不要。
+      noveltyThreshold: 0.7,
       minSectionSec: 4.0,
     },
     audioSmoothing: 0.5,
