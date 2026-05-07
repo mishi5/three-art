@@ -89,7 +89,9 @@ export class App {
     `;
     document.body.appendChild(this.diagHud);
 
-    this.settingsPanel = new SettingsPanel(this.settings);
+    this.settingsPanel = new SettingsPanel(this.settings, () => {
+      // Task 12 で実装される。
+    });
 
     // Mouse + keyboard camera control. Defaults: left-drag = rotate,
     // right-drag = pan, wheel = zoom. Damping for smoothness.

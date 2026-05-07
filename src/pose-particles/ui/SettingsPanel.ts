@@ -1,4 +1,4 @@
-import GUI from "lil-gui";
+import GUI, { Controller } from "lil-gui";
 import type { Settings } from "../settings";
 import { RENDER_MODES, MOTION_TARGETS, makeDefaultSettings, saveSettings, clearSettings } from "../settings";
 import { TWIST_AXES } from "../visuals/twist";
@@ -6,8 +6,9 @@ import { TWIST_AXES } from "../visuals/twist";
 export class SettingsPanel {
   private gui: GUI;
   private settings: Settings;
+  private autoControlled: Controller[] = [];
 
-  constructor(settings: Settings) {
+  constructor(settings: Settings, onReanalyze: () => void) {
     this.settings = settings;
     this.gui = new GUI({ title: "Settings", width: 300 });
 
@@ -25,18 +26,30 @@ export class SettingsPanel {
     audio.add(settings, "audioSmoothing", 0, 0.95, 0.01).name("smoothing (0=instant)");
 
     const color = this.gui.addFolder("Color");
-    color.add(settings.color, "saturation", 0, 1, 0.01).name("saturation (0=mono)");
-    color.add(settings.color, "hueBase", 0, 1, 0.01).name("hue base");
+    this.autoControlled.push(
+      color.add(settings.color, "saturation", 0, 1, 0.01).name("saturation (0=mono)"),
+    );
+    this.autoControlled.push(
+      color.add(settings.color, "hueBase", 0, 1, 0.01).name("hue base"),
+    );
     color.add(settings.color, "hueSpread", 0, 1, 0.01).name("hue spread (rainbow)");
-    color.add(settings.color, "bassHueShift", 0, 1, 0.01).name("bass hue shift");
+    this.autoControlled.push(
+      color.add(settings.color, "bassHueShift", 0, 1, 0.01).name("bass hue shift"),
+    );
     color.add(settings.color, "trebleBoost", 0, 2, 0.05).name("treble brightness");
 
     const pc = this.gui.addFolder("PointCloud (体の点群)");
-    pc.add(settings.pointCloud, "bassExpansion", 0, 8, 0.1).name("bass expansion");
-    pc.add(settings.pointCloud, "trebleShimmer", 0, 0.2, 0.005).name("treble shimmer");
+    this.autoControlled.push(
+      pc.add(settings.pointCloud, "bassExpansion", 0, 8, 0.1).name("bass expansion"),
+    );
+    this.autoControlled.push(
+      pc.add(settings.pointCloud, "trebleShimmer", 0, 0.2, 0.005).name("treble shimmer"),
+    );
     pc.add(settings.pointCloud, "ambientShimmer", 0, 0.05, 0.001).name("ambient shimmer");
     pc.add(settings.pointCloud, "baseSize", 0, 10, 0.1).name("base size (px)");
-    pc.add(settings.pointCloud, "volumeSize", 0, 20, 0.1).name("volume size (px)");
+    this.autoControlled.push(
+      pc.add(settings.pointCloud, "volumeSize", 0, 20, 0.1).name("volume size (px)"),
+    );
 
     const shape = this.gui.addFolder("Shape (cube / sphere mode)");
     shape.add(settings.shape, "radius", 0.1, 3, 0.05).name("radius / half-size");
@@ -44,13 +57,19 @@ export class SettingsPanel {
 
     const ff = this.gui.addFolder("FragmentField (空間の細片)");
     ff.add(settings.fragmentField, "driftBase", 0, 2, 0.05).name("drift base");
-    ff.add(settings.fragmentField, "midDrift", 0, 3, 0.05).name("mid drift");
-    ff.add(settings.fragmentField, "jointPull", 0, 0.2, 0.005).name("joint pull");
+    this.autoControlled.push(
+      ff.add(settings.fragmentField, "midDrift", 0, 3, 0.05).name("mid drift"),
+    );
+    this.autoControlled.push(
+      ff.add(settings.fragmentField, "jointPull", 0, 0.2, 0.005).name("joint pull"),
+    );
     ff.add(settings.fragmentField, "noiseScale", 0.05, 3, 0.05).name("noise scale");
     ff.add(settings.fragmentField, "timeSpeed", 0, 1, 0.01).name("noise speed");
 
     const cam = this.gui.addFolder("Camera");
-    cam.add(settings.camera, "autoRotateSpeed", -10, 10, 0.1).name("auto rotate (0=off)");
+    this.autoControlled.push(
+      cam.add(settings.camera, "autoRotateSpeed", -10, 10, 0.1).name("auto rotate (0=off)"),
+    );
 
     const outlier = this.gui.addFolder("Outliers (spike chaos)");
     outlier.add(settings.outlier, "fraction", 0, 0.5, 0.01).name("fraction (~10%)");
@@ -71,13 +90,24 @@ export class SettingsPanel {
 
     const blur = this.gui.addFolder("Blur (post-process)");
     blur.add(settings.blur, "enabled").name("enabled");
-    blur.add(settings.blur, "strength", 0, 30, 0.1).name("strength (px)");
+    this.autoControlled.push(
+      blur.add(settings.blur, "strength", 0, 30, 0.1).name("strength (px)"),
+    );
     blur.add(settings.blur, "iterations", 1, 6, 1).name("iterations");
     blur.add(settings.blur, "bassDrive", 0, 3, 0.05).name("bass drive");
 
     const motion = this.gui.addFolder("Motion influence");
     motion.add(settings.motion, "target", [...MOTION_TARGETS]).name("target param");
     motion.add(settings.motion, "strength", 0, 30, 0.1).name("strength");
+
+    const auto = this.gui.addFolder("Auto Mode");
+    auto.add(settings.auto, "enabled").name("enabled").onChange((v: boolean) => {
+      this.applyAutoDisabled(v);
+    });
+    auto.add(settings.auto, "transitionSec", 0.5, 3.0, 0.05).name("transition (s)");
+    auto.add(settings.auto, "noveltyThreshold", 0.0, 1.0, 0.01).name("novelty threshold");
+    auto.add(settings.auto, "minSectionSec", 1.0, 10.0, 0.1).name("min section (s)");
+    auto.add({ reanalyze: () => onReanalyze() }, "reanalyze").name("Re-analyze");
 
     // Preset save / load / reset
     const presets = this.gui.addFolder("Preset");
@@ -100,6 +130,7 @@ export class SettingsPanel {
     dom.style.zIndex = "55";
     dom.style.maxHeight = "calc(100vh - 200px)";
     dom.style.overflowY = "auto";
+    this.applyAutoDisabled(settings.auto.enabled);
   }
 
   /** Replaces the live settings object's contents with another set, then refreshes the GUI. */
@@ -150,6 +181,12 @@ export class SettingsPanel {
 
   dispose(): void {
     this.gui.destroy();
+  }
+
+  private applyAutoDisabled(disabled: boolean): void {
+    for (const c of this.autoControlled) {
+      if (disabled) c.disable(); else c.enable();
+    }
   }
 }
 
