@@ -62,7 +62,7 @@ export async function run(audioBuffer: AudioBuffer): Promise<BandTimeSeries> {
       analyser.getByteFrequencyData(bins);
       samples.push({ t: target, bins });
       offline.resume();
-    }).catch(() => { /* skip frame on suspend error */ });
+    }).catch((err) => { console.warn("[SongAnalyzer] suspend failed at", target, err); });
   }
 
   src.start(0);

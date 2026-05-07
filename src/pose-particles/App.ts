@@ -198,6 +198,11 @@ export class App {
       this.showAnalyzingToast();
       try {
         const series = await SongAnalyzer.run(buffer);
+        // 解析中に別の曲がロードされていたら結果を破棄 (race guard)
+        if (this.currentSongHash !== hash) {
+          this.hideAnalyzingToast();
+          return;
+        }
         const det = detect(series, this.settings.auto);
         payload = {
           version: 1,
@@ -213,6 +218,8 @@ export class App {
       }
       this.hideAnalyzingToast();
     }
+    // キャッシュヒット時も別曲ロード後なら無視 (race guard)
+    if (this.currentSongHash !== hash) return;
     this.currentSeries = payload.series;
     this.sectionTimeline.setData(payload.series, payload.boundaries);
     this.parameterAutomation = new ParameterAutomation(
