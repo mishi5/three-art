@@ -44,6 +44,16 @@ describe("ParameterAutomation.applyAt", () => {
     expect(live.blur.strength).toBeCloseTo(0.5, 2);
   });
 
+  test("補間は smoothstep (cubic) であって linear ではない", () => {
+    // t=9.5, transitionSec=2 → u=0.25 → smoothstep(0.25)=0.15625
+    // 線形 lerp なら 0.25 になるが、smoothstep の cubic 形状で 0.15625 になる
+    const auto = new ParameterAutomation(SECTIONS, BOUNDARIES, MAP, 2.0);
+    const live = makeLive();
+    auto.applyAt(9.5, live as unknown as Record<string, unknown>);
+    expect(live.color.hueBase).toBeCloseTo(0.15625, 4);
+    expect(live.blur.strength).toBeCloseTo(0.15625, 4);
+  });
+
   test("境界より transitionSec/2 以上離れていれば補間がかからない", () => {
     const auto = new ParameterAutomation(SECTIONS, BOUNDARIES, MAP, 2.0);
     const live = makeLive();
