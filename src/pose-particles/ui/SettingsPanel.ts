@@ -105,7 +105,7 @@ export class SettingsPanel {
       this.applyAutoDisabled(v);
     });
     auto.add(settings.auto, "transitionSec", 0.5, 3.0, 0.05).name("transition (s)");
-    auto.add(settings.auto, "noveltyThreshold", 0.0, 0.05, 0.0005).name("novelty threshold");
+    auto.add(settings.auto, "noveltyThreshold", 0.0, 0.02, 0.0001).name("novelty threshold");
     auto.add(settings.auto, "minSectionSec", 1.0, 10.0, 0.1).name("min section (s)");
     auto.add({ reanalyze: () => onReanalyze() }, "reanalyze").name("Re-analyze");
 

@@ -156,6 +156,23 @@ export function detect(series: BandTimeSeries, opts: DetectorOptions): {
     .filter((t) => t > opts.minSectionSec / 2 && t < series.duration - opts.minSectionSec / 2)
     .map((t) => ({ t, source: "auto" }));
 
+  // Tuning aid: 実音源の novelty スケールは曲によって異なる。Console に
+  // 統計を出してユーザが noveltyThreshold スライダを合わせる目安にする。
+  if (smoothed.length > 0) {
+    let max = 0, sum = 0;
+    for (const v of smoothed) {
+      if (v > max) max = v;
+      sum += v;
+    }
+    const mean = sum / smoothed.length;
+    // eslint-disable-next-line no-console
+    console.log(
+      `[SectionDetector] smoothed novelty: max=${max.toFixed(5)}, ` +
+      `mean=${mean.toFixed(5)}, threshold=${opts.noveltyThreshold}, ` +
+      `peaks=${peakIdx.length}, boundaries=${boundaries.length}`,
+    );
+  }
+
   return {
     boundaries,
     sections: buildSections(series, boundaries),
