@@ -48,10 +48,15 @@ export interface AutoSettings {
   enabled: boolean;
   /** 境界補間の総幅 (秒)。前後 transitionSec/2 が補間ゾーン。 */
   transitionSec: number;
-  /** 境界検出の novelty 閾値 (0..1)。 */
+  /** 境界検出の sensitivity (0..1, percentile-based)。 */
   noveltyThreshold: number;
   /** 連続境界をマージする最小間隔 (秒)。 */
   minSectionSec: number;
+  /**
+   * スタイルプリセットのブレンド強度 (0..1)。0 = 実セクション特徴量のみ、
+   * 1 = STYLE_PRESETS が完全支配。中間で section ごとの「テーマ感」が混ざる。
+   */
+  styleStrength: number;
 }
 
 export interface Settings {
@@ -274,6 +279,7 @@ export function makeDefaultSettings(): Settings {
       // 曲の絶対値スケールに依存しないため、曲を変えてもチューニング不要。
       noveltyThreshold: 0.7,
       minSectionSec: 4.0,
+      styleStrength: 0.6,
     },
     audioSmoothing: 0.5,
   };

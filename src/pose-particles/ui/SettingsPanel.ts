@@ -107,6 +107,7 @@ export class SettingsPanel {
     auto.add(settings.auto, "transitionSec", 0.5, 3.0, 0.05).name("transition (s)");
     auto.add(settings.auto, "noveltyThreshold", 0.0, 1.0, 0.01).name("sensitivity (0..1)");
     auto.add(settings.auto, "minSectionSec", 1.0, 10.0, 0.1).name("min section (s)");
+    auto.add(settings.auto, "styleStrength", 0.0, 1.0, 0.01).name("style blend (0..1)");
     auto.add({ reanalyze: () => onReanalyze() }, "reanalyze").name("Re-analyze");
 
     // Preset save / load / reset

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Section, SectionBoundary } from "./AnalysisCache";
-import { type AutomationMap } from "./AutomationMap";
+import { type AutomationMap, type SectionFeatures } from "./AutomationMap";
 import { ParameterAutomation } from "./ParameterAutomation";
 
 interface FakeLive {
@@ -91,5 +91,39 @@ describe("ParameterAutomation.applyAt", () => {
     const live = makeLive();
     auto.applyAt(15, live as unknown as Record<string, unknown>);
     expect(live.color.hueBase).toBe(0.7);
+  });
+
+  test("styleStrength=0 では style 配列が無視される (従来挙動)", () => {
+    const styles: SectionFeatures[] = [{ energyNorm: 1, bassAbs: 1, midAbs: 1, trebleAbs: 1 }];
+    const auto = new ParameterAutomation(SECTIONS, BOUNDARIES, MAP, 0, styles, 0);
+    const live = makeLive();
+    auto.applyAt(2, live as unknown as Record<string, unknown>);
+    // section 0: energyNorm=0, bassAbs=0 → MAP の we=1, wb=1 で計算しても両方 0
+    expect(live.color.hueBase).toBe(0);
+    expect(live.blur.strength).toBe(0);
+  });
+
+  test("styleStrength=1 で完全に style 値が支配する", () => {
+    const styles: SectionFeatures[] = [{ energyNorm: 1, bassAbs: 0, midAbs: 0, trebleAbs: 0 }];
+    const auto = new ParameterAutomation(SECTIONS, BOUNDARIES, MAP, 0, styles, 1);
+    const live = makeLive();
+    auto.applyAt(2, live as unknown as Record<string, unknown>);
+    // section 0 の実 features (all 0) を捨てて style[0] の energyNorm=1 を使用
+    // MAP[0]: target=color.hueBase, we=1 → 1 * 1 = 1
+    expect(live.color.hueBase).toBe(1);
+  });
+
+  test("styles はセクション順で循環する (idx % styles.length)", () => {
+    const styles: SectionFeatures[] = [
+      { energyNorm: 0, bassAbs: 0, midAbs: 0, trebleAbs: 0 }, // section 0 用
+      { energyNorm: 1, bassAbs: 0, midAbs: 0, trebleAbs: 0 }, // section 1 用
+    ];
+    const auto = new ParameterAutomation(SECTIONS, BOUNDARIES, MAP, 0, styles, 1);
+    const live0 = makeLive();
+    auto.applyAt(2, live0 as unknown as Record<string, unknown>);
+    expect(live0.color.hueBase).toBe(0);
+    const live1 = makeLive();
+    auto.applyAt(15, live1 as unknown as Record<string, unknown>);
+    expect(live1.color.hueBase).toBe(1);
   });
 });

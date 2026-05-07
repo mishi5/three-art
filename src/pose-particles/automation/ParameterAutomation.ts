@@ -26,28 +26,36 @@ function asFeatures(s: Section): SectionFeatures {
 
 export class ParameterAutomation {
   private readonly entries: ReadonlyArray<AutomationEntry>;
+  private readonly styles: ReadonlyArray<SectionFeatures>;
+  private readonly styleStrength: number;
 
   constructor(
     private readonly sections: Section[],
     private readonly boundaries: SectionBoundary[],
     map: AutomationMap,
     private readonly transitionSec: number,
+    styles: ReadonlyArray<SectionFeatures> = [],
+    styleStrength: number = 0,
   ) {
     this.entries = map;
+    this.styles = styles;
+    this.styleStrength = Math.max(0, Math.min(1, styleStrength));
   }
 
   /**
    * 再生時刻 t (秒) に対して live Settings を上書きする。
    * 1) t を含むセクションを線形探索 (短い曲なので二分探索は不要、20 セクション程度)
-   * 2) 境界 ±transitionSec/2 の窓内なら隣接セクションを smoothstep で線形補間
+   * 2) セクションの実特徴量に style preset (sectionIndex で循環) を styleStrength
+   *    で混ぜる。これで似た特徴量のセクションでも見た目が変わる
+   * 3) 境界 ±transitionSec/2 の窓内なら隣接セクションを smoothstep で線形補間
    *    曲頭・曲末は片側のセクションがないので補間しない
-   * 3) 補間後の特徴量で AutomationMap を回し、setByPath で値を書き込む
+   * 4) 補間後の特徴量で AutomationMap を回し、setByPath で値を書き込む
    */
   applyAt(t: number, live: Record<string, unknown>): void {
     if (this.sections.length === 0) return;
     const idx = this.findSectionIndex(t);
     const cur = this.sections[idx]!;
-    let features = asFeatures(cur);
+    let features = this.featuresAt(idx);
 
     if (this.transitionSec > 0 && this.boundaries.length > 0) {
       const halfWin = this.transitionSec / 2;
@@ -56,7 +64,7 @@ export class ParameterAutomation {
       if (idx > 0) {
         const bd = cur.start;
         if (Math.abs(t - bd) < halfWin) {
-          const prev = asFeatures(this.sections[idx - 1]!);
+          const prev = this.featuresAt(idx - 1);
           // d=0 (境界の真上) で 0.5、d=halfWin で 1 (= 100% cur)、d=-halfWin で 0 (= 100% prev)
           const u = (t - bd) / this.transitionSec + 0.5; // 0..1
           features = lerpFeatures(prev, features, smoothstep(u));
@@ -66,7 +74,7 @@ export class ParameterAutomation {
       if (idx < this.sections.length - 1) {
         const bd = cur.end;
         if (Math.abs(t - bd) < halfWin) {
-          const next = asFeatures(this.sections[idx + 1]!);
+          const next = this.featuresAt(idx + 1);
           const u = (t - bd) / this.transitionSec + 0.5;
           features = lerpFeatures(features, next, smoothstep(u));
         }
@@ -76,6 +84,14 @@ export class ParameterAutomation {
     for (const e of this.entries) {
       setByPath(live, e.target, computeValue(e, features));
     }
+  }
+
+  /** セクション idx の特徴量を、style preset と styleStrength でブレンドして返す。 */
+  private featuresAt(idx: number): SectionFeatures {
+    const base = asFeatures(this.sections[idx]!);
+    if (this.styleStrength <= 0 || this.styles.length === 0) return base;
+    const style = this.styles[idx % this.styles.length]!;
+    return lerpFeatures(base, style, this.styleStrength);
   }
 
   private findSectionIndex(t: number): number {

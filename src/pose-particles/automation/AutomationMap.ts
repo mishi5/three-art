@@ -32,6 +32,20 @@ export function computeValue(e: AutomationEntry, f: SectionFeatures): number {
  * spec 表（設計書 §DEFAULT_AUTOMATION_MAP）にそって 10 個のパラメータを定義する。
  * チューニングは手動確認時に行う想定で、ここはあくまでセンセーブルな初期値。
  */
+/**
+ * スタイルプリセット: section index に応じて循環適用される SectionFeatures。
+ * 似た特徴量のセクション同士でも見た目が変わるよう、明示的に異なる
+ * パターンを 6 個用意し `styleStrength` で実セクション特徴量とブレンドする。
+ */
+export const STYLE_PRESETS: ReadonlyArray<SectionFeatures> = [
+  { energyNorm: 0.2,  bassAbs: 0.9,  midAbs: 0.1, trebleAbs: 0.0  }, // 0: deep & warm (bass-heavy)
+  { energyNorm: 0.45, bassAbs: 0.2,  midAbs: 0.8, trebleAbs: 0.2  }, // 1: vocal mid (calm)
+  { energyNorm: 1.0,  bassAbs: 0.7,  midAbs: 0.7, trebleAbs: 0.7  }, // 2: peak (bright)
+  { energyNorm: 0.6,  bassAbs: 0.0,  midAbs: 0.1, trebleAbs: 0.95 }, // 3: shimmer cold (treble)
+  { energyNorm: 0.85, bassAbs: 0.8,  midAbs: 0.6, trebleAbs: 0.0  }, // 4: warm peak
+  { energyNorm: 0.05, bassAbs: 0.0,  midAbs: 0.0, trebleAbs: 0.0  }, // 5: minimal (silent feel)
+];
+
 export const DEFAULT_AUTOMATION_MAP: AutomationMap = [
   // base はセクション特徴量がすべて 0 のときの値 (静かなセクション)。
   // we/wb/wm/wt は energyNorm/bassAbs/midAbs/trebleAbs に対する重み。

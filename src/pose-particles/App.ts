@@ -17,7 +17,7 @@ import { AnalysisCache, type CachePayload, type BandTimeSeries, type SectionBoun
 import * as SongAnalyzer from "./audio/SongAnalyzer";
 import { detect, recomputeSections } from "./audio/SectionDetector";
 import { ParameterAutomation } from "./automation/ParameterAutomation";
-import { DEFAULT_AUTOMATION_MAP } from "./automation/AutomationMap";
+import { DEFAULT_AUTOMATION_MAP, STYLE_PRESETS } from "./automation/AutomationMap";
 import { SectionTimeline } from "./ui/SectionTimeline";
 import { FileAudioSource } from "./audio/FileAudioSource";
 
@@ -227,6 +227,8 @@ export class App {
       payload.boundaries,
       DEFAULT_AUTOMATION_MAP,
       this.settings.auto.transitionSec,
+      STYLE_PRESETS,
+      this.settings.auto.styleStrength,
     );
   }
 
@@ -235,6 +237,7 @@ export class App {
     const sections = recomputeSections(this.currentSeries, next);
     this.parameterAutomation = new ParameterAutomation(
       sections, next, DEFAULT_AUTOMATION_MAP, this.settings.auto.transitionSec,
+      STYLE_PRESETS, this.settings.auto.styleStrength,
     );
     AnalysisCache.set(this.currentSongHash, {
       version: 1,
