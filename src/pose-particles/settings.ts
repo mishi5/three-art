@@ -155,10 +155,22 @@ export function loadSettings(): Settings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return defaults;
     const parsed = JSON.parse(raw) as Partial<Settings>;
-    return deepMerge(defaults, parsed);
+    return migrate(deepMerge(defaults, parsed));
   } catch {
     return defaults;
   }
+}
+
+/**
+ * 古い保存値を新しい slider 範囲に合わせる。Issue #5 のレビュー後に
+ * auto.noveltyThreshold の slider 範囲を 0..1 → 0..0.05、デフォルトを
+ * 0.4 → 0.005 に変更したため、範囲外の古い値はデフォルトにリセットする。
+ */
+function migrate(s: Settings): Settings {
+  if (s.auto.noveltyThreshold > 0.05) {
+    s.auto.noveltyThreshold = 0.005;
+  }
+  return s;
 }
 
 export function saveSettings(s: Settings): void {
