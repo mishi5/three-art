@@ -33,6 +33,28 @@ describe("framesFromBins", () => {
     expect(f.treble).toBeLessThan(0.1);
   });
 
+  test("mid-only の bin (251-2000Hz 帯のみ高い) で mid > bass, treble", () => {
+    const bins = new Uint8Array(FFT / 2);
+    const lo = Math.floor((250 / (SR / 2)) * (FFT / 2)) + 1;
+    const hi = Math.floor((2000 / (SR / 2)) * (FFT / 2));
+    for (let i = lo; i <= hi; i++) bins[i] = 255;
+    const f = framesFromBins([{ t: 0, bins }], SR, FFT)[0]!;
+    expect(f.mid).toBeGreaterThan(0.9);
+    expect(f.bass).toBeLessThan(0.1);
+    expect(f.treble).toBeLessThan(0.1);
+  });
+
+  test("treble-only の bin (2001-8000Hz 帯のみ高い) で treble > bass, mid", () => {
+    const bins = new Uint8Array(FFT / 2);
+    const lo = Math.floor((2000 / (SR / 2)) * (FFT / 2)) + 1;
+    const hi = Math.floor((8000 / (SR / 2)) * (FFT / 2));
+    for (let i = lo; i <= hi; i++) bins[i] = 255;
+    const f = framesFromBins([{ t: 0, bins }], SR, FFT)[0]!;
+    expect(f.treble).toBeGreaterThan(0.9);
+    expect(f.bass).toBeLessThan(0.1);
+    expect(f.mid).toBeLessThan(0.1);
+  });
+
   test("無音 (全 bin = 0) で全帯域 0", () => {
     const bins = new Uint8Array(FFT / 2);
     const f = framesFromBins([{ t: 0, bins }], SR, FFT)[0]!;

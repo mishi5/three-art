@@ -28,6 +28,11 @@ export function framesFromBins(
 /**
  * AudioBuffer を OfflineAudioContext に流して `HOP_MS` ごとに FFT bin を取り出し、
  * 帯域時系列を作る。AnalyserNode の挙動に依存するため Bun テスト不可。手動確認用。
+ *
+ * 注: AnalyserNode の `getByteFrequencyData` は dB スケール (デフォルト
+ * minDecibels=-100 / maxDecibels=-30) で 0..255 を出力する。これらの値が
+ * AnalysisCache の payload に焼き込まれるため、デフォルトを変更したら
+ * CACHE_VERSION を上げる必要がある。
  */
 export async function run(audioBuffer: AudioBuffer): Promise<BandTimeSeries> {
   const sr = audioBuffer.sampleRate;
@@ -48,6 +53,8 @@ export async function run(audioBuffer: AudioBuffer): Promise<BandTimeSeries> {
 
   // OfflineAudioContext.suspend(t) は t 秒で停止し getByteFrequencyData を読める。
   // ループで suspend → 読み取り → resume を繰り返す。
+  // .catch を付けて unhandled rejection が rendering を中断しないようにする
+  // (suspend は実装によっては render quantum 境界外で reject することがある)。
   for (let t = 0; t < total; t += step) {
     const target = t;
     offline.suspend(target).then(() => {
@@ -55,11 +62,15 @@ export async function run(audioBuffer: AudioBuffer): Promise<BandTimeSeries> {
       analyser.getByteFrequencyData(bins);
       samples.push({ t: target, bins });
       offline.resume();
-    });
+    }).catch(() => { /* skip frame on suspend error */ });
   }
 
   src.start(0);
   await offline.startRendering();
+
+  // microtask 順序は仕様上 in-order で push されるはずだが、defensive sort で
+  // 万一の順序ズレに備える。framesFromBins は時刻順を期待。
+  samples.sort((a, b) => a.t - b.t);
 
   return {
     duration: total,
