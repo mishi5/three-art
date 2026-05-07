@@ -307,6 +307,7 @@ function cloneSettings(s: Settings): Settings {
     edges: { ...s.edges },
     twist: { ...s.twist },
     blur: { ...s.blur },
+    auto: { ...s.auto },
   };
 }
 

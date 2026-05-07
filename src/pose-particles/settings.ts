@@ -43,6 +43,17 @@ export function modeToInt(mode: RenderMode): number {
   return mode === "bones" ? 0 : mode === "cube" ? 1 : 2;
 }
 
+export interface AutoSettings {
+  /** 自動制御を有効化する。曲ファイル再生時のみ実効。 */
+  enabled: boolean;
+  /** 境界補間の総幅 (秒)。前後 transitionSec/2 が補間ゾーン。 */
+  transitionSec: number;
+  /** 境界検出の novelty 閾値 (0..1)。 */
+  noveltyThreshold: number;
+  /** 連続境界をマージする最小間隔 (秒)。 */
+  minSectionSec: number;
+}
+
 export interface Settings {
   /** Which arrangement the PointCloud particles take. */
   mode: RenderMode;
@@ -128,6 +139,8 @@ export interface Settings {
   twist: TwistSettings;
   /** Post-process Gaussian blur applied to the final rendered image. */
   blur: BlurSettings;
+  /** 曲解析ベースのパラメータ自動制御 (Issue #5)。 */
+  auto: AutoSettings;
 }
 
 const STORAGE_KEY = "pose-particles.settings.v1";
@@ -237,6 +250,12 @@ export function makeDefaultSettings(): Settings {
     },
     twist: makeDefaultTwist(),
     blur: makeDefaultBlur(),
+    auto: {
+      enabled: false,
+      transitionSec: 1.5,
+      noveltyThreshold: 0.4,
+      minSectionSec: 4.0,
+    },
     audioSmoothing: 0.5,
   };
 }
