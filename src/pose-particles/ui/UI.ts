@@ -122,6 +122,7 @@ export class UI {
         await src.loadFromFile(file);
         await src.start();
         this.app.setAudio(src);
+        await this.app.onSongLoaded(file);
         fileStatus.textContent = `再生中: ${file.name}`;
         errBox.style.display = "none";
       } catch (e) {

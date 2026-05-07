@@ -12,6 +12,14 @@ import { BlurPipeline } from "./visuals/BlurPipeline";
 import { DebugOverlay } from "./ui/DebugOverlay";
 import { SettingsPanel } from "./ui/SettingsPanel";
 import { loadSettings, type Settings, type RenderMode, type MotionTarget } from "./settings";
+import { fileHash } from "./automation/fileHash";
+import { AnalysisCache, type CachePayload, type BandTimeSeries, type SectionBoundary } from "./automation/AnalysisCache";
+import * as SongAnalyzer from "./audio/SongAnalyzer";
+import { detect, recomputeSections } from "./audio/SectionDetector";
+import { ParameterAutomation } from "./automation/ParameterAutomation";
+import { DEFAULT_AUTOMATION_MAP } from "./automation/AutomationMap";
+import { SectionTimeline } from "./ui/SectionTimeline";
+import { FileAudioSource } from "./audio/FileAudioSource";
 
 export class App {
   readonly scene = new THREE.Scene();
@@ -37,6 +45,11 @@ export class App {
   private audioInput: AudioInput | null = null;
   private audioCtx: AudioContext | null = null;
   private rafId: number | null = null;
+  private parameterAutomation: ParameterAutomation | null = null;
+  private sectionTimeline: SectionTimeline;
+  private currentSongHash: string | null = null;
+  private currentSeries: BandTimeSeries | null = null;
+  private analyzingToast: HTMLDivElement | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene.background = new THREE.Color(0x000000);
@@ -89,9 +102,8 @@ export class App {
     `;
     document.body.appendChild(this.diagHud);
 
-    this.settingsPanel = new SettingsPanel(this.settings, () => {
-      // Task 12 で実装される。
-    });
+    this.sectionTimeline = new SectionTimeline((next) => this.onBoundariesEdited(next));
+    this.settingsPanel = new SettingsPanel(this.settings, () => this.reanalyze());
 
     // Mouse + keyboard camera control. Defaults: left-drag = rotate,
     // right-drag = pan, wheel = zoom. Damping for smoothness.
@@ -163,6 +175,89 @@ export class App {
     this.audioInput = audio;
   }
 
+  async onSongLoaded(file: File): Promise<void> {
+    if (!(this.audioInput instanceof FileAudioSource)) return;
+    const buffer = this.audioInput.getDecodedBuffer();
+    if (!buffer) return;
+    const head = new Uint8Array(await file.slice(0, 4096).arrayBuffer());
+    const hash = fileHash(file.name, file.size, head);
+    this.currentSongHash = hash;
+    await this.runAnalysis(hash, buffer, /*forceReanalyze*/ false);
+  }
+
+  async reanalyze(): Promise<void> {
+    if (!(this.audioInput instanceof FileAudioSource)) return;
+    const buffer = this.audioInput.getDecodedBuffer();
+    if (!buffer || !this.currentSongHash) return;
+    await this.runAnalysis(this.currentSongHash, buffer, true);
+  }
+
+  private async runAnalysis(hash: string, buffer: AudioBuffer, force: boolean): Promise<void> {
+    let payload: CachePayload | null = force ? null : AnalysisCache.get(hash);
+    if (!payload) {
+      this.showAnalyzingToast();
+      try {
+        const series = await SongAnalyzer.run(buffer);
+        const det = detect(series, this.settings.auto);
+        payload = {
+          version: 1,
+          series,
+          boundaries: det.boundaries,
+          sections: det.sections,
+        };
+        AnalysisCache.set(hash, payload);
+      } catch (e) {
+        console.warn("[App] song analysis failed", e);
+        this.hideAnalyzingToast();
+        return;
+      }
+      this.hideAnalyzingToast();
+    }
+    this.currentSeries = payload.series;
+    this.sectionTimeline.setData(payload.series, payload.boundaries);
+    this.parameterAutomation = new ParameterAutomation(
+      payload.sections,
+      payload.boundaries,
+      DEFAULT_AUTOMATION_MAP,
+      this.settings.auto.transitionSec,
+    );
+  }
+
+  private onBoundariesEdited(next: SectionBoundary[]): void {
+    if (!this.currentSeries || !this.currentSongHash) return;
+    const sections = recomputeSections(this.currentSeries, next);
+    this.parameterAutomation = new ParameterAutomation(
+      sections, next, DEFAULT_AUTOMATION_MAP, this.settings.auto.transitionSec,
+    );
+    AnalysisCache.set(this.currentSongHash, {
+      version: 1,
+      series: this.currentSeries,
+      boundaries: next,
+      sections,
+    });
+  }
+
+  private showAnalyzingToast(): void {
+    if (this.analyzingToast) return;
+    const div = document.createElement("div");
+    div.textContent = "Analyzing song…";
+    div.style.cssText = `
+      position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%);
+      padding: 12px 18px; background: rgba(0,0,0,0.75); color: #fff;
+      font: 14px/1.4 system-ui; border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 4px; z-index: 80;
+    `;
+    document.body.appendChild(div);
+    this.analyzingToast = div;
+  }
+
+  private hideAnalyzingToast(): void {
+    if (this.analyzingToast) {
+      this.analyzingToast.remove();
+      this.analyzingToast = null;
+    }
+  }
+
   start(): void {
     const tick = (): void => {
       this.rafId = requestAnimationFrame(tick);
@@ -188,6 +283,14 @@ export class App {
     // chosen target as a multiplicative boost. The user's persisted settings
     // stay untouched (so the GUI keeps showing their tuned value).
     const live = cloneSettings(this.settings);
+    // Auto モード: ファイル再生時のみ live を上書きする。
+    if (this.settings.auto.enabled
+        && this.parameterAutomation
+        && this.audioInput instanceof FileAudioSource) {
+      const t = this.audioInput.getCurrentTime();
+      this.parameterAutomation.applyAt(t, live as unknown as Record<string, unknown>);
+      this.sectionTimeline.setCurrentTime(t);
+    }
     if (live.motion.target !== "off") {
       const factor = 1 + motion * live.motion.strength;
       applyMotionTo(live, live.motion.target, factor);
@@ -239,6 +342,9 @@ export class App {
       this.orbit.update();
       this.lastMode = this.settings.mode;
     }
+    // SectionTimeline: auto.enabled のときだけ表示
+    if (this.settings.auto.enabled) this.sectionTimeline.show();
+    else this.sectionTimeline.hide();
     this.orbit.update();
     this.blurPipeline.update(live.blur, this.smoothedAudio.bass);
     // diagnostic: origin stays at world (0,0,0); centroid sits at where the
@@ -289,6 +395,7 @@ export class App {
     this.audioInput?.stop();
     this.debugOverlay?.dispose();
     this.settingsPanel.dispose();
+    this.sectionTimeline.dispose();
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("keydown", this.onKeyDown);
   }
