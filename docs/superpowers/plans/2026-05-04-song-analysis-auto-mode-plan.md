@@ -519,6 +519,19 @@ git commit -m "#5 feat: 10 パラメータの DEFAULT_AUTOMATION_MAP と compute
 
 `BandTimeSeries`, `SectionBoundary`, `Section` 型は Task 2 の `AnalysisCache.ts` で先行定義済み。再エクスポートして使う。
 
+> **実装ノート（2026-05-07 追記）**: 実装中に spec のアルゴリズムに 2 つのバグが発見された。
+> 1. cosine novelty (3-D 単位ベクトル) は amp-only シフト (形状不変の音量変化) を捉えられない。これは spec が当初想定した「曲全体での energyNorm 正規化を境界検出が前提に」する設計と矛盾する。
+> 2. zero-vector ハンドリングが未指定で、打楽器の単発 hit (silence → spike → silence) を強い novelty として検出してしまう。
+>
+> 解決:
+> - cosine novelty は維持（real audio で transient 誤検出を避けるため、L2 やハイブリッドより堅牢）。
+> - **片側または両側 zero-vec のとき 0 を返す**ことで transient rejection を実装。
+> - amp-only シフトでの境界検出は仕様から外し、ユーザが SectionTimeline で手動境界追加することで対応。`energyNorm` の min-max 正規化は `recomputeSections` 経由で動作する。
+> - テストは「形状変化で境界検出」「transient で境界 0」「amp-only シフトは detect では 0、recomputeSections で energyNorm 正規化が機能」を検証する形に修正。
+> - threshold は SMOOTH_WINDOW=20 と整合する 0.02 を採用（synthetic step transition で peak ≈ 0.024）。
+>
+> 詳細は spec doc §解析パイプライン詳細 を参照。下記の Step 3 コードと Step 1 テストは初期 plan で、実コミット (`5d6b...` 後の修正コミット) では cosine novelty + zero-vec ガード版が反映されている。
+
 - [ ] **Step 1: Write the failing test**
 
 Create `src/pose-particles/audio/SectionDetector.test.ts`:

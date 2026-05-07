@@ -6,17 +6,33 @@ export interface DetectorOptions {
   minSectionSec: number;
 }
 
-const SMOOTH_WINDOW = 5; // 5 frames * 50ms = 250ms
+const SMOOTH_WINDOW = 20; // 20 frames * 50ms ≈ 1 秒
 
 /**
- * 帯域 3 軸 [bass, mid, treble] の L2 距離を sqrt(3) で正規化。値域 [0, 1]。
- * スペクトル形状と振幅の両方の変化を捉える。
+ * 帯域 3 軸 [bass, mid, treble] を単位ベクトル化。ノルム 0 の場合は 0 ベクトル。
  */
-function l2Novelty(a: BandFrame, b: BandFrame): number {
-  const db = b.bass - a.bass;
-  const dm = b.mid - a.mid;
-  const dt = b.treble - a.treble;
-  return Math.sqrt(db * db + dm * dm + dt * dt) / Math.sqrt(3);
+function unit3(b: number, m: number, t: number): [number, number, number] {
+  const n = Math.sqrt(b * b + m * m + t * t);
+  if (n < 1e-9) return [0, 0, 0];
+  return [b / n, m / n, t / n];
+}
+
+/**
+ * (1 - cosSimilarity) / 2 を返す。値域 [0, 1]。
+ *
+ * 形状（スペクトル比）の変化のみ捉える。両ベクトルがゼロ（無音）または
+ * どちらか一方がゼロのときは 0 を返し、変化なしと扱う。これは打楽器の
+ * 単発 hit (silence → spike → silence) を境界として誤検出しないため。
+ *
+ * 振幅変化（pure volume swell, 形状不変）は別途 energyNorm が section ごとに
+ * 出すので、ユーザは SectionTimeline で必要なら手動で境界を追加できる。
+ */
+function cosineNovelty(a: [number, number, number], b: [number, number, number]): number {
+  const aZero = a[0] === 0 && a[1] === 0 && a[2] === 0;
+  const bZero = b[0] === 0 && b[1] === 0 && b[2] === 0;
+  if (aZero || bZero) return 0;
+  const dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  return (1 - dot) / 2;
 }
 
 /**
@@ -125,8 +141,11 @@ export function detect(series: BandTimeSeries, opts: DetectorOptions): {
   }
 
   const novelty = new Array<number>(frames.length).fill(0);
+  let prev = unit3(frames[0]!.bass, frames[0]!.mid, frames[0]!.treble);
   for (let i = 1; i < frames.length; i++) {
-    novelty[i] = l2Novelty(frames[i - 1]!, frames[i]!);
+    const cur = unit3(frames[i]!.bass, frames[i]!.mid, frames[i]!.treble);
+    novelty[i] = cosineNovelty(prev, cur);
+    prev = cur;
   }
   const smoothed = smooth(novelty, SMOOTH_WINDOW);
   const peakIdx = findPeaks(smoothed, opts.noveltyThreshold);

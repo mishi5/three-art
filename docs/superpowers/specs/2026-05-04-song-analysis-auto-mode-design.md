@@ -248,6 +248,8 @@ out = clamp(base + we*energyNorm + wb*bassAbs + wm*midAbs + wt*trebleAbs, min, m
    ゼロベクトルのまま扱う）。
 2. 連続 frame 間の **`(1 - cosSimilarity) / 2`** を novelty 列にする
    （0..1 にスケール、`noveltyThreshold` の 0..1 GUI スライダと整合）。
+   片側または両側がゼロベクトル（無音）のときは 0 を返す。これにより打楽器の
+   単発 hit (`silence → spike → silence`) は境界として検出されない。
 3. 20 フレーム (≈1 秒) の移動平均で平滑化。
 4. 局所最大点を抽出し、`noveltyThreshold` を超えるものを境界候補に。
 5. 境界の前後が `minSectionSec` 未満ならマージ。
@@ -255,6 +257,14 @@ out = clamp(base + we*energyNorm + wb*bassAbs + wm*midAbs + wt*trebleAbs, min, m
    - 境界が 0 個なら `sections` は曲全体を覆う 1 個になる。
    - `energyNorm` 計算では `series.frames.map(f => f.volume)` の min/max
      を取る。`max - min` がほぼゼロのときは全セクション 0.5 にフォールバック。
+
+**設計判断: amp-only シフト（形状不変の音量変化）は detect では境界が立たない。**
+cosine novelty は形状（スペクトル比）の変化のみ捉える設計とし、純粋な音量変化を
+境界として検出することは意図的に行わない。理由は、L2 距離やハイブリッドだと打楽器の
+transient（kick/snare）が周期的に大きな novelty を出して誤検出につながるため。
+ユーザが「ここが盛り上がりの始まり」と感じる箇所は、SectionTimeline の波形 UI で
+手動で境界を追加することで対応する。`energyNorm` の min-max 正規化機能自体は、
+detect 経由でも recomputeSections 経由でも動作する。
 
 ### ParameterAutomation 詳細
 

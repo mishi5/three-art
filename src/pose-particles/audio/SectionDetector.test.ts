@@ -17,7 +17,9 @@ function makeSeries(blocks: Array<{ duration: number; bass: number; mid: number;
   return { duration: t, frames, sampleRate: 44100 };
 }
 
-const OPTS: DetectorOptions = { noveltyThreshold: 0.1, minSectionSec: 1.0 };
+// Threshold は SMOOTH_WINDOW=20 で step transition の novelty が ~0.024 に
+// 平滑化される前提で 0.02 に設定。実音源用デフォルトは settings.ts 側で別。
+const OPTS: DetectorOptions = { noveltyThreshold: 0.02, minSectionSec: 1.0 };
 
 describe("SectionDetector.detect", () => {
   test("単一帯域だけが鳴る曲は境界 0 個 = セクション 1 個", () => {
@@ -29,7 +31,7 @@ describe("SectionDetector.detect", () => {
     expect(r.sections[0]?.end).toBeCloseTo(series.duration, 1);
   });
 
-  test("前半 bass-only / 後半 treble-only で中央付近に境界が立つ", () => {
+  test("形状変化 (bass-only → treble-only) で中央付近に境界が立つ", () => {
     const series = makeSeries([
       { duration: 15, bass: 0.9, mid: 0, treble: 0 },
       { duration: 15, bass: 0,   mid: 0, treble: 0.9 },
@@ -48,7 +50,7 @@ describe("SectionDetector.detect", () => {
       { duration: 5, bass: 0,   mid: 0, treble: 0.9 },
       { duration: 5, bass: 0.9, mid: 0, treble: 0 },
     ]);
-    const lo = detect(series, { ...OPTS, noveltyThreshold: 0.05 }).boundaries.length;
+    const lo = detect(series, { ...OPTS, noveltyThreshold: 0.01 }).boundaries.length;
     const hi = detect(series, { ...OPTS, noveltyThreshold: 0.5 }).boundaries.length;
     expect(hi).toBeLessThanOrEqual(lo);
   });
@@ -64,19 +66,21 @@ describe("SectionDetector.detect", () => {
       });
     }
     const series = makeSeries(blocks);
-    const r = detect(series, { noveltyThreshold: 0.05, minSectionSec: 5 });
+    const r = detect(series, { noveltyThreshold: 0.01, minSectionSec: 5 });
     expect(r.boundaries.length).toBeLessThanOrEqual(6);
   });
 
-  test("セクションの energyNorm は曲全体内で min-max 正規化される", () => {
-    const series = makeSeries([
-      { duration: 10, bass: 0.2, mid: 0.2, treble: 0.2, volume: 0.2 },
-      { duration: 10, bass: 0.8, mid: 0.8, treble: 0.8, volume: 0.8 },
-    ]);
-    const r = detect(series, OPTS);
-    const energies = r.sections.map((s) => s.energyNorm).sort((a, b) => a - b);
-    expect(energies[0]).toBeCloseTo(0, 1);
-    expect(energies[energies.length - 1]).toBeCloseTo(1, 1);
+  test("打楽器 transient (silence→spike→silence) は境界として検出されない", () => {
+    // 30 秒, 0.5s ごとに 1 frame だけ kick (前後は silence)。
+    // cosine novelty は片側 zero-vec で 0 を返すため、kick frame の novelty も 0。
+    const blocks: Array<{ duration: number; bass: number; mid: number; treble: number; volume?: number }> = [];
+    for (let i = 0; i < 60; i++) {
+      blocks.push({ duration: 0.05, bass: 0.6, mid: 0.4, treble: 0.2 }); // kick
+      blocks.push({ duration: 0.45, bass: 0,   mid: 0,   treble: 0   }); // silence
+    }
+    const series = makeSeries(blocks);
+    const r = detect(series, { noveltyThreshold: 0.02, minSectionSec: 4.0 });
+    expect(r.boundaries.length).toBeLessThanOrEqual(1);
   });
 
   test("セクションの bassAbs / midAbs / trebleAbs はセクション内平均 (生値)", () => {
@@ -112,5 +116,20 @@ describe("SectionDetector.recomputeSections", () => {
     expect(sections).toHaveLength(1);
     expect(sections[0]?.start).toBe(0);
     expect(sections[0]?.end).toBeCloseTo(series.duration, 1);
+  });
+
+  test("amp-only シフト (形状不変) は detect では境界が立たないが、recomputeSections で energyNorm が min-max 正規化される", () => {
+    // 同じ帯域比 (1:1:1) で振幅だけが変わる。cosine novelty は形状のみ捉えるので
+    // detect は境界 0 を返す。energyNorm の min-max 正規化機能はユーザが
+    // SectionTimeline で境界を追加した経路でのみ意味を持つので、recomputeSections で検証。
+    const series = makeSeries([
+      { duration: 10, bass: 0.2, mid: 0.2, treble: 0.2, volume: 0.2 },
+      { duration: 10, bass: 0.8, mid: 0.8, treble: 0.8, volume: 0.8 },
+    ]);
+    expect(detect(series, OPTS).boundaries).toHaveLength(0);
+    const sections = recomputeSections(series, [{ t: 10, source: "user-add" }]);
+    const energies = sections.map((s) => s.energyNorm).sort((a, b) => a - b);
+    expect(energies[0]).toBeCloseTo(0, 1);
+    expect(energies[energies.length - 1]).toBeCloseTo(1, 1);
   });
 });
