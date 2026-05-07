@@ -253,7 +253,10 @@ export function makeDefaultSettings(): Settings {
     auto: {
       enabled: false,
       transitionSec: 1.5,
-      noveltyThreshold: 0.4,
+      // 実音源では SMOOTH_WINDOW=20 frame の SMA で平滑化されるため、
+      // peak novelty は ~0.001-0.02 のオーダーになる。0.005 を実用的な
+      // デフォルトとする (synthetic test 用は 0.02、レイヤが異なる)。
+      noveltyThreshold: 0.005,
       minSectionSec: 4.0,
     },
     audioSmoothing: 0.5,

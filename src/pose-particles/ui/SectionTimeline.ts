@@ -36,9 +36,12 @@ export function addOrRemoveBoundary(
  * クリックで境界を追加/削除し、コールバックで上位 (App) に通知する。
  *
  * Note: high-DPI (Retina) ディスプレイ対応のため、canvas の internal pixel 数は
- * `window.innerWidth * dpr` x `96 * dpr` を取り、CSS サイズは 100vw x 96px のまま。
- * 描画座標は internal pixel ベースで計算するので width/height をそのまま使う。
+ * `cssWidth * dpr` x `96 * dpr` を取る。CSS サイズは 100% で親要素の幅に追従。
+ * SettingsPanel (右側 300px + 16px margin = 316px 占有) と重ならないよう、
+ * タイムライン本体の右端を 332px 内側で止める。
  */
+const TIMELINE_RIGHT_OFFSET_PX = 332;
+const TIMELINE_HEIGHT_PX = 96;
 export class SectionTimeline {
   readonly element: HTMLDivElement;
   private canvas: HTMLCanvasElement;
@@ -51,8 +54,8 @@ export class SectionTimeline {
     this.onChange = onChange;
     this.element = document.createElement("div");
     this.element.style.cssText = `
-      position: fixed; left: 0; bottom: 0;
-      width: 100vw; height: 96px;
+      position: fixed; left: 0; right: ${TIMELINE_RIGHT_OFFSET_PX}px; bottom: 0;
+      height: ${TIMELINE_HEIGHT_PX}px;
       background: rgba(0,0,0,0.5);
       border-top: 1px solid rgba(255,255,255,0.2);
       z-index: 50;
@@ -68,7 +71,12 @@ export class SectionTimeline {
     this.handleResize();
   }
 
-  show(): void { this.element.style.display = "block"; this.draw(); }
+  show(): void {
+    this.element.style.display = "block";
+    // display:none 中は getBoundingClientRect の width が 0 になるため、
+    // 表示直後に canvas の internal pixel size を再計算する。
+    this.handleResize();
+  }
   hide(): void { this.element.style.display = "none"; }
 
   setData(series: BandTimeSeries, boundaries: SectionBoundary[]): void {
@@ -90,8 +98,13 @@ export class SectionTimeline {
 
   private handleResize = (): void => {
     const dpr = Math.min(window.devicePixelRatio, 2);
-    this.canvas.width = Math.floor(window.innerWidth * dpr);
-    this.canvas.height = Math.floor(96 * dpr);
+    // CSS で `right: <offset>px` を指定しているため、canvas の実際の幅は
+    // `getBoundingClientRect().width` で取得する。display:none のときは 0 を
+    // 返すので、その場合はフォールバックで window.innerWidth - offset を使う。
+    const rect = this.canvas.getBoundingClientRect();
+    const cssWidth = rect.width > 0 ? rect.width : Math.max(0, window.innerWidth - TIMELINE_RIGHT_OFFSET_PX);
+    this.canvas.width = Math.max(1, Math.floor(cssWidth * dpr));
+    this.canvas.height = Math.max(1, Math.floor(TIMELINE_HEIGHT_PX * dpr));
     this.draw();
   };
 
