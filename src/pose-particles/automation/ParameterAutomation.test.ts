@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Section, SectionBoundary } from "./AnalysisCache";
-import { type AutomationMap, type SectionFeatures } from "./AutomationMap";
+import { type AutomationMap, type StylePreset } from "./AutomationMap";
 import { ParameterAutomation } from "./ParameterAutomation";
 
 interface FakeLive {
@@ -94,29 +94,36 @@ describe("ParameterAutomation.applyAt", () => {
   });
 
   test("styleStrength=0 では style 配列が無視される (従来挙動)", () => {
-    const styles: SectionFeatures[] = [{ energyNorm: 1, bassAbs: 1, midAbs: 1, trebleAbs: 1 }];
+    const styles: StylePreset[] = [{
+      features: { energyNorm: 1, bassAbs: 1, midAbs: 1, trebleAbs: 1 },
+      overrides: { "color.hueBase": 0.99 },
+    }];
     const auto = new ParameterAutomation(SECTIONS, BOUNDARIES, MAP, 0, styles, 0);
     const live = makeLive();
     auto.applyAt(2, live as unknown as Record<string, unknown>);
     // section 0: energyNorm=0, bassAbs=0 → MAP の we=1, wb=1 で計算しても両方 0
+    // overrides も適用されない
     expect(live.color.hueBase).toBe(0);
     expect(live.blur.strength).toBe(0);
   });
 
-  test("styleStrength=1 で完全に style 値が支配する", () => {
-    const styles: SectionFeatures[] = [{ energyNorm: 1, bassAbs: 0, midAbs: 0, trebleAbs: 0 }];
+  test("styleStrength=1 で features が完全支配する", () => {
+    const styles: StylePreset[] = [{
+      features: { energyNorm: 1, bassAbs: 0, midAbs: 0, trebleAbs: 0 },
+      overrides: {},
+    }];
     const auto = new ParameterAutomation(SECTIONS, BOUNDARIES, MAP, 0, styles, 1);
     const live = makeLive();
     auto.applyAt(2, live as unknown as Record<string, unknown>);
-    // section 0 の実 features (all 0) を捨てて style[0] の energyNorm=1 を使用
+    // section 0 の実 features (all 0) を捨てて style[0].features の energyNorm=1 を使用
     // MAP[0]: target=color.hueBase, we=1 → 1 * 1 = 1
     expect(live.color.hueBase).toBe(1);
   });
 
   test("styles はセクション順で循環する (idx % styles.length)", () => {
-    const styles: SectionFeatures[] = [
-      { energyNorm: 0, bassAbs: 0, midAbs: 0, trebleAbs: 0 }, // section 0 用
-      { energyNorm: 1, bassAbs: 0, midAbs: 0, trebleAbs: 0 }, // section 1 用
+    const styles: StylePreset[] = [
+      { features: { energyNorm: 0, bassAbs: 0, midAbs: 0, trebleAbs: 0 }, overrides: {} },
+      { features: { energyNorm: 1, bassAbs: 0, midAbs: 0, trebleAbs: 0 }, overrides: {} },
     ];
     const auto = new ParameterAutomation(SECTIONS, BOUNDARIES, MAP, 0, styles, 1);
     const live0 = makeLive();
@@ -125,5 +132,46 @@ describe("ParameterAutomation.applyAt", () => {
     const live1 = makeLive();
     auto.applyAt(15, live1 as unknown as Record<string, unknown>);
     expect(live1.color.hueBase).toBe(1);
+  });
+
+  test("style.overrides が discrete 値を上書きする (補間なし、瞬時切替)", () => {
+    interface FakeLiveExt {
+      color: { hueBase: number };
+      blur: { strength: number; enabled: boolean };
+      mode: string;
+    }
+    const styles: StylePreset[] = [
+      {
+        features: { energyNorm: 0, bassAbs: 0, midAbs: 0, trebleAbs: 0 },
+        overrides: { mode: "cube", "blur.enabled": true },
+      },
+      {
+        features: { energyNorm: 0, bassAbs: 0, midAbs: 0, trebleAbs: 0 },
+        overrides: { mode: "sphere", "blur.enabled": false },
+      },
+    ];
+    const auto = new ParameterAutomation(SECTIONS, BOUNDARIES, MAP, 0, styles, 0.5);
+
+    const live0: FakeLiveExt = { color: { hueBase: 0.5 }, blur: { strength: 0, enabled: false }, mode: "bones" };
+    auto.applyAt(2, live0 as unknown as Record<string, unknown>);
+    expect(live0.mode).toBe("cube");
+    expect(live0.blur.enabled).toBe(true);
+
+    const live1: FakeLiveExt = { color: { hueBase: 0.5 }, blur: { strength: 0, enabled: true }, mode: "bones" };
+    auto.applyAt(15, live1 as unknown as Record<string, unknown>);
+    expect(live1.mode).toBe("sphere");
+    expect(live1.blur.enabled).toBe(false);
+  });
+
+  test("styleStrength=0 のとき overrides も適用されない", () => {
+    const styles: StylePreset[] = [{
+      features: { energyNorm: 0, bassAbs: 0, midAbs: 0, trebleAbs: 0 },
+      overrides: { "color.hueBase": 0.42 },
+    }];
+    const auto = new ParameterAutomation(SECTIONS, BOUNDARIES, MAP, 0, styles, 0);
+    const live = makeLive();
+    auto.applyAt(2, live as unknown as Record<string, unknown>);
+    // styleStrength=0 で overrides もスキップされる (実 features での計算のみ)
+    expect(live.color.hueBase).toBe(0); // section 0 の実 features (all 0) で計算
   });
 });

@@ -33,17 +33,100 @@ export function computeValue(e: AutomationEntry, f: SectionFeatures): number {
  * チューニングは手動確認時に行う想定で、ここはあくまでセンセーブルな初期値。
  */
 /**
- * スタイルプリセット: section index に応じて循環適用される SectionFeatures。
- * 似た特徴量のセクション同士でも見た目が変わるよう、明示的に異なる
- * パターンを 6 個用意し `styleStrength` で実セクション特徴量とブレンドする。
+ * スタイルプリセット: section index に応じて循環適用される。
+ * - features: 連続パラメータ用に SectionFeatures をブレンド (styleStrength で強度)
+ * - overrides: discrete な値 (mode / *.enabled など) の上書き。section に入った
+ *   瞬間に切替され、補間されない (連続変化できないので意図的に離散切替)
  */
-export const STYLE_PRESETS: ReadonlyArray<SectionFeatures> = [
-  { energyNorm: 0.2,  bassAbs: 0.9,  midAbs: 0.1, trebleAbs: 0.0  }, // 0: deep & warm (bass-heavy)
-  { energyNorm: 0.45, bassAbs: 0.2,  midAbs: 0.8, trebleAbs: 0.2  }, // 1: vocal mid (calm)
-  { energyNorm: 1.0,  bassAbs: 0.7,  midAbs: 0.7, trebleAbs: 0.7  }, // 2: peak (bright)
-  { energyNorm: 0.6,  bassAbs: 0.0,  midAbs: 0.1, trebleAbs: 0.95 }, // 3: shimmer cold (treble)
-  { energyNorm: 0.85, bassAbs: 0.8,  midAbs: 0.6, trebleAbs: 0.0  }, // 4: warm peak
-  { energyNorm: 0.05, bassAbs: 0.0,  midAbs: 0.0, trebleAbs: 0.0  }, // 5: minimal (silent feel)
+export interface StylePreset {
+  features: SectionFeatures;
+  overrides: Record<string, unknown>;
+}
+
+export const STYLE_PRESETS: ReadonlyArray<StylePreset> = [
+  // 0: bones bass-heavy (edges のグラフがメイン)
+  {
+    features: { energyNorm: 0.2, bassAbs: 0.9, midAbs: 0.1, trebleAbs: 0.0 },
+    overrides: {
+      mode: "bones",
+      "twist.enabled": false,
+      "blur.enabled": false,
+      "edges.enabled": true,
+      "edges.alpha": 0.7,
+      "color.hueSpread": 0.1,
+    },
+  },
+  // 1: cube + twist y軸 (中音メイン)
+  {
+    features: { energyNorm: 0.45, bassAbs: 0.2, midAbs: 0.8, trebleAbs: 0.2 },
+    overrides: {
+      mode: "cube",
+      "twist.enabled": true,
+      "twist.axis": "y",
+      "twist.strength": 3.0,
+      "twist.phaseSpeed": 0.5,
+      "blur.enabled": true,
+      "edges.enabled": false,
+      "color.hueSpread": 0.4,
+    },
+  },
+  // 2: sphere + 全部最大 (ピーク)
+  {
+    features: { energyNorm: 1.0, bassAbs: 0.7, midAbs: 0.7, trebleAbs: 0.7 },
+    overrides: {
+      mode: "sphere",
+      "twist.enabled": true,
+      "twist.axis": "z",
+      "twist.strength": 5.0,
+      "twist.phaseSpeed": 1.5,
+      "blur.enabled": true,
+      "edges.enabled": true,
+      "edges.alpha": 0.5,
+      "outlier.fraction": 0.25,
+      "outlier.boost": 5.0,
+      "color.hueSpread": 0.7,
+    },
+  },
+  // 3: bones treble-shimmer (高音メイン、ねじれ無し、blur 無し)
+  {
+    features: { energyNorm: 0.6, bassAbs: 0.0, midAbs: 0.1, trebleAbs: 0.95 },
+    overrides: {
+      mode: "bones",
+      "twist.enabled": false,
+      "blur.enabled": false,
+      "edges.enabled": false,
+      "outlier.fraction": 0.15,
+      "outlier.boost": 4.0,
+      "color.hueSpread": 0.9,
+    },
+  },
+  // 4: cube + twist x軸 (warm peak、回転速い)
+  {
+    features: { energyNorm: 0.85, bassAbs: 0.8, midAbs: 0.6, trebleAbs: 0.0 },
+    overrides: {
+      mode: "cube",
+      "twist.enabled": true,
+      "twist.axis": "x",
+      "twist.strength": 2.0,
+      "twist.phaseSpeed": -1.0,
+      "blur.enabled": false,
+      "edges.enabled": true,
+      "edges.alpha": 0.3,
+      "color.hueSpread": 0.2,
+    },
+  },
+  // 5: sphere minimal (静寂、ほぼ何も無い)
+  {
+    features: { energyNorm: 0.05, bassAbs: 0.0, midAbs: 0.0, trebleAbs: 0.0 },
+    overrides: {
+      mode: "sphere",
+      "twist.enabled": false,
+      "blur.enabled": true,
+      "edges.enabled": false,
+      "outlier.fraction": 0.02,
+      "color.hueSpread": 0.0,
+    },
+  },
 ];
 
 export const DEFAULT_AUTOMATION_MAP: AutomationMap = [

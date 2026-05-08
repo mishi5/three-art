@@ -1,5 +1,5 @@
 import type { Section, SectionBoundary } from "./AnalysisCache";
-import { computeValue, type AutomationEntry, type AutomationMap, type SectionFeatures } from "./AutomationMap";
+import { computeValue, type AutomationEntry, type AutomationMap, type SectionFeatures, type StylePreset } from "./AutomationMap";
 import { setByPath } from "./setByPath";
 
 function smoothstep(x: number): number {
@@ -26,7 +26,7 @@ function asFeatures(s: Section): SectionFeatures {
 
 export class ParameterAutomation {
   private readonly entries: ReadonlyArray<AutomationEntry>;
-  private readonly styles: ReadonlyArray<SectionFeatures>;
+  private readonly styles: ReadonlyArray<StylePreset>;
   private readonly styleStrength: number;
 
   constructor(
@@ -34,7 +34,7 @@ export class ParameterAutomation {
     private readonly boundaries: SectionBoundary[],
     map: AutomationMap,
     private readonly transitionSec: number,
-    styles: ReadonlyArray<SectionFeatures> = [],
+    styles: ReadonlyArray<StylePreset> = [],
     styleStrength: number = 0,
   ) {
     this.entries = map;
@@ -84,14 +84,24 @@ export class ParameterAutomation {
     for (const e of this.entries) {
       setByPath(live, e.target, computeValue(e, features));
     }
+
+    // Discrete overrides: cur section の style.overrides を直接 setByPath で
+    // 上書き (mode/enabled flags 等は連続補間できないので、境界をまたいだ
+    // 瞬間に切替される)。styleStrength=0 のときは適用しない。
+    if (this.styleStrength > 0 && this.styles.length > 0) {
+      const style = this.styles[idx % this.styles.length]!;
+      for (const [path, value] of Object.entries(style.overrides)) {
+        setByPath(live, path, value);
+      }
+    }
   }
 
-  /** セクション idx の特徴量を、style preset と styleStrength でブレンドして返す。 */
+  /** セクション idx の特徴量を、style preset の features と styleStrength でブレンドして返す。 */
   private featuresAt(idx: number): SectionFeatures {
     const base = asFeatures(this.sections[idx]!);
     if (this.styleStrength <= 0 || this.styles.length === 0) return base;
     const style = this.styles[idx % this.styles.length]!;
-    return lerpFeatures(base, style, this.styleStrength);
+    return lerpFeatures(base, style.features, this.styleStrength);
   }
 
   private findSectionIndex(t: number): number {
