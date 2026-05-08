@@ -43,6 +43,22 @@ export function modeToInt(mode: RenderMode): number {
   return mode === "bones" ? 0 : mode === "cube" ? 1 : 2;
 }
 
+export interface AutoSettings {
+  /** 自動制御を有効化する。曲ファイル再生時のみ実効。 */
+  enabled: boolean;
+  /** 境界補間の総幅 (秒)。前後 transitionSec/2 が補間ゾーン。 */
+  transitionSec: number;
+  /** 境界検出の sensitivity (0..1, percentile-based)。 */
+  noveltyThreshold: number;
+  /** 連続境界をマージする最小間隔 (秒)。 */
+  minSectionSec: number;
+  /**
+   * スタイルプリセットのブレンド強度 (0..1)。0 = 実セクション特徴量のみ、
+   * 1 = STYLE_PRESETS が完全支配。中間で section ごとの「テーマ感」が混ざる。
+   */
+  styleStrength: number;
+}
+
 export interface Settings {
   /** Which arrangement the PointCloud particles take. */
   mode: RenderMode;
@@ -128,6 +144,8 @@ export interface Settings {
   twist: TwistSettings;
   /** Post-process Gaussian blur applied to the final rendered image. */
   blur: BlurSettings;
+  /** 曲解析ベースのパラメータ自動制御 (Issue #5)。 */
+  auto: AutoSettings;
 }
 
 const STORAGE_KEY = "pose-particles.settings.v1";
@@ -142,10 +160,26 @@ export function loadSettings(): Settings {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return defaults;
     const parsed = JSON.parse(raw) as Partial<Settings>;
-    return deepMerge(defaults, parsed);
+    return migrate(deepMerge(defaults, parsed));
   } catch {
     return defaults;
   }
+}
+
+/**
+ * 古い保存値を新しい slider 範囲に合わせる。Issue #5 のレビュー後に
+ * auto.noveltyThreshold の slider 範囲を 0..1 → 0..0.05、デフォルトを
+ * 0.4 → 0.005 に変更したため、範囲外の古い値はデフォルトにリセットする。
+ */
+function migrate(s: Settings): Settings {
+  // noveltyThreshold は当初 absolute threshold (0..0.05) として運用していたが、
+  // 実音源のスケール依存性が問題で percentile-based の sensitivity (0..1) に
+  // 仕様変更した。0.06 未満の保存値はおそらく旧仕様のものと判定し、新仕様の
+  // デフォルト 0.7 にリセットする。
+  if (s.auto.noveltyThreshold < 0.06) {
+    s.auto.noveltyThreshold = 0.7;
+  }
+  return s;
 }
 
 export function saveSettings(s: Settings): void {
@@ -237,6 +271,16 @@ export function makeDefaultSettings(): Settings {
     },
     twist: makeDefaultTwist(),
     blur: makeDefaultBlur(),
+    auto: {
+      enabled: false,
+      transitionSec: 1.5,
+      // sensitivity (0..1) として percentile-based に解釈される。0.7 で
+      // smoothed novelty の上位 35% (= 1 - 0.7*0.5) を境界候補とする。
+      // 曲の絶対値スケールに依存しないため、曲を変えてもチューニング不要。
+      noveltyThreshold: 0.7,
+      minSectionSec: 4.0,
+      styleStrength: 0.6,
+    },
     audioSmoothing: 0.5,
   };
 }

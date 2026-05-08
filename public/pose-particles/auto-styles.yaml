@@ -1,0 +1,115 @@
+# pose-particles Auto Mode スタイルプリセット定義
+#
+# section index に応じて循環適用される。各エントリは:
+#   features  - 連続パラメータ用 SectionFeatures (0..1)
+#               styleStrength で実セクション特徴量とブレンドされる
+#   overrides - discrete な値の上書き (mode / *.enabled など)
+#               境界をまたいだ瞬間に瞬時切替 (補間できないため)
+#
+# overrides のキーはドット記法で Settings の階層パスを表す。
+# 例: "twist.enabled" は settings.twist.enabled に書き込まれる。
+#
+# このファイルは fetch でロードされる。失敗時はコードに埋め込まれた
+# fallback プリセット (AutomationMap.ts の DEFAULT_STYLE_PRESETS) が使われる。
+
+styles:
+  # 0: bones bass-heavy (骨格 + 線、bass で赤)
+  - name: bones-bass
+    features:
+      energyNorm: 0.2
+      bassAbs: 0.9
+      midAbs: 0.1
+      trebleAbs: 0.0
+    overrides:
+      mode: bones
+      twist.enabled: false
+      blur.enabled: false
+      edges.enabled: true
+      edges.alpha: 0.7
+      color.hueSpread: 0.1
+
+  # 1: cube + twist y軸 (中音メイン、ねじれる立方体)
+  - name: cube-mid-twist-y
+    features:
+      energyNorm: 0.45
+      bassAbs: 0.2
+      midAbs: 0.8
+      trebleAbs: 0.2
+    overrides:
+      mode: cube
+      twist.enabled: true
+      twist.axis: y
+      twist.strength: 3.0
+      twist.phaseSpeed: 0.5
+      blur.enabled: true
+      edges.enabled: false
+      color.hueSpread: 0.4
+
+  # 2: sphere ピーク (全部入り、激しい)
+  - name: sphere-peak
+    features:
+      energyNorm: 1.0
+      bassAbs: 0.7
+      midAbs: 0.7
+      trebleAbs: 0.7
+    overrides:
+      mode: sphere
+      twist.enabled: true
+      twist.axis: z
+      twist.strength: 5.0
+      twist.phaseSpeed: 1.5
+      blur.enabled: true
+      edges.enabled: true
+      edges.alpha: 0.5
+      outlier.fraction: 0.25
+      outlier.boost: 5.0
+      color.hueSpread: 0.7
+
+  # 3: bones treble-shimmer (高音、outlier 強)
+  - name: bones-shimmer
+    features:
+      energyNorm: 0.6
+      bassAbs: 0.0
+      midAbs: 0.1
+      trebleAbs: 0.95
+    overrides:
+      mode: bones
+      twist.enabled: false
+      blur.enabled: false
+      edges.enabled: false
+      outlier.fraction: 0.15
+      outlier.boost: 4.0
+      color.hueSpread: 0.9
+
+  # 4: cube + twist x軸逆回転 (warm peak)
+  - name: cube-warm-twist-x
+    features:
+      energyNorm: 0.85
+      bassAbs: 0.8
+      midAbs: 0.6
+      trebleAbs: 0.0
+    overrides:
+      mode: cube
+      twist.enabled: true
+      twist.axis: x
+      twist.strength: 2.0
+      twist.phaseSpeed: -1.0
+      blur.enabled: false
+      edges.enabled: true
+      edges.alpha: 0.3
+      color.hueSpread: 0.2
+
+  # 5: sphere minimal (静寂、ほぼ無)
+  - name: sphere-minimal
+    features:
+      energyNorm: 0.05
+      bassAbs: 0.0
+      midAbs: 0.0
+      trebleAbs: 0.0
+    overrides:
+      mode: sphere
+      twist.enabled: false
+      blur.enabled: true
+      edges.enabled: false
+      outlier.fraction: 0.02
+      color.hueSpread: 0.0

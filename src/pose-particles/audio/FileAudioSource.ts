@@ -8,6 +8,7 @@ export class FileAudioSource implements AudioInput {
   private source: AudioBufferSourceNode | null = null;
   private buffer: AudioBuffer | null = null;
   private playing = false;
+  private startedAt: number | null = null;
 
   constructor(ctx: AudioContext) {
     this.ctx = ctx;
@@ -33,6 +34,7 @@ export class FileAudioSource implements AudioInput {
     this.source.loop = true;
     this.source.connect(this.analyzer.input).connect(this.ctx.destination);
     this.source.start(0);
+    this.startedAt = this.ctx.currentTime;
     this.playing = true;
   }
 
@@ -47,10 +49,25 @@ export class FileAudioSource implements AudioInput {
       this.source = null;
     }
     this.playing = false;
+    this.startedAt = null;
   }
 
   read(): AudioFeatures {
     if (!this.playing) return DEFAULT_AUDIO_FEATURES;
     return this.analyzer.read(this.ctx.sampleRate);
+  }
+
+  /** 解析した AudioBuffer を返す。decode 前 / 解放後は null。 */
+  getDecodedBuffer(): AudioBuffer | null {
+    return this.buffer;
+  }
+
+  /** 再生開始からの経過秒。loop の場合は曲長で wrap する。stop 中 / 未開始は 0。 */
+  getCurrentTime(): number {
+    if (!this.playing || this.startedAt === null || !this.buffer) return 0;
+    const elapsed = this.ctx.currentTime - this.startedAt;
+    const dur = this.buffer.duration;
+    if (dur <= 0) return 0;
+    return elapsed % dur;
   }
 }
