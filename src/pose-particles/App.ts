@@ -17,7 +17,8 @@ import { AnalysisCache, type CachePayload, type BandTimeSeries, type SectionBoun
 import * as SongAnalyzer from "./audio/SongAnalyzer";
 import { detect, recomputeSections } from "./audio/SectionDetector";
 import { ParameterAutomation } from "./automation/ParameterAutomation";
-import { DEFAULT_AUTOMATION_MAP, STYLE_PRESETS } from "./automation/AutomationMap";
+import { DEFAULT_AUTOMATION_MAP, DEFAULT_STYLE_PRESETS, type StylePreset } from "./automation/AutomationMap";
+import { loadStylePresets } from "./automation/style-loader";
 import { SectionTimeline } from "./ui/SectionTimeline";
 import { FileAudioSource } from "./audio/FileAudioSource";
 
@@ -50,6 +51,9 @@ export class App {
   private currentSongHash: string | null = null;
   private currentSeries: BandTimeSeries | null = null;
   private analyzingToast: HTMLDivElement | null = null;
+  /** YAML から読み込まれた style プリセット (失敗時は fallback)。 */
+  private loadedStyles: ReadonlyArray<StylePreset> = DEFAULT_STYLE_PRESETS;
+  private stylesReady: Promise<void>;
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene.background = new THREE.Color(0x000000);
@@ -103,6 +107,9 @@ export class App {
     document.body.appendChild(this.diagHud);
 
     this.sectionTimeline = new SectionTimeline((next) => this.onBoundariesEdited(next));
+    this.stylesReady = loadStylePresets().then((styles) => {
+      this.loadedStyles = styles;
+    });
     this.settingsPanel = new SettingsPanel(this.settings, () => this.reanalyze());
 
     // Mouse + keyboard camera control. Defaults: left-drag = rotate,
@@ -193,6 +200,8 @@ export class App {
   }
 
   private async runAnalysis(hash: string, buffer: AudioBuffer, force: boolean): Promise<void> {
+    // YAML スタイルロード完了を待つ (通常は曲ロードまでに完了している)
+    await this.stylesReady;
     let payload: CachePayload | null = force ? null : AnalysisCache.get(hash);
     if (!payload) {
       this.showAnalyzingToast();
@@ -227,7 +236,7 @@ export class App {
       payload.boundaries,
       DEFAULT_AUTOMATION_MAP,
       this.settings.auto.transitionSec,
-      STYLE_PRESETS,
+      this.loadedStyles,
       this.settings.auto.styleStrength,
     );
   }
@@ -237,7 +246,7 @@ export class App {
     const sections = recomputeSections(this.currentSeries, next);
     this.parameterAutomation = new ParameterAutomation(
       sections, next, DEFAULT_AUTOMATION_MAP, this.settings.auto.transitionSec,
-      STYLE_PRESETS, this.settings.auto.styleStrength,
+      this.loadedStyles, this.settings.auto.styleStrength,
     );
     AnalysisCache.set(this.currentSongHash, {
       version: 1,

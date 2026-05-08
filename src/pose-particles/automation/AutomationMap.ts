@@ -43,7 +43,7 @@ export interface StylePreset {
   overrides: Record<string, unknown>;
 }
 
-export const STYLE_PRESETS: ReadonlyArray<StylePreset> = [
+export const DEFAULT_STYLE_PRESETS: ReadonlyArray<StylePreset> = [
   // 0: bones bass-heavy (edges のグラフがメイン)
   {
     features: { energyNorm: 0.2, bassAbs: 0.9, midAbs: 0.1, trebleAbs: 0.0 },
