@@ -36,6 +36,7 @@ export class App {
   readonly centroidMarker: THREE.Mesh;
   private diagHud: HTMLDivElement;
   private debugVisible = false;
+  private uiVisible = true;
   private smoothedAudio = { volume: 0, bass: 0, mid: 0, treble: 0 };
   readonly settings: Settings = loadSettings();
   private settingsPanel: SettingsPanel;
@@ -170,7 +171,21 @@ export class App {
       this.skeletonGuide.object3D.visible = this.debugVisible && this.settings.mode === "bones";
       console.log(`[App] 3D debug overlays: ${this.debugVisible ? "ON" : "OFF"}`);
     }
+    if (e.key === "h" || e.key === "H") {
+      this.uiVisible = !this.uiVisible;
+      this.applyUiVisibility();
+      console.log(`[App] UI: ${this.uiVisible ? "ON" : "OFF"}`);
+    }
   };
+
+  /** SettingsPanel / SectionTimeline / ファイル選択パネルをまとめて表示・非表示する。 */
+  private applyUiVisibility(): void {
+    this.settingsPanel.setVisible(this.uiVisible);
+    if (this.uiVisible && this.settings.auto.enabled) this.sectionTimeline.show();
+    else this.sectionTimeline.hide();
+    const uiRoot = document.getElementById("ui-root");
+    if (uiRoot) uiRoot.style.display = this.uiVisible ? "" : "none";
+  }
 
   getOrCreateAudioContext(): AudioContext {
     if (!this.audioCtx) this.audioCtx = new AudioContext();
@@ -361,8 +376,8 @@ export class App {
       this.orbit.update();
       this.lastMode = this.settings.mode;
     }
-    // SectionTimeline: auto.enabled のときだけ表示
-    if (this.settings.auto.enabled) this.sectionTimeline.show();
+    // SectionTimeline: auto.enabled かつ UI 表示中のみ表示 (H キーで一括非表示可)
+    if (this.uiVisible && this.settings.auto.enabled) this.sectionTimeline.show();
     else this.sectionTimeline.hide();
     this.orbit.update();
     this.blurPipeline.update(live.blur, this.smoothedAudio.bass);

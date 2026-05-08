@@ -184,6 +184,10 @@ export class SettingsPanel {
     this.gui.destroy();
   }
 
+  setVisible(visible: boolean): void {
+    this.gui.show(visible);
+  }
+
   private applyAutoDisabled(disabled: boolean): void {
     for (const c of this.autoControlled) {
       if (disabled) c.disable(); else c.enable();
