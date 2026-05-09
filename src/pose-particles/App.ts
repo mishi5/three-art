@@ -163,9 +163,17 @@ export class App {
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
-    // Don't hijack keys when the user is typing into the GUI inputs.
+    // Don't hijack keys when the user is typing into the GUI inputs or
+    // has a focused button/select (Space would otherwise both activate the
+    // button and toggle our handler — double-fire).
     const target = e.target as HTMLElement | null;
-    if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+    if (target && (
+      target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.tagName === "BUTTON" ||
+      target.tagName === "SELECT" ||
+      target.isContentEditable
+    )) return;
     if (e.key === "b" || e.key === "B") {
       this.debugVisible = !this.debugVisible;
       this.originMarker.visible = this.debugVisible;

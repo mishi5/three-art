@@ -40,6 +40,8 @@ export class FileAudioSource implements AudioInput {
   private playOffset = 0;
   /** state==="playing" 突入時の ctx.currentTime。それ以外は null。 */
   private startedAt: number | null = null;
+  /** resume() の await 中フラグ。再エントリでの二重 spawn を防ぐ。 */
+  private resumeInFlight = false;
 
   constructor(ctx: AudioContext) {
     this.ctx = ctx;
@@ -83,20 +85,30 @@ export class FileAudioSource implements AudioInput {
     this.state = "paused";
   }
 
-  /** paused → playing。新規 BufferSource を offset から再生。 */
+  /** paused → playing。新規 BufferSource を offset から再生。
+   *  ctx.resume() の await 中に再エントリしないよう resumeInFlight でガードする
+   *  (二重 spawn による node リーク + 重複再生を防ぐ)。 */
   async resume(): Promise<void> {
     if (this.state !== "paused" || !this.buffer) return;
-    if (this.ctx.state === "suspended") {
-      try {
-        await this.ctx.resume();
-      } catch (e) {
-        console.warn("[FileAudioSource] AudioContext.resume() failed", e);
-        return; // state は paused のまま
+    if (this.resumeInFlight) return;
+    this.resumeInFlight = true;
+    try {
+      if (this.ctx.state === "suspended") {
+        try {
+          await this.ctx.resume();
+        } catch (e) {
+          console.warn("[FileAudioSource] AudioContext.resume() failed", e);
+          return; // state は paused のまま
+        }
       }
+      // await 中に pause/seek/stop が呼ばれて状態が変わった可能性をチェック
+      if (this.state !== "paused") return;
+      this.spawnSource(this.playOffset);
+      this.startedAt = this.ctx.currentTime;
+      this.state = "playing";
+    } finally {
+      this.resumeInFlight = false;
     }
-    this.spawnSource(this.playOffset);
-    this.startedAt = this.ctx.currentTime;
-    this.state = "playing";
   }
 
   togglePause(): void {
