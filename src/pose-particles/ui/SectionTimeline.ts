@@ -31,6 +31,34 @@ export function addOrRemoveBoundary(
   return next;
 }
 
+export type TimelineMouseInput = {
+  /** "down" は mousedown、"scrub" は mousedown 後の mousemove */
+  kind: "down" | "scrub";
+  altKey: boolean;
+  mouseT: number;
+  hitWindowSec: number;
+  boundaries: ReadonlyArray<SectionBoundary>;
+};
+
+export type TimelineMouseAction =
+  | { kind: "seek"; t: number }
+  | { kind: "boundary-edit"; next: SectionBoundary[] }
+  | { kind: "noop" };
+
+/**
+ * タイムライン上のマウス操作を意図 (seek / 境界編集 / 何もしない) に変換する。
+ * Alt なし: 常に seek。Alt あり: down 時のみ境界編集 (scrub は無視)。
+ */
+export function interpretTimelineMouse(input: TimelineMouseInput): TimelineMouseAction {
+  if (!input.altKey) {
+    return { kind: "seek", t: input.mouseT };
+  }
+  if (input.kind === "down") {
+    return { kind: "boundary-edit", next: addOrRemoveBoundary(input.boundaries, input.mouseT, input.hitWindowSec) };
+  }
+  return { kind: "noop" };
+}
+
 /**
  * 画面下部に固定された Canvas タイムライン。auto.enabled のときだけ表示する。
  * クリックで境界を追加/削除し、コールバックで上位 (App) に通知する。
