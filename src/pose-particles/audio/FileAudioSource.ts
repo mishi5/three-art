@@ -35,7 +35,10 @@ export class FileAudioSource implements AudioInput {
   private analyzer: AudioAnalyzer;
   private source: AudioBufferSourceNode | null = null;
   private buffer: AudioBuffer | null = null;
-  private playing = false;
+  private state: PlaybackState = "stopped";
+  /** 曲頭からの累積位置 (秒)。pause/seek で更新。 */
+  private playOffset = 0;
+  /** state==="playing" 突入時の ctx.currentTime。それ以外は null。 */
   private startedAt: number | null = null;
 
   constructor(ctx: AudioContext) {
@@ -57,31 +60,73 @@ export class FileAudioSource implements AudioInput {
 
   async start(): Promise<void> {
     if (!this.buffer) throw new Error("no audio buffer loaded");
-    this.source = this.ctx.createBufferSource();
-    this.source.buffer = this.buffer;
-    this.source.loop = true;
-    this.source.connect(this.analyzer.input).connect(this.ctx.destination);
-    this.source.start(0);
+    this.spawnSource(0);
+    this.playOffset = 0;
     this.startedAt = this.ctx.currentTime;
-    this.playing = true;
+    this.state = "playing";
+  }
+
+  /** playing → paused。AudioBufferSourceNode を停止し offset を保存。 */
+  pause(): void {
+    if (this.state !== "playing" || !this.buffer) return;
+    const now = this.ctx.currentTime;
+    const elapsed = this.startedAt === null ? 0 : now - this.startedAt;
+    this.playOffset = (this.playOffset + elapsed) % this.buffer.duration;
+    this.disposeSource();
+    this.startedAt = null;
+    this.state = "paused";
+  }
+
+  /** paused → playing。新規 BufferSource を offset から再生。 */
+  async resume(): Promise<void> {
+    if (this.state !== "paused" || !this.buffer) return;
+    if (this.ctx.state === "suspended") {
+      try {
+        await this.ctx.resume();
+      } catch (e) {
+        console.warn("[FileAudioSource] AudioContext.resume() failed", e);
+        return; // state は paused のまま
+      }
+    }
+    this.spawnSource(this.playOffset);
+    this.startedAt = this.ctx.currentTime;
+    this.state = "playing";
+  }
+
+  togglePause(): void {
+    if (this.state === "playing") this.pause();
+    else if (this.state === "paused") void this.resume();
+    // stopped は no-op
+  }
+
+  /** 任意状態で seek。playing なら新ノードに差し替え、paused なら playOffset のみ更新。 */
+  seek(t: number): void {
+    if (!this.buffer) return;
+    const target = clampSeek(t, this.buffer.duration);
+    if (this.state === "playing") {
+      this.disposeSource();
+      this.spawnSource(target);
+      this.playOffset = target;
+      this.startedAt = this.ctx.currentTime;
+    } else if (this.state === "paused") {
+      this.playOffset = target;
+    }
+    // stopped は no-op
+  }
+
+  isPlaying(): boolean {
+    return this.state === "playing";
   }
 
   stop(): void {
-    if (this.source) {
-      try {
-        this.source.stop();
-      } catch {
-        /* already stopped */
-      }
-      this.source.disconnect();
-      this.source = null;
-    }
-    this.playing = false;
+    this.disposeSource();
+    this.state = "stopped";
     this.startedAt = null;
+    this.playOffset = 0;
   }
 
   read(): AudioFeatures {
-    if (!this.playing) return DEFAULT_AUDIO_FEATURES;
+    if (this.state !== "playing") return DEFAULT_AUDIO_FEATURES;
     return this.analyzer.read(this.ctx.sampleRate);
   }
 
@@ -90,12 +135,37 @@ export class FileAudioSource implements AudioInput {
     return this.buffer;
   }
 
-  /** 再生開始からの経過秒。loop の場合は曲長で wrap する。stop 中 / 未開始は 0。 */
+  /** 再生開始からの経過秒。loop の場合は曲長で wrap する。stopped 中 / 未開始は 0。 */
   getCurrentTime(): number {
-    if (!this.playing || this.startedAt === null || !this.buffer) return 0;
-    const elapsed = this.ctx.currentTime - this.startedAt;
-    const dur = this.buffer.duration;
-    if (dur <= 0) return 0;
-    return elapsed % dur;
+    return computeCurrentTime(
+      this.state,
+      this.playOffset,
+      this.startedAt,
+      this.ctx.currentTime,
+      this.buffer?.duration ?? 0,
+    );
+  }
+
+  /** 内部用: 新しい AudioBufferSourceNode を作って再生開始。 */
+  private spawnSource(offset: number): void {
+    if (!this.buffer) return;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.buffer;
+    src.loop = true;
+    src.connect(this.analyzer.input).connect(this.ctx.destination);
+    src.start(0, offset);
+    this.source = src;
+  }
+
+  /** 内部用: 現 source を停止して破棄。 */
+  private disposeSource(): void {
+    if (!this.source) return;
+    try {
+      this.source.stop();
+    } catch {
+      /* already stopped */
+    }
+    this.source.disconnect();
+    this.source = null;
   }
 }
