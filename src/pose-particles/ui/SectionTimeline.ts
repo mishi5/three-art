@@ -60,8 +60,9 @@ export function interpretTimelineMouse(input: TimelineMouseInput): TimelineMouse
 }
 
 /**
- * 画面下部に固定された Canvas タイムライン。auto.enabled のときだけ表示する。
- * クリックで境界を追加/削除し、コールバックで上位 (App) に通知する。
+ * 画面下部に固定された Canvas タイムライン。ファイル再生中かつ解析完了後に表示する。
+ * 通常クリック/ドラッグで seek、Alt+クリックで境界を追加/削除する。
+ * 左端 32px は再生/一時停止ボタン。
  *
  * Note: high-DPI (Retina) ディスプレイ対応のため、canvas の internal pixel 数は
  * `cssWidth * dpr` x `96 * dpr` を取る。CSS サイズは 100% で親要素の幅に追従。
@@ -130,12 +131,16 @@ export class SectionTimeline {
   }
 
   show(): void {
+    if (this.element.style.display === "flex") return;
     // display:none 中は getBoundingClientRect の width が 0 になるため、
-    // 表示直後に canvas の internal pixel size を再計算する。
+    // 非表示 → 表示の遷移時に canvas の internal pixel size を再計算する。
     this.element.style.display = "flex";
     this.handleResize();
   }
-  hide(): void { this.element.style.display = "none"; }
+  hide(): void {
+    if (this.element.style.display === "none") return;
+    this.element.style.display = "none";
+  }
 
   setData(series: BandTimeSeries, boundaries: SectionBoundary[]): void {
     this.series = series;
