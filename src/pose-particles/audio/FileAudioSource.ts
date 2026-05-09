@@ -60,6 +60,7 @@ export class FileAudioSource implements AudioInput {
 
   async start(): Promise<void> {
     if (!this.buffer) throw new Error("no audio buffer loaded");
+    if (this.state !== "stopped") return; // 既に playing/paused なら no-op (二重 spawn 防止)
     this.spawnSource(0);
     this.playOffset = 0;
     this.startedAt = this.ctx.currentTime;
@@ -69,9 +70,14 @@ export class FileAudioSource implements AudioInput {
   /** playing → paused。AudioBufferSourceNode を停止し offset を保存。 */
   pause(): void {
     if (this.state !== "playing" || !this.buffer) return;
-    const now = this.ctx.currentTime;
-    const elapsed = this.startedAt === null ? 0 : now - this.startedAt;
-    this.playOffset = (this.playOffset + elapsed) % this.buffer.duration;
+    // computeCurrentTime と同じロジックを再利用して負 modulo を回避
+    this.playOffset = computeCurrentTime(
+      this.state,
+      this.playOffset,
+      this.startedAt,
+      this.ctx.currentTime,
+      this.buffer.duration,
+    );
     this.disposeSource();
     this.startedAt = null;
     this.state = "paused";
