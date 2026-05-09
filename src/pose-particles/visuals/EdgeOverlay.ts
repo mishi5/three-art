@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { NUM_JOINTS, type AudioFeatures, type Joints } from "../types";
 import type { Settings } from "../settings";
+import { applyTwist, effectiveTwistStrength, twistPhase } from "./twist";
 
 const MAX_ANCHORS = 256;
 
@@ -139,6 +140,12 @@ export class EdgeOverlay {
     const shapeR = settings.shape.radius;
     const shapePulse = settings.shape.bassPulse;
     const oBoost = settings.outlier.boost;
+    // Twist parameters mirror PointCloud's so the cloud and the edges share
+    // axis / strength / phase. PointCloud applies the same transform in GLSL.
+    const twistStrength = effectiveTwistStrength(settings.twist, bass);
+    const twistPhaseValue = twistPhase(settings.twist, t);
+    const twistAxis = settings.twist.axis;
+    const twistActive = twistStrength !== 0 || twistPhaseValue !== 0;
 
     for (let i = 0; i < N; i++) {
       // Spike wave for this anchor
@@ -177,6 +184,10 @@ export class EdgeOverlay {
         x = (this.anchorSphereDir[i * 3] ?? 0) * radius;
         y = (this.anchorSphereDir[i * 3 + 1] ?? 0) * radius;
         z = (this.anchorSphereDir[i * 3 + 2] ?? 0) * radius;
+      }
+      if (twistActive) {
+        const [tx, ty, tz] = applyTwist(x, y, z, twistAxis, twistStrength, twistPhaseValue);
+        x = tx; y = ty; z = tz;
       }
       this.anchorPos[i * 3] = x;
       this.anchorPos[i * 3 + 1] = y;
@@ -240,5 +251,14 @@ export class EdgeOverlay {
 
     this.posAttr.needsUpdate = true;
     this.object3D.geometry.setDrawRange(0, segCount * 2);
+  }
+
+  /** Read the most-recently-computed world position of anchor `i`. */
+  getAnchorPosition(i: number): [number, number, number] {
+    return [
+      this.anchorPos[i * 3] ?? 0,
+      this.anchorPos[i * 3 + 1] ?? 0,
+      this.anchorPos[i * 3 + 2] ?? 0,
+    ];
   }
 }
