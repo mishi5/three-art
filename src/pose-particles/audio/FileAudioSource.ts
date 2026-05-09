@@ -12,6 +12,23 @@ export function clampSeek(t: number, duration: number): number {
   return t;
 }
 
+export type PlaybackState = "stopped" | "playing" | "paused";
+
+/** 状態と内部時刻から現在の再生位置を算出。playing 中だけ ctxNow を使う。 */
+export function computeCurrentTime(
+  state: PlaybackState,
+  playOffset: number,
+  startedAt: number | null,
+  ctxNow: number,
+  duration: number,
+): number {
+  if (state === "stopped") return 0;
+  if (state === "paused") return playOffset;
+  if (startedAt === null || duration <= 0) return 0;
+  const elapsed = ctxNow - startedAt;
+  return (playOffset + elapsed) % duration;
+}
+
 export class FileAudioSource implements AudioInput {
   private ctx: AudioContext;
   private analyzer: AudioAnalyzer;
