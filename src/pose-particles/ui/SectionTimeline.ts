@@ -70,16 +70,29 @@ export function interpretTimelineMouse(input: TimelineMouseInput): TimelineMouse
  */
 const TIMELINE_RIGHT_OFFSET_PX = 332;
 const TIMELINE_HEIGHT_PX = 96;
+const PLAY_BUTTON_WIDTH_PX = 32;
 export class SectionTimeline {
   readonly element: HTMLDivElement;
   private canvas: HTMLCanvasElement;
+  private playButton: HTMLButtonElement;
   private series: BandTimeSeries | null = null;
   private boundaries: SectionBoundary[] = [];
   private currentTime = 0;
+  private isPlayingState = false;
+  private isScrubbing = false;
   private onChange: (next: SectionBoundary[]) => void;
+  private onSeek: (t: number) => void;
+  private onPauseToggle: () => void;
 
-  constructor(onChange: (next: SectionBoundary[]) => void) {
-    this.onChange = onChange;
+  constructor(handlers: {
+    onChange: (next: SectionBoundary[]) => void;
+    onSeek: (t: number) => void;
+    onPauseToggle: () => void;
+  }) {
+    this.onChange = handlers.onChange;
+    this.onSeek = handlers.onSeek;
+    this.onPauseToggle = handlers.onPauseToggle;
+
     this.element = document.createElement("div");
     this.element.style.cssText = `
       position: fixed; left: 0; right: ${TIMELINE_RIGHT_OFFSET_PX}px; bottom: 0;
@@ -88,21 +101,38 @@ export class SectionTimeline {
       border-top: 1px solid rgba(255,255,255,0.2);
       z-index: 50;
       display: none;
+      flex-direction: row;
     `;
+
+    this.playButton = document.createElement("button");
+    this.playButton.type = "button";
+    this.playButton.textContent = "▶";
+    this.playButton.setAttribute("aria-label", "再生");
+    this.playButton.style.cssText = `
+      width: ${PLAY_BUTTON_WIDTH_PX}px; height: 100%;
+      background: rgba(255,255,255,0.06); color: #fff;
+      border: none; border-right: 1px solid rgba(255,255,255,0.15);
+      font-size: 14px; cursor: pointer; flex: 0 0 auto;
+    `;
+    this.playButton.addEventListener("click", this.handlePlayButton);
+    this.element.appendChild(this.playButton);
+
     this.canvas = document.createElement("canvas");
-    this.canvas.style.cssText = "width: 100%; height: 100%; display: block;";
+    this.canvas.style.cssText = "flex: 1 1 auto; height: 100%; display: block; cursor: pointer;";
     this.element.appendChild(this.canvas);
     document.body.appendChild(this.element);
 
-    this.canvas.addEventListener("click", this.handleClick);
+    this.canvas.addEventListener("mousedown", this.handleMouseDown);
+    window.addEventListener("keydown", this.handleAltKeyChange);
+    window.addEventListener("keyup", this.handleAltKeyChange);
     window.addEventListener("resize", this.handleResize);
     this.handleResize();
   }
 
   show(): void {
-    this.element.style.display = "block";
     // display:none 中は getBoundingClientRect の width が 0 になるため、
     // 表示直後に canvas の internal pixel size を再計算する。
+    this.element.style.display = "flex";
     this.handleResize();
   }
   hide(): void { this.element.style.display = "none"; }
@@ -118,34 +148,104 @@ export class SectionTimeline {
     this.draw();
   }
 
+  /** 再生/一時停止状態を反映してボタンの ▶/Ⅱ を切り替える。 */
+  setIsPlaying(playing: boolean): void {
+    if (this.isPlayingState === playing) return;
+    this.isPlayingState = playing;
+    this.playButton.textContent = playing ? "Ⅱ" : "▶";
+    this.playButton.setAttribute("aria-label", playing ? "一時停止" : "再生");
+  }
+
   dispose(): void {
-    this.canvas.removeEventListener("click", this.handleClick);
+    this.canvas.removeEventListener("mousedown", this.handleMouseDown);
+    this.playButton.removeEventListener("click", this.handlePlayButton);
+    window.removeEventListener("mousemove", this.handleMouseMove);
+    window.removeEventListener("mouseup", this.handleMouseUp);
+    window.removeEventListener("keydown", this.handleAltKeyChange);
+    window.removeEventListener("keyup", this.handleAltKeyChange);
     window.removeEventListener("resize", this.handleResize);
     this.element.remove();
   }
 
   private handleResize = (): void => {
     const dpr = Math.min(window.devicePixelRatio, 2);
-    // CSS で `right: <offset>px` を指定しているため、canvas の実際の幅は
-    // `getBoundingClientRect().width` で取得する。display:none のときは 0 を
-    // 返すので、その場合はフォールバックで window.innerWidth - offset を使う。
     const rect = this.canvas.getBoundingClientRect();
-    const cssWidth = rect.width > 0 ? rect.width : Math.max(0, window.innerWidth - TIMELINE_RIGHT_OFFSET_PX);
+    const fallback = Math.max(0, window.innerWidth - TIMELINE_RIGHT_OFFSET_PX - PLAY_BUTTON_WIDTH_PX);
+    const cssWidth = rect.width > 0 ? rect.width : fallback;
     this.canvas.width = Math.max(1, Math.floor(cssWidth * dpr));
     this.canvas.height = Math.max(1, Math.floor(TIMELINE_HEIGHT_PX * dpr));
     this.draw();
   };
 
-  private handleClick = (ev: MouseEvent): void => {
-    if (!this.series) return;
+  private handlePlayButton = (): void => {
+    this.onPauseToggle();
+    // Space キーで二重発火しないようボタンの focus を外す
+    this.playButton.blur();
+  };
+
+  /** マウス座標を曲時刻に変換。canvas が非表示で width=0 のときは null。 */
+  private mouseTFromEvent(ev: MouseEvent): number | null {
+    if (!this.series) return null;
     const rect = this.canvas.getBoundingClientRect();
+    if (rect.width <= 0) return null;
     const x = ev.clientX - rect.left;
-    const mouseT = (x / rect.width) * this.series.duration;
-    const hitWindowSec = (8 / rect.width) * this.series.duration; // ≈ 8px
-    const next = addOrRemoveBoundary(this.boundaries, mouseT, hitWindowSec);
-    this.boundaries = next;
-    this.draw();
-    this.onChange(next);
+    return (x / rect.width) * this.series.duration;
+  }
+
+  private handleMouseDown = (ev: MouseEvent): void => {
+    if (ev.button !== 0) return; // 左クリックのみ
+    if (!this.series) return;
+    const mouseT = this.mouseTFromEvent(ev);
+    if (mouseT === null) return;
+    const rectWidth = this.canvas.getBoundingClientRect().width;
+    const hitWindowSec = (8 / rectWidth) * this.series.duration;
+    const action = interpretTimelineMouse({
+      kind: "down",
+      altKey: ev.altKey,
+      mouseT,
+      hitWindowSec,
+      boundaries: this.boundaries,
+    });
+    if (action.kind === "seek") {
+      this.onSeek(action.t);
+      this.isScrubbing = true;
+      window.addEventListener("mousemove", this.handleMouseMove);
+      window.addEventListener("mouseup", this.handleMouseUp);
+    } else if (action.kind === "boundary-edit") {
+      this.boundaries = action.next;
+      this.draw();
+      this.onChange(action.next);
+    }
+  };
+
+  private handleMouseMove = (ev: MouseEvent): void => {
+    if (!this.isScrubbing || !this.series) return;
+    const mouseT = this.mouseTFromEvent(ev);
+    if (mouseT === null) return;
+    const rectWidth = this.canvas.getBoundingClientRect().width;
+    const hitWindowSec = (8 / rectWidth) * this.series.duration;
+    const action = interpretTimelineMouse({
+      kind: "scrub",
+      altKey: ev.altKey,
+      mouseT,
+      hitWindowSec,
+      boundaries: this.boundaries,
+    });
+    if (action.kind === "seek") this.onSeek(action.t);
+  };
+
+  private handleMouseUp = (): void => {
+    if (!this.isScrubbing) return;
+    this.isScrubbing = false;
+    window.removeEventListener("mousemove", this.handleMouseMove);
+    window.removeEventListener("mouseup", this.handleMouseUp);
+  };
+
+  private handleAltKeyChange = (ev: KeyboardEvent): void => {
+    if (ev.key === "Alt") {
+      // Alt 押下中は境界編集モードを示すため crosshair に切り替える
+      this.canvas.style.cursor = ev.type === "keydown" ? "crosshair" : "pointer";
+    }
   };
 
   private draw(): void {
