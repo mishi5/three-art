@@ -2,6 +2,16 @@ import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "../types";
 import { AudioAnalyzer } from "./AudioAnalyzer";
 import type { AudioInput } from "./AudioInput";
 
+/** seek 時刻を [0, duration) に clamp。NaN は 0 に倒し、Infinity は upper bound に張り付かせる。 */
+export function clampSeek(t: number, duration: number): number {
+  if (Number.isNaN(t)) return 0;
+  if (duration <= 0) return 0;
+  if (t === -Infinity || t < 0) return 0;
+  const upper = duration - 1e-3;
+  if (t === Infinity || t > upper) return upper;
+  return t;
+}
+
 export class FileAudioSource implements AudioInput {
   private ctx: AudioContext;
   private analyzer: AudioAnalyzer;
