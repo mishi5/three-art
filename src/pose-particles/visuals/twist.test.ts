@@ -52,6 +52,11 @@ describe("twistPhase", () => {
     const t: TwistSettings = { ...defaultTwist, phaseSpeed: 0 };
     expect(twistPhase(t, 99)).toBe(0);
   });
+
+  test("enabled=false yields 0 even with non-zero phaseSpeed and time", () => {
+    const off: TwistSettings = { ...defaultTwist, enabled: false, phaseSpeed: 1.5 };
+    expect(twistPhase(off, 99)).toBe(0);
+  });
 });
 
 describe("applyTwist axis=y", () => {

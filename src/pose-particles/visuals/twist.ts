@@ -30,6 +30,7 @@ export function effectiveTwistStrength(t: TwistSettings, bass: number): number {
 }
 
 export function twistPhase(t: TwistSettings, timeSec: number): number {
+  if (!t.enabled) return 0;
   return t.phaseSpeed * timeSec;
 }
 
