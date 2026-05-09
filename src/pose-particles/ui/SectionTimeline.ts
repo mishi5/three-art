@@ -157,6 +157,7 @@ export class SectionTimeline {
   }
 
   dispose(): void {
+    this.isScrubbing = false;
     this.canvas.removeEventListener("mousedown", this.handleMouseDown);
     this.playButton.removeEventListener("click", this.handlePlayButton);
     window.removeEventListener("mousemove", this.handleMouseMove);
@@ -183,26 +184,27 @@ export class SectionTimeline {
     this.playButton.blur();
   };
 
-  /** マウス座標を曲時刻に変換。canvas が非表示で width=0 のときは null。 */
-  private mouseTFromEvent(ev: MouseEvent): number | null {
+  /** マウス座標を曲時刻に変換。canvas が非表示で width=0 のときは null。
+   *  rect の取得は 1 イベントにつき 1 回で済むよう mouseT と rectWidth を同時に返す。 */
+  private mouseTAndRect(ev: MouseEvent): { mouseT: number; rectWidth: number } | null {
     if (!this.series) return null;
     const rect = this.canvas.getBoundingClientRect();
     if (rect.width <= 0) return null;
     const x = ev.clientX - rect.left;
-    return (x / rect.width) * this.series.duration;
+    return { mouseT: (x / rect.width) * this.series.duration, rectWidth: rect.width };
   }
 
   private handleMouseDown = (ev: MouseEvent): void => {
     if (ev.button !== 0) return; // 左クリックのみ
+    if (this.isScrubbing) return; // 既に scrub 中なら無視 (reentrancy ガード)
     if (!this.series) return;
-    const mouseT = this.mouseTFromEvent(ev);
-    if (mouseT === null) return;
-    const rectWidth = this.canvas.getBoundingClientRect().width;
-    const hitWindowSec = (8 / rectWidth) * this.series.duration;
+    const r = this.mouseTAndRect(ev);
+    if (r === null) return;
+    const hitWindowSec = (8 / r.rectWidth) * this.series.duration;
     const action = interpretTimelineMouse({
       kind: "down",
       altKey: ev.altKey,
-      mouseT,
+      mouseT: r.mouseT,
       hitWindowSec,
       boundaries: this.boundaries,
     });
@@ -220,14 +222,13 @@ export class SectionTimeline {
 
   private handleMouseMove = (ev: MouseEvent): void => {
     if (!this.isScrubbing || !this.series) return;
-    const mouseT = this.mouseTFromEvent(ev);
-    if (mouseT === null) return;
-    const rectWidth = this.canvas.getBoundingClientRect().width;
-    const hitWindowSec = (8 / rectWidth) * this.series.duration;
+    const r = this.mouseTAndRect(ev);
+    if (r === null) return;
+    const hitWindowSec = (8 / r.rectWidth) * this.series.duration;
     const action = interpretTimelineMouse({
       kind: "scrub",
       altKey: ev.altKey,
-      mouseT,
+      mouseT: r.mouseT,
       hitWindowSec,
       boundaries: this.boundaries,
     });
