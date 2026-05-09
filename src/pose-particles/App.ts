@@ -107,7 +107,11 @@ export class App {
     `;
     document.body.appendChild(this.diagHud);
 
-    this.sectionTimeline = new SectionTimeline((next) => this.onBoundariesEdited(next));
+    this.sectionTimeline = new SectionTimeline({
+      onChange: (next) => this.onBoundariesEdited(next),
+      onSeek: (t) => this.onTimelineSeek(t),
+      onPauseToggle: () => this.onPauseToggle(),
+    });
     this.stylesReady = loadStylePresets().then((styles) => {
       this.loadedStyles = styles;
     });
@@ -159,9 +163,17 @@ export class App {
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
-    // Don't hijack keys when the user is typing into the GUI inputs.
+    // Don't hijack keys when the user is typing into the GUI inputs or
+    // has a focused button/select (Space would otherwise both activate the
+    // button and toggle our handler — double-fire).
     const target = e.target as HTMLElement | null;
-    if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+    if (target && (
+      target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.tagName === "BUTTON" ||
+      target.tagName === "SELECT" ||
+      target.isContentEditable
+    )) return;
     if (e.key === "b" || e.key === "B") {
       this.debugVisible = !this.debugVisible;
       this.originMarker.visible = this.debugVisible;
@@ -176,13 +188,20 @@ export class App {
       this.applyUiVisibility();
       console.log(`[App] UI: ${this.uiVisible ? "ON" : "OFF"}`);
     }
+    if (e.code === "Space" && this.audioInput instanceof FileAudioSource) {
+      e.preventDefault();
+      this.audioInput.togglePause();
+    }
   };
 
   /** SettingsPanel / SectionTimeline / ファイル選択パネルをまとめて表示・非表示する。 */
   private applyUiVisibility(): void {
     this.settingsPanel.setVisible(this.uiVisible);
-    if (this.uiVisible && this.settings.auto.enabled) this.sectionTimeline.show();
-    else this.sectionTimeline.hide();
+    if (this.uiVisible && this.audioInput instanceof FileAudioSource && this.currentSeries !== null) {
+      this.sectionTimeline.show();
+    } else {
+      this.sectionTimeline.hide();
+    }
     const uiRoot = document.getElementById("ui-root");
     if (uiRoot) uiRoot.style.display = this.uiVisible ? "" : "none";
   }
@@ -271,6 +290,18 @@ export class App {
     });
   }
 
+  private onTimelineSeek(t: number): void {
+    if (this.audioInput instanceof FileAudioSource) {
+      this.audioInput.seek(t);
+    }
+  }
+
+  private onPauseToggle(): void {
+    if (this.audioInput instanceof FileAudioSource) {
+      this.audioInput.togglePause();
+    }
+  }
+
   private showAnalyzingToast(): void {
     if (this.analyzingToast) return;
     const div = document.createElement("div");
@@ -325,6 +356,14 @@ export class App {
       this.parameterAutomation.applyAt(t, live as unknown as Record<string, unknown>);
       this.sectionTimeline.setCurrentTime(t);
     }
+
+    // Auto OFF でもタイムラインに現在時刻と再生状態を反映する
+    if (this.audioInput instanceof FileAudioSource) {
+      if (!this.settings.auto.enabled || !this.parameterAutomation) {
+        this.sectionTimeline.setCurrentTime(this.audioInput.getCurrentTime());
+      }
+      this.sectionTimeline.setIsPlaying(this.audioInput.isPlaying());
+    }
     if (live.motion.target !== "off") {
       const factor = 1 + motion * live.motion.strength;
       applyMotionTo(live, live.motion.target, factor);
@@ -376,9 +415,12 @@ export class App {
       this.orbit.update();
       this.lastMode = this.settings.mode;
     }
-    // SectionTimeline: auto.enabled かつ UI 表示中のみ表示 (H キーで一括非表示可)
-    if (this.uiVisible && this.settings.auto.enabled) this.sectionTimeline.show();
-    else this.sectionTimeline.hide();
+    // SectionTimeline: ファイル再生中かつ解析完了かつ UI 表示中で表示 (H キーで一括非表示可)
+    if (this.uiVisible && this.audioInput instanceof FileAudioSource && this.currentSeries !== null) {
+      this.sectionTimeline.show();
+    } else {
+      this.sectionTimeline.hide();
+    }
     this.orbit.update();
     this.blurPipeline.update(live.blur, this.smoothedAudio.bass);
     // diagnostic: origin stays at world (0,0,0); centroid sits at where the
