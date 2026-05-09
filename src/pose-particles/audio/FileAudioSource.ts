@@ -26,7 +26,8 @@ export function computeCurrentTime(
   if (state === "paused") return playOffset;
   if (startedAt === null || duration <= 0) return 0;
   const elapsed = ctxNow - startedAt;
-  return (playOffset + elapsed) % duration;
+  const raw = (playOffset + elapsed) % duration;
+  return raw < 0 ? raw + duration : raw;
 }
 
 export class FileAudioSource implements AudioInput {

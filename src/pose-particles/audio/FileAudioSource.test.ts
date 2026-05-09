@@ -55,4 +55,9 @@ describe("computeCurrentTime", () => {
   test("playing で duration<=0 なら 0", () => {
     expect(computeCurrentTime("playing", 5, 0, 10, 0)).toBe(0);
   });
+
+  test("playing で elapsed が負で wrap が必要な場合も 0 以上に正規化", () => {
+    // playOffset=2, startedAt=10, ctxNow=5  → elapsed=-5、raw=(2-5)%100=-3 → +100 = 97
+    expect(computeCurrentTime("playing", 2, 10, 5, 100)).toBeCloseTo(97, 6);
+  });
 });
