@@ -2,6 +2,7 @@ import GUI, { Controller } from "lil-gui";
 import type { Settings } from "../settings";
 import { RENDER_MODES, MOTION_TARGETS, makeDefaultSettings, saveSettings, clearSettings } from "../settings";
 import { TWIST_AXES } from "../visuals/twist";
+import { parsePresetYaml, serializePresetYaml } from "./preset-yaml";
 
 export class SettingsPanel {
   private gui: GUI;
@@ -114,12 +115,12 @@ export class SettingsPanel {
     const presets = this.gui.addFolder("Preset");
     const actions = {
       reset: () => this.applyPreset(makeDefaultSettings(), { clearStorage: true }),
-      exportJson: () => this.exportJson(),
-      importJson: () => this.importJson(),
+      exportYaml: () => this.exportYaml(),
+      importYaml: () => this.importYaml(),
     };
     presets.add(actions, "reset").name("reset to defaults");
-    presets.add(actions, "exportJson").name("export preset (.json)");
-    presets.add(actions, "importJson").name("import preset (.json)");
+    presets.add(actions, "exportYaml").name("export preset (.yaml)");
+    presets.add(actions, "importYaml").name("import preset (.yaml)");
 
     // Auto-save to localStorage on any change.
     this.gui.onChange(() => saveSettings(settings));
@@ -142,30 +143,30 @@ export class SettingsPanel {
     else saveSettings(this.settings);
   }
 
-  private exportJson(): void {
-    const json = JSON.stringify(this.settings, null, 2);
-    const blob = new Blob([json], { type: "application/json" });
+  private exportYaml(): void {
+    const text = serializePresetYaml(this.settings);
+    const blob = new Blob([text], { type: "application/x-yaml" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    a.download = `pose-particles-preset-${ts}.json`;
+    a.download = `pose-particles-preset-${ts}.yaml`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
 
-  private importJson(): void {
+  private importYaml(): void {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "application/json,.json";
+    input.accept = ".yaml,.yml,application/x-yaml,text/yaml";
     input.addEventListener("change", () => {
       const file = input.files?.[0];
       if (!file) return;
       file.text().then((text) => {
         try {
-          const parsed = JSON.parse(text) as Partial<Settings>;
+          const parsed = parsePresetYaml(text);
           deepAssign(
             this.settings as unknown as Record<string, unknown>,
             parsed as unknown as Record<string, unknown>,
