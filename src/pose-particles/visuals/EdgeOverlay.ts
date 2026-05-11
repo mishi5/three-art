@@ -122,6 +122,10 @@ export class EdgeOverlay {
   }
 
   update(joints: Joints, center: Float32Array, audio: AudioFeatures, settings: Settings, t: number): void {
+    if (settings.mode === "lattice") {
+      this.object3D.visible = false;
+      return;
+    }
     const e = settings.edges;
     this.object3D.visible = e.enabled;
     if (!e.enabled) return;
