@@ -7,9 +7,9 @@
 import { makeDefaultTwist, type TwistSettings } from "./visuals/twist";
 import { makeDefaultBlur, type BlurSettings } from "./visuals/blur";
 
-export type RenderMode = "bones" | "cube" | "sphere";
+export type RenderMode = "bones" | "cube" | "sphere" | "lattice";
 
-export const RENDER_MODES: ReadonlyArray<RenderMode> = ["bones", "cube", "sphere"];
+export const RENDER_MODES: ReadonlyArray<RenderMode> = ["bones", "cube", "sphere", "lattice"];
 
 /** Parameters that body motion can be routed into as a multiplicative boost. */
 export const MOTION_TARGETS = [
@@ -35,12 +35,36 @@ export const MOTION_TARGETS = [
   "camera.autoRotateSpeed",
   "twist.strength",
   "blur.strength",
+  "lattice.waveAmplitude",
+  "lattice.waveOscFreq",
 ] as const;
 export type MotionTarget = typeof MOTION_TARGETS[number];
 
 /** Numeric mode passed to shaders (must match shader switch). */
 export function modeToInt(mode: RenderMode): number {
-  return mode === "bones" ? 0 : mode === "cube" ? 1 : 2;
+  switch (mode) {
+    case "bones": return 0;
+    case "cube": return 1;
+    case "sphere": return 2;
+    case "lattice": return 3;
+  }
+}
+
+export interface LatticeSettings {
+  /** 格子解像度 NxNxN。8..17 */
+  resolution: number;
+  /** 波速度 (m/s)。0.5..3.0 */
+  waveSpeed: number;
+  /** 弾性振動の最大変位 (m)。0..0.5 */
+  waveAmplitude: number;
+  /** 振動周波数 (Hz)。1..10 */
+  waveOscFreq: number;
+  /** 減衰時定数 (sec)。0.1..1.5 */
+  waveDamping: number;
+  /** onset しきい値 (1 フレームの bass 増分)。0.02..0.5 */
+  onsetThreshold: number;
+  /** onset クールダウン (sec)。0.05..0.5 */
+  onsetCooldown: number;
 }
 
 export interface AutoSettings {
@@ -144,6 +168,8 @@ export interface Settings {
   twist: TwistSettings;
   /** Post-process Gaussian blur applied to the final rendered image. */
   blur: BlurSettings;
+  /** lattice モード専用パラメータ (Issue #14)。 */
+  lattice: LatticeSettings;
   /** 曲解析ベースのパラメータ自動制御 (Issue #5)。 */
   auto: AutoSettings;
 }
@@ -271,6 +297,15 @@ export function makeDefaultSettings(): Settings {
     },
     twist: makeDefaultTwist(),
     blur: makeDefaultBlur(),
+    lattice: {
+      resolution: 12,
+      waveSpeed: 1.2,
+      waveAmplitude: 0.15,
+      waveOscFreq: 4.0,
+      waveDamping: 0.4,
+      onsetThreshold: 0.15,
+      onsetCooldown: 0.12,
+    },
     auto: {
       enabled: false,
       transitionSec: 1.5,

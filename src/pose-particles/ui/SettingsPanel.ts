@@ -56,6 +56,16 @@ export class SettingsPanel {
     shape.add(settings.shape, "radius", 0.1, 3, 0.05).name("radius / half-size");
     shape.add(settings.shape, "bassPulse", 0, 3, 0.05).name("bass pulse");
 
+    const lattice = this.gui.addFolder("Lattice (lattice mode)");
+    lattice.add(settings.lattice, "resolution", 8, 17, 1).name("resolution NxNxN");
+    lattice.add(settings.lattice, "waveSpeed", 0.5, 3.0, 0.05).name("wave speed (m/s)");
+    lattice.add(settings.lattice, "waveAmplitude", 0.0, 0.5, 0.005).name("wave amplitude (m)");
+    lattice.add(settings.lattice, "waveOscFreq", 1.0, 10.0, 0.1).name("osc freq (Hz)");
+    lattice.add(settings.lattice, "waveDamping", 0.1, 1.5, 0.01).name("damping (sec)");
+    lattice.add(settings.lattice, "onsetThreshold", 0.02, 0.5, 0.005).name("onset threshold");
+    lattice.add(settings.lattice, "onsetCooldown", 0.05, 0.5, 0.005).name("onset cooldown (sec)");
+    lattice.close();
+
     const ff = this.gui.addFolder("FragmentField (空間の細片)");
     ff.add(settings.fragmentField, "driftBase", 0, 2, 0.05).name("drift base");
     this.autoControlled.push(

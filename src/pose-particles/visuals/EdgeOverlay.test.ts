@@ -96,3 +96,38 @@ describe("EdgeOverlay twist", () => {
     expect(z1).toBeCloseTo(x0, 5);
   });
 });
+
+describe("EdgeOverlay lattice mode", () => {
+  test("mode=lattice では edges.enabled=true でも描画されない", () => {
+    const overlay = new EdgeOverlay();
+    const settings = makeDefaultSettings();
+    settings.edges.enabled = true;
+    settings.edges.anchorCount = 16;
+    settings.mode = "lattice";
+    const joints = makeEmptyJoints();
+    const center = new Float32Array([0, 0, 0]);
+    const audio = makeAudio();
+
+    overlay.update(joints, center, audio, settings, 0.5);
+
+    expect(overlay.object3D.visible).toBe(false);
+  });
+
+  test("mode=sphere に戻すと edges.enabled=true で描画再開", () => {
+    const overlay = new EdgeOverlay();
+    const settings = makeDefaultSettings();
+    settings.edges.enabled = true;
+    settings.edges.anchorCount = 16;
+    settings.mode = "lattice";
+    const joints = makeEmptyJoints();
+    const center = new Float32Array([0, 0, 0]);
+    const audio = makeAudio();
+
+    overlay.update(joints, center, audio, settings, 0.5);
+    expect(overlay.object3D.visible).toBe(false);
+
+    settings.mode = "sphere";
+    overlay.update(joints, center, audio, settings, 0.5);
+    expect(overlay.object3D.visible).toBe(true);
+  });
+});
