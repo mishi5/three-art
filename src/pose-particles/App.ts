@@ -502,6 +502,7 @@ function cloneSettings(s: Settings): Settings {
     edges: { ...s.edges },
     twist: { ...s.twist },
     blur: { ...s.blur },
+    lattice: { ...s.lattice },
     auto: { ...s.auto },
   };
 }
@@ -530,5 +531,7 @@ function applyMotionTo(s: Settings, target: MotionTarget, factor: number): void 
     case "camera.autoRotateSpeed":       s.camera.autoRotateSpeed *= factor; break;
     case "twist.strength":               s.twist.strength *= factor; break;
     case "blur.strength":                s.blur.strength *= factor; break;
+    case "lattice.waveAmplitude":        s.lattice.waveAmplitude *= factor; break;
+    case "lattice.waveOscFreq":          s.lattice.waveOscFreq *= factor; break;
   }
 }
