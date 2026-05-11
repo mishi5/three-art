@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { NUM_JOINTS, type AudioFeatures, type Joints } from "../types";
-import type { Settings } from "../settings";
+import { modeToInt, type Settings } from "../settings";
 import { axisToInt, effectiveTwistStrength, twistPhase } from "./twist";
 
 const POINTS_PER_JOINT = 400;
@@ -22,7 +22,8 @@ const vertexShader = /* glsl */ `
   uniform float uAmbientShimmer;
   uniform float uBaseSize;
   uniform float uVolumeSize;
-  uniform float uMode;          // 0=bones, 1=cube, 2=sphere (float for WebGL1 portability)
+  uniform float uMode;          // 0=bones, 1=cube, 2=sphere, 3=lattice (float for WebGL1 portability)
+  uniform float uLatticeN;      // 格子解像度 (lattice モードのみ使用)
   uniform float uShapeRadius;
   uniform float uShapeBassPulse;
   uniform float uHueBase;
@@ -39,6 +40,7 @@ const vertexShader = /* glsl */ `
   attribute float aJointIndex;
   attribute vec3 aOffset;
   attribute float aSeed;
+  attribute float aIndex;       // 0..total-1 のグローバル粒子インデックス (lattice モードのみ使用)
 
   varying float vAlpha;
   varying vec3 vColor;
@@ -160,7 +162,7 @@ const vertexShader = /* glsl */ `
       float scale = uShapeRadius * (1.0 + uBass * uShapeBassPulse) * outlier;
       pos = cubePos * scale + normalize(cubePos + 0.0001) * shimmer;
       visAlpha = 0.85;
-    } else {
+    } else if (uMode < 2.5) {
       // sphere: particles uniformly on the SURFACE of a sphere
       vec3 r = hash3unit(aSeed * 7.0 + aJointIndex + 1.0);
       float theta = r.x * 6.2831853;
@@ -170,6 +172,26 @@ const vertexShader = /* glsl */ `
       float radius = uShapeRadius * (1.0 + uBass * uShapeBassPulse) * outlier;
       pos = dir * radius + dir * shimmer;
       visAlpha = 0.85;
+    } else {
+      // lattice: NxNxN 厳密格子。bass shockwave は別 step で追加。
+      int idx = int(aIndex + 0.5);
+      int N = int(uLatticeN + 0.5);
+      int N3 = N * N * N;
+      if (idx >= N3) {
+        pos = vec3(0.0);
+        visAlpha = 0.0;
+      } else {
+        // WebGL1 互換のため整数 %% を使わず割り算で代用
+        int ix = idx - (idx / N) * N;
+        int iy = (idx / N) - (idx / (N * N)) * N;
+        int iz = idx / (N * N);
+        vec3 cell = vec3(float(ix), float(iy), float(iz));
+        float cellSize = uShapeRadius * 2.0 / max(float(N - 1), 1.0);
+        vec3 latticePos = (cell - vec3(float(N - 1) * 0.5)) * cellSize;
+        vec3 outwardDir = normalize(latticePos + vec3(1e-5));
+        pos = latticePos + outwardDir * shimmer;
+        visAlpha = 0.85;
+      }
     }
 
     pos = applyTwist(pos, uTwistStrength, uTwistPhase, uTwistAxis);
@@ -220,6 +242,7 @@ export class PointCloud {
     const offsets = new Float32Array(total * 3);
     const indices = new Float32Array(total);
     const seeds = new Float32Array(total);
+    const aIndexArr = new Float32Array(total);
     for (let j = 0; j < NUM_JOINTS; j++) {
       for (let p = 0; p < POINTS_PER_JOINT; p++) {
         const i = j * POINTS_PER_JOINT + p;
@@ -228,12 +251,14 @@ export class PointCloud {
         offsets[i * 3 + 2] = gaussian() * SIGMA;
         indices[i] = j;
         seeds[i] = Math.random();
+        aIndexArr[i] = i;
       }
     }
     geom.setAttribute("position", new THREE.BufferAttribute(new Float32Array(total * 3), 3));
     geom.setAttribute("aOffset", new THREE.BufferAttribute(offsets, 3));
     geom.setAttribute("aJointIndex", new THREE.BufferAttribute(indices, 1));
     geom.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1));
+    geom.setAttribute("aIndex", new THREE.BufferAttribute(aIndexArr, 1));
     geom.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 4);
 
     this.jointsUniform = new Float32Array(NUM_JOINTS * 3);
@@ -259,6 +284,7 @@ export class PointCloud {
         uBaseSize: { value: 3.0 },
         uVolumeSize: { value: 5.0 },
         uMode: { value: 0.0 },
+        uLatticeN: { value: 12.0 },
         uShapeRadius: { value: 1.0 },
         uShapeBassPulse: { value: 0.5 },
         uHueBase: { value: 0.6 },
@@ -313,7 +339,8 @@ export class PointCloud {
     u.uAmbientShimmer!.value = settings.pointCloud.ambientShimmer;
     u.uBaseSize!.value = settings.pointCloud.baseSize;
     u.uVolumeSize!.value = settings.pointCloud.volumeSize;
-    u.uMode!.value = settings.mode === "bones" ? 0.0 : settings.mode === "cube" ? 1.0 : 2.0;
+    u.uMode!.value = modeToInt(settings.mode);
+    u.uLatticeN!.value = settings.lattice.resolution;
     u.uShapeRadius!.value = settings.shape.radius;
     u.uShapeBassPulse!.value = settings.shape.bassPulse;
     u.uHueBase!.value = settings.color.hueBase;
