@@ -24,6 +24,11 @@ const vertexShader = /* glsl */ `
   uniform float uVolumeSize;
   uniform float uMode;          // 0=bones, 1=cube, 2=sphere, 3=lattice (float for WebGL1 portability)
   uniform float uLatticeN;      // 格子解像度 (lattice モードのみ使用)
+  uniform float uWaveTimes[4];  // 直近 onset 時刻 (-1 = inactive)
+  uniform float uWaveSpeed;     // 波速度 m/s
+  uniform float uWaveAmplitude; // 弾性振動の最大変位 m
+  uniform float uWaveOscFreq;   // 振動周波数 Hz
+  uniform float uWaveDamping;   // 減衰時定数 sec (1/e)
   uniform float uShapeRadius;
   uniform float uShapeBassPulse;
   uniform float uHueBase;
@@ -189,7 +194,19 @@ const vertexShader = /* glsl */ `
         float cellSize = uShapeRadius * 2.0 / max(float(N - 1), 1.0);
         vec3 latticePos = (cell - vec3(float(N - 1) * 0.5)) * cellSize;
         vec3 outwardDir = normalize(latticePos + vec3(1e-5));
-        pos = latticePos + outwardDir * shimmer;
+        float r = length(latticePos);
+        float totalDisp = 0.0;
+        for (int wi = 0; wi < 4; wi++) {
+          float t0 = uWaveTimes[wi];
+          if (t0 < 0.0) continue;
+          float waveAge = (uTime - t0) - r / uWaveSpeed;
+          if (waveAge < 0.0) continue;
+          float env = exp(-waveAge / uWaveDamping);
+          float osc = sin(waveAge * uWaveOscFreq * 6.2831853);
+          totalDisp += uWaveAmplitude * env * osc;
+        }
+        pos = latticePos + outwardDir * totalDisp;
+        pos += outwardDir * shimmer;
         visAlpha = 0.85;
       }
     }
@@ -285,6 +302,11 @@ export class PointCloud {
         uVolumeSize: { value: 5.0 },
         uMode: { value: 0.0 },
         uLatticeN: { value: 12.0 },
+        uWaveTimes: { value: new Float32Array([-1, -1, -1, -1]) },
+        uWaveSpeed: { value: 1.2 },
+        uWaveAmplitude: { value: 0.15 },
+        uWaveOscFreq: { value: 4.0 },
+        uWaveDamping: { value: 0.4 },
         uShapeRadius: { value: 1.0 },
         uShapeBassPulse: { value: 0.5 },
         uHueBase: { value: 0.6 },
@@ -341,6 +363,10 @@ export class PointCloud {
     u.uVolumeSize!.value = settings.pointCloud.volumeSize;
     u.uMode!.value = modeToInt(settings.mode);
     u.uLatticeN!.value = settings.lattice.resolution;
+    u.uWaveSpeed!.value = settings.lattice.waveSpeed;
+    u.uWaveAmplitude!.value = settings.lattice.waveAmplitude;
+    u.uWaveOscFreq!.value = settings.lattice.waveOscFreq;
+    u.uWaveDamping!.value = settings.lattice.waveDamping;
     u.uShapeRadius!.value = settings.shape.radius;
     u.uShapeBassPulse!.value = settings.shape.bassPulse;
     u.uHueBase!.value = settings.color.hueBase;
@@ -353,5 +379,10 @@ export class PointCloud {
     u.uTwistStrength!.value = effectiveTwistStrength(settings.twist, audio.bass);
     u.uTwistPhase!.value = twistPhase(settings.twist, timeSec);
     u.uTwistAxis!.value = axisToInt(settings.twist.axis);
+  }
+
+  setWaveTimes(times: readonly number[]): void {
+    const arr = this.material.uniforms.uWaveTimes!.value as Float32Array;
+    for (let i = 0; i < 4; i++) arr[i] = times[i] ?? -1;
   }
 }

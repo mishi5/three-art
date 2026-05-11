@@ -21,6 +21,7 @@ import { DEFAULT_AUTOMATION_MAP, DEFAULT_STYLE_PRESETS, type StylePreset } from 
 import { loadStylePresets } from "./automation/style-loader";
 import { SectionTimeline } from "./ui/SectionTimeline";
 import { FileAudioSource } from "./audio/FileAudioSource";
+import { OnsetDetector } from "./audio/OnsetDetector";
 
 export class App {
   readonly scene = new THREE.Scene();
@@ -38,6 +39,7 @@ export class App {
   private debugVisible = false;
   private uiVisible = true;
   private smoothedAudio = { volume: 0, bass: 0, mid: 0, treble: 0 };
+  private onsetDetector = new OnsetDetector();
   readonly settings: Settings = loadSettings();
   private settingsPanel: SettingsPanel;
   private orbit: OrbitControls;
@@ -220,6 +222,7 @@ export class App {
     if (!(this.audioInput instanceof FileAudioSource)) return;
     const buffer = this.audioInput.getDecodedBuffer();
     if (!buffer) return;
+    this.onsetDetector.reset();
     const head = new Uint8Array(await file.slice(0, 4096).arrayBuffer());
     const hash = fileHash(file.name, file.size, head);
     this.currentSongHash = hash;
@@ -385,6 +388,13 @@ export class App {
       treble: this.smoothedAudio.treble,
       fft: audio.fft,
     };
+    this.onsetDetector.update(
+      this.smoothedAudio.bass,
+      live.lattice.onsetThreshold,
+      live.lattice.onsetCooldown,
+      t,
+    );
+    this.pointCloud.setWaveTimes(this.onsetDetector.getWaveTimes());
     this.pointCloud.update(joints, vis, center, gainedAudio, live, t);
     this.fragmentField.update(joints, vis, center, gainedAudio, live, t);
     this.edgeOverlay.update(joints, center, gainedAudio, live, t);
