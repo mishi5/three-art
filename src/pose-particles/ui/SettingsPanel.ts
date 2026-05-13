@@ -17,7 +17,7 @@ export interface SettingsPanelCallbacks {
 }
 
 /** 利用可能なプリセット画像 (public/images/presets/ 配下) */
-const IMAGE_PRESETS = ["sample-01.png", "sample-02.png"] as const;
+const IMAGE_PRESETS = ["sample-01.svg", "sample-02.svg"] as const;
 const UPLOADED_TAG = "(uploaded)";
 
 export class SettingsPanel {

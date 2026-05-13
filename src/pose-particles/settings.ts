@@ -333,7 +333,7 @@ export function makeDefaultSettings(): Settings {
       onsetCooldown: 0.12,
     },
     image: {
-      preset: "sample-01.png",
+      preset: "sample-01.svg",
       // 80 * 60 = 4800 ≤ 5200 (粒子総数)
       gridW: 80,
       gridH: 60,
