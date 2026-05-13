@@ -7,9 +7,9 @@
 import { makeDefaultTwist, type TwistSettings } from "./visuals/twist";
 import { makeDefaultBlur, type BlurSettings } from "./visuals/blur";
 
-export type RenderMode = "bones" | "cube" | "sphere" | "lattice";
+export type RenderMode = "bones" | "cube" | "sphere" | "lattice" | "rain";
 
-export const RENDER_MODES: ReadonlyArray<RenderMode> = ["bones", "cube", "sphere", "lattice"];
+export const RENDER_MODES: ReadonlyArray<RenderMode> = ["bones", "cube", "sphere", "lattice", "rain"];
 
 /** Parameters that body motion can be routed into as a multiplicative boost. */
 export const MOTION_TARGETS = [
@@ -47,6 +47,7 @@ export function modeToInt(mode: RenderMode): number {
     case "cube": return 1;
     case "sphere": return 2;
     case "lattice": return 3;
+    case "rain": return 4;
   }
 }
 
@@ -65,6 +66,25 @@ export interface LatticeSettings {
   onsetThreshold: number;
   /** onset クールダウン (sec)。0.05..0.5 */
   onsetCooldown: number;
+}
+
+export type RainBinMapping = "linear" | "log";
+
+export interface RainSettings {
+  /** 落下基本速度 (m/s)。鳴っていない帯域でも最低限この速度で落ちる。 */
+  baseSpeed: number;
+  /** 振幅 1 あたりの追加速度 (m/s)。fft[xIndex] * ampGain が追加される。 */
+  ampGain: number;
+  /** 雨粒数。再起動 (mode 再選択) で反映される静的パラメータ。 */
+  count: number;
+  /** 雫の基準長 (m)。実描画長は速度に比例する。 */
+  length: number;
+  /** 描画域横幅 (m)。FFT bin 全体がこの幅にマップされる。 */
+  areaWidth: number;
+  /** 描画域高さ (m)。Y はこの高さでリングバッファ。 */
+  areaHeight: number;
+  /** 周波数 → X のマップ方式 (MVP は linear のみ実装、log は将来)。 */
+  binMapping: RainBinMapping;
 }
 
 export interface AutoSettings {
@@ -170,6 +190,8 @@ export interface Settings {
   blur: BlurSettings;
   /** lattice モード専用パラメータ (Issue #14)。 */
   lattice: LatticeSettings;
+  /** rain モード専用パラメータ (Issue #17)。 */
+  rain: RainSettings;
   /** 曲解析ベースのパラメータ自動制御 (Issue #5)。 */
   auto: AutoSettings;
 }
@@ -305,6 +327,15 @@ export function makeDefaultSettings(): Settings {
       waveDamping: 0.4,
       onsetThreshold: 0.15,
       onsetCooldown: 0.12,
+    },
+    rain: {
+      baseSpeed: 0.3,
+      ampGain: 4.0,
+      count: 4000,
+      length: 0.04,
+      areaWidth: 2.0,
+      areaHeight: 2.4,
+      binMapping: "linear",
     },
     auto: {
       enabled: false,

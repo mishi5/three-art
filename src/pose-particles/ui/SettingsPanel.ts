@@ -66,6 +66,16 @@ export class SettingsPanel {
     lattice.add(settings.lattice, "onsetCooldown", 0.05, 0.5, 0.005).name("onset cooldown (sec)");
     lattice.close();
 
+    const rain = this.gui.addFolder("Rain (rain mode)");
+    rain.add(settings.rain, "baseSpeed", 0.0, 2.0, 0.01).name("base speed (m/s)");
+    rain.add(settings.rain, "ampGain", 0.0, 20.0, 0.1).name("amp gain (m/s)");
+    rain.add(settings.rain, "count", 256, 20000, 1).name("count (re-enter mode)");
+    rain.add(settings.rain, "length", 0.005, 0.5, 0.005).name("drop length (m)");
+    rain.add(settings.rain, "areaWidth", 0.5, 6.0, 0.05).name("area width (m)");
+    rain.add(settings.rain, "areaHeight", 0.5, 6.0, 0.05).name("area height (m)");
+    rain.add(settings.rain, "binMapping", ["linear", "log"]).name("bin mapping");
+    rain.close();
+
     const ff = this.gui.addFolder("FragmentField (空間の細片)");
     ff.add(settings.fragmentField, "driftBase", 0, 2, 0.05).name("drift base");
     this.autoControlled.push(
