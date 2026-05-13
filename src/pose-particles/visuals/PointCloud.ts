@@ -318,6 +318,7 @@ export class PointCloud {
   readonly object3D: THREE.Points;
   private material: THREE.ShaderMaterial;
   private jointsUniform: Float32Array; // length 39
+  private lastImageAspect = 4 / 3; // image モードの平面サイズ計算用 (デフォルト 4:3)
 
   private colorAttr: THREE.BufferAttribute;
 
@@ -453,13 +454,21 @@ export class PointCloud {
     u.uWaveDamping!.value = settings.lattice.waveDamping;
     u.uShapeRadius!.value = settings.shape.radius;
     u.uShapeBassPulse!.value = settings.shape.bassPulse;
-    u.uImageGridW!.value = settings.image.gridW;
-    u.uImageGridH!.value = settings.image.gridH;
     u.uImagePushAmount!.value = settings.image.pushAmount;
     u.uImageNoiseAmp!.value = settings.image.noiseAmp;
     u.uImageNoiseScale!.value = settings.image.noiseScale;
     u.uImageNoiseSpeed!.value = settings.image.noiseSpeed;
     u.uImageWaveStrength!.value = settings.image.waveStrength;
+    // shape.radius がライブで変わっても画像平面のサイズが追従するように再計算
+    // (gridW/gridH と aColor は setImage 経由でしか変えない)
+    const longest = settings.shape.radius * 2;
+    if (this.lastImageAspect >= 1) {
+      u.uImagePlaneW!.value = longest;
+      u.uImagePlaneH!.value = longest / this.lastImageAspect;
+    } else {
+      u.uImagePlaneH!.value = longest;
+      u.uImagePlaneW!.value = longest * this.lastImageAspect;
+    }
     u.uHueBase!.value = settings.color.hueBase;
     u.uHueSpread!.value = settings.color.hueSpread;
     u.uBassHueShift!.value = settings.color.bassHueShift;
@@ -481,7 +490,7 @@ export class PointCloud {
    * 画像グリッドの RGB を aColor attribute に書き込み、平面サイズ uniform を更新する。
    * shape.radius を基準に画像のアスペクト比を保持して contain で配置する。
    */
-  setImage(grid: ImageGrid, gridW: number, gridH: number, shapeRadius: number): void {
+  setImage(grid: ImageGrid, gridW: number, gridH: number): void {
     const total = gridW * gridH;
     if (total > TOTAL_PARTICLES) {
       throw new Error(`grid ${gridW}x${gridH}=${total} exceeds particle budget ${TOTAL_PARTICLES}`);
@@ -496,21 +505,9 @@ export class PointCloud {
     for (let i = total * 3; i < TOTAL_PARTICLES * 3; i++) colors[i] = 1;
     this.colorAttr.needsUpdate = true;
 
-    // 画像の縦横比を保ったまま、shape.radius * 2 を最長辺に合わせて配置 (contain)
-    const aspect = grid.imageAspect;
-    const longest = shapeRadius * 2;
-    let planeW: number;
-    let planeH: number;
-    if (aspect >= 1) {
-      planeW = longest;
-      planeH = longest / aspect;
-    } else {
-      planeH = longest;
-      planeW = longest * aspect;
-    }
-    this.material.uniforms.uImagePlaneW!.value = planeW;
-    this.material.uniforms.uImagePlaneH!.value = planeH;
+    this.lastImageAspect = grid.imageAspect;
     this.material.uniforms.uImageGridW!.value = gridW;
     this.material.uniforms.uImageGridH!.value = gridH;
+    // 平面サイズは update() 内で毎フレーム shape.radius に追従して再計算する
   }
 }

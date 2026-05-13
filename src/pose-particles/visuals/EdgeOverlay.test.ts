@@ -131,3 +131,20 @@ describe("EdgeOverlay lattice mode", () => {
     expect(overlay.object3D.visible).toBe(true);
   });
 });
+
+describe("EdgeOverlay image mode", () => {
+  test("mode=image では edges.enabled=true でも描画されない", () => {
+    const overlay = new EdgeOverlay();
+    const settings = makeDefaultSettings();
+    settings.edges.enabled = true;
+    settings.edges.anchorCount = 16;
+    settings.mode = "image";
+    const joints = makeEmptyJoints();
+    const center = new Float32Array([0, 0, 0]);
+    const audio = makeAudio();
+
+    overlay.update(joints, center, audio, settings, 0.5);
+
+    expect(overlay.object3D.visible).toBe(false);
+  });
+});
