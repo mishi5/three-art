@@ -7,9 +7,9 @@
 import { makeDefaultTwist, type TwistSettings } from "./visuals/twist";
 import { makeDefaultBlur, type BlurSettings } from "./visuals/blur";
 
-export type RenderMode = "bones" | "cube" | "sphere" | "lattice";
+export type RenderMode = "bones" | "cube" | "sphere" | "lattice" | "image";
 
-export const RENDER_MODES: ReadonlyArray<RenderMode> = ["bones", "cube", "sphere", "lattice"];
+export const RENDER_MODES: ReadonlyArray<RenderMode> = ["bones", "cube", "sphere", "lattice", "image"];
 
 /** Parameters that body motion can be routed into as a multiplicative boost. */
 export const MOTION_TARGETS = [
@@ -37,6 +37,9 @@ export const MOTION_TARGETS = [
   "blur.strength",
   "lattice.waveAmplitude",
   "lattice.waveOscFreq",
+  "image.pushAmount",
+  "image.noiseAmp",
+  "image.waveStrength",
 ] as const;
 export type MotionTarget = typeof MOTION_TARGETS[number];
 
@@ -47,7 +50,28 @@ export function modeToInt(mode: RenderMode): number {
     case "cube": return 1;
     case "sphere": return 2;
     case "lattice": return 3;
+    case "image": return 4;
   }
+}
+
+/** image モード専用パラメータ (Issue #18)。 */
+export interface ImageSettings {
+  /** プリセットファイル名 (public/images/presets/ 配下)、"(uploaded)" = アップロード済み画像 */
+  preset: string;
+  /** グリッド W (8..120)。gridW * gridH <= 5200 (粒子総数) */
+  gridW: number;
+  /** グリッド H (8..120) */
+  gridH: number;
+  /** Z 押し出しゲイン (中高域 × 輝度に乗算)。0..2 */
+  pushAmount: number;
+  /** ノイズ歪み振幅 (m)。0..0.5 */
+  noiseAmp: number;
+  /** ノイズ空間スケール。0.5..8 */
+  noiseScale: number;
+  /** ノイズ時間スケール。0..3 */
+  noiseSpeed: number;
+  /** 中心波動振幅 (m)。0..0.5 */
+  waveStrength: number;
 }
 
 export interface LatticeSettings {
@@ -170,6 +194,8 @@ export interface Settings {
   blur: BlurSettings;
   /** lattice モード専用パラメータ (Issue #14)。 */
   lattice: LatticeSettings;
+  /** image モード専用パラメータ (Issue #18)。 */
+  image: ImageSettings;
   /** 曲解析ベースのパラメータ自動制御 (Issue #5)。 */
   auto: AutoSettings;
 }
@@ -305,6 +331,17 @@ export function makeDefaultSettings(): Settings {
       waveDamping: 0.4,
       onsetThreshold: 0.15,
       onsetCooldown: 0.12,
+    },
+    image: {
+      preset: "sample-01.png",
+      // 80 * 60 = 4800 ≤ 5200 (粒子総数)
+      gridW: 80,
+      gridH: 60,
+      pushAmount: 0.5,
+      noiseAmp: 0.05,
+      noiseScale: 2.0,
+      noiseSpeed: 0.5,
+      waveStrength: 0.15,
     },
     auto: {
       enabled: false,
