@@ -160,3 +160,40 @@ describe("DisplayAudioSource - 外部停止検知", () => {
     expect(src.read()).toBe(DEFAULT_AUDIO_FEATURES);
   });
 });
+
+describe("DisplayAudioSource - 二重起動ガード", () => {
+  it("start() の in-flight 中に再度 start() を呼んでも getDisplayMedia は 1 回しか呼ばれない", async () => {
+    let calls = 0;
+    let resolveStream: ((s: MediaStream) => void) | null = null;
+    const audio = makeFakeTrack("audio");
+    installGetDisplayMedia(() => {
+      calls++;
+      return new Promise<MediaStream>((res) => {
+        resolveStream = res;
+      });
+    });
+
+    const src = new DisplayAudioSource(makeFakeCtx());
+    const p1 = src.start();
+    const p2 = src.start();
+    resolveStream!(makeFakeStream([audio]));
+    await Promise.all([p1, p2]);
+
+    expect(calls).toBe(1);
+  });
+
+  it("既に active な状態で start() を呼んでも getDisplayMedia は呼ばれない", async () => {
+    let calls = 0;
+    const audio = makeFakeTrack("audio");
+    installGetDisplayMedia(async () => {
+      calls++;
+      return makeFakeStream([audio]);
+    });
+
+    const src = new DisplayAudioSource(makeFakeCtx());
+    await src.start();
+    await src.start();
+
+    expect(calls).toBe(1);
+  });
+});

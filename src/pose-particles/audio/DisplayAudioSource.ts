@@ -13,6 +13,7 @@ export class DisplayAudioSource implements AudioInput {
   private stream: MediaStream | null = null;
   private node: MediaStreamAudioSourceNode | null = null;
   private active = false;
+  private starting = false;
 
   constructor(ctx: AudioContext) {
     this.ctx = ctx;
@@ -20,25 +21,31 @@ export class DisplayAudioSource implements AudioInput {
   }
 
   async start(): Promise<void> {
-    const stream = await navigator.mediaDevices.getDisplayMedia({
-      audio: true,
-      video: { width: 1, height: 1, frameRate: 1 },
-    });
-    for (const t of stream.getVideoTracks()) t.stop();
-    const audioTracks = stream.getAudioTracks();
-    if (audioTracks.length === 0) {
-      for (const t of stream.getTracks()) t.stop();
-      throw new Error(
-        "タブの音声共有が ON になっていません。Chrome タブを選び『タブの音声を共有』を有効にしてください",
-      );
+    if (this.starting || this.active) return;
+    this.starting = true;
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        audio: true,
+        video: { width: 1, height: 1, frameRate: 1 },
+      });
+      for (const t of stream.getVideoTracks()) t.stop();
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length === 0) {
+        for (const t of stream.getTracks()) t.stop();
+        throw new Error(
+          "タブの音声共有が ON になっていません。Chrome タブを選び『タブの音声を共有』を有効にしてください",
+        );
+      }
+      audioTracks[0]!.addEventListener("ended", () => {
+        this.active = false;
+      });
+      this.stream = stream;
+      this.node = this.ctx.createMediaStreamSource(stream);
+      this.node.connect(this.analyzer.input);
+      this.active = true;
+    } finally {
+      this.starting = false;
     }
-    audioTracks[0]!.addEventListener("ended", () => {
-      this.active = false;
-    });
-    this.stream = stream;
-    this.node = this.ctx.createMediaStreamSource(stream);
-    this.node.connect(this.analyzer.input);
-    this.active = true;
   }
 
   stop(): void {
