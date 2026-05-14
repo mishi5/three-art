@@ -20,6 +20,7 @@ const vertexShader = /* glsl */ `
   uniform float uMid;
   uniform float uTreble;
   uniform float uPixelRatio;
+  uniform float uPixelPerWorld;  // world 1m を drawing-buffer pixel に変換する係数 (z=1 時)
   uniform float uBassExpansion;
   uniform float uTrebleShimmer;
   uniform float uAmbientShimmer;
@@ -277,7 +278,19 @@ const vertexShader = /* glsl */ `
 
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_Position = projectionMatrix * mv;
-    gl_PointSize = (uBaseSize + uVolume * uVolumeSize) * outlier * uPixelRatio * (1.0 / -mv.z);
+    if (uMode > 3.5) {
+      // image: セル間隔 (world m) に追従。隙間が出ないよう大きい方の辺を採用。
+      // cellSize × uPixelPerWorld で drawing-buffer pixel @ z=1 → 1/-mv.z で perspective scale
+      float cellW = uImagePlaneW / max(uImageGridW, 1.0);
+      float cellH = uImagePlaneH / max(uImageGridH, 1.0);
+      float cellSize = max(cellW, cellH);
+      float ptDrawing = cellSize * uPixelPerWorld * outlier / -mv.z;
+      // volume は CSS pixel ベースの追加サイズなので uPixelRatio で drawing pixel に揃える
+      ptDrawing += uVolume * uVolumeSize * uPixelRatio;
+      gl_PointSize = ptDrawing;
+    } else {
+      gl_PointSize = (uBaseSize + uVolume * uVolumeSize) * outlier * uPixelRatio * (1.0 / -mv.z);
+    }
 
     if (uMode > 3.5) {
       // image モード: 粒子色は画像セルの RGB をそのまま使用 (treble で軽くブースト)
@@ -370,6 +383,8 @@ export class PointCloud {
         uMid: { value: 0 },
         uTreble: { value: 0 },
         uPixelRatio: { value: pixelRatio },
+        // 後段の setProjection() で更新する。0 のままだと image モードで粒子が消えるので初期値は適当な大きさ
+        uPixelPerWorld: { value: 1000 },
         uBassExpansion: { value: 1.5 },
         uTrebleShimmer: { value: 0.02 },
         uAmbientShimmer: { value: 0.0 },
@@ -479,6 +494,17 @@ export class PointCloud {
     u.uTwistStrength!.value = effectiveTwistStrength(settings.twist, audio.bass);
     u.uTwistPhase!.value = twistPhase(settings.twist, timeSec);
     u.uTwistAxis!.value = axisToInt(settings.twist.axis);
+  }
+
+  /**
+   * world 1m が drawing-buffer 上で何 pixel に対応するか (z=1 時) を更新する。
+   * image モードで粒子サイズをセル間隔から決めるのに使用。
+   * renderer.setSize と camera.fov 変更時に呼ぶこと。
+   */
+  setProjection(drawingBufferHeight: number, fovYDeg: number): void {
+    const fovRad = (fovYDeg * Math.PI) / 180;
+    this.material.uniforms.uPixelPerWorld!.value =
+      drawingBufferHeight / (2 * Math.tan(fovRad / 2));
   }
 
   setWaveTimes(times: readonly number[]): void {

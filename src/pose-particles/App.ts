@@ -72,6 +72,7 @@ export class App {
     this.blurPipeline = new BlurPipeline(this.renderer, this.scene, this.camera);
     this.handleResize();
     this.pointCloud = new PointCloud(this.renderer.getPixelRatio());
+    this.pointCloud.setProjection(this.renderer.domElement.height, this.camera.fov);
     this.scene.add(this.pointCloud.object3D);
     this.fragmentField = new FragmentField(this.renderer.getPixelRatio());
     this.scene.add(this.fragmentField.object3D);
@@ -157,6 +158,9 @@ export class App {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.blurPipeline.setSize(w, h);
+    // image モード: drawing-buffer 高さと FOV から world→pixel 係数を再計算
+    // (constructor からも呼ばれるが、pointCloud がまだ生成されていない初回呼び出しでは skip)
+    this.pointCloud?.setProjection(this.renderer.domElement.height, this.camera.fov);
   };
 
   async startPose(): Promise<void> {
