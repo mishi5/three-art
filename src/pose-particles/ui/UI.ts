@@ -1,8 +1,9 @@
 import type { App } from "../App";
+import { DisplayAudioSource } from "../audio/DisplayAudioSource";
 import { FileAudioSource } from "../audio/FileAudioSource";
 import { MicAudioSource } from "../audio/MicAudioSource";
 
-type Mode = "none" | "file" | "mic";
+type Mode = "none" | "file" | "mic" | "display";
 
 const btnCss = `
   flex: 1; padding: 6px 8px; background: rgba(255,255,255,0.1);
@@ -80,14 +81,16 @@ export class UI {
     `;
     panel.innerHTML = `
       <div style="display:flex;gap:4px">
-        <button data-mode="file" style="${btnCss}">ファイル</button>
-        <button data-mode="mic"  style="${btnCss}">マイク</button>
+        <button data-mode="file"    style="${btnCss}">ファイル</button>
+        <button data-mode="mic"     style="${btnCss}">マイク</button>
+        <button data-mode="display" style="${btnCss}">PC音声</button>
       </div>
       <div id="file-controls" style="display:none">
         <input id="file-input" type="file" accept="audio/*" style="font-size:11px;color:#ccc">
         <div id="file-status" style="margin-top:6px;opacity:0.7"></div>
       </div>
       <div id="mic-status" style="display:none;opacity:0.7">マイク使用中</div>
+      <div id="display-status" style="display:none;opacity:0.7">PC音声 使用中</div>
       <div id="audio-error" style="color:#f88;display:none"></div>
     `;
     this.root.appendChild(panel);
@@ -96,19 +99,25 @@ export class UI {
     const fileInput = panel.querySelector("#file-input") as HTMLInputElement;
     const fileStatus = panel.querySelector("#file-status") as HTMLDivElement;
     const micStatus = panel.querySelector("#mic-status") as HTMLDivElement;
+    const displayStatus = panel.querySelector("#display-status") as HTMLDivElement;
     const errBox = panel.querySelector("#audio-error") as HTMLDivElement;
 
     panel.querySelectorAll<HTMLButtonElement>("button[data-mode]").forEach((b) => {
       b.addEventListener("click", () => {
         const mode = b.dataset.mode as Mode;
+        fileCtrl.style.display = "none";
+        micStatus.style.display = "none";
+        displayStatus.style.display = "none";
         if (mode === "file") {
           fileCtrl.style.display = "block";
-          micStatus.style.display = "none";
           this.switchToFile();
-        } else {
-          fileCtrl.style.display = "none";
+        } else if (mode === "mic") {
           micStatus.style.display = "block";
           this.switchToMic(errBox);
+        } else if (mode === "display") {
+          displayStatus.style.display = "block";
+          displayStatus.textContent = "PC音声を取得中…";
+          this.switchToDisplay(errBox, displayStatus);
         }
       });
     });
@@ -151,5 +160,32 @@ export class UI {
         e instanceof Error ? e.message : "マイク起動失敗";
       this.mode = "none";
     }
+  }
+
+  private async switchToDisplay(errBox: HTMLElement, statusEl: HTMLElement): Promise<void> {
+    try {
+      const ctx = this.app.getOrCreateAudioContext();
+      const display = new DisplayAudioSource(ctx);
+      await display.start();
+      this.app.setAudio(display);
+      this.mode = "display";
+      statusEl.textContent = "PC音声 使用中";
+      errBox.style.display = "none";
+    } catch (e) {
+      const msg = this.displayErrorMessage(e);
+      errBox.style.display = "block";
+      errBox.textContent = msg;
+      statusEl.style.display = "none";
+      this.mode = "none";
+    }
+  }
+
+  private displayErrorMessage(e: unknown): string {
+    if (e instanceof Error) {
+      if (e.name === "NotAllowedError") return "PC音声の取得がキャンセルされました";
+      if (e.name === "NotSupportedError") return "このブラウザは PC 音声取得に対応していません";
+      return e.message;
+    }
+    return "PC音声の取得に失敗しました";
   }
 }
