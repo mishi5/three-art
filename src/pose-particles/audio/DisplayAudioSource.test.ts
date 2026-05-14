@@ -125,3 +125,23 @@ describe("DisplayAudioSource - 成功パス", () => {
     expect(src.read()).toBe(DEFAULT_AUDIO_FEATURES);
   });
 });
+
+describe("DisplayAudioSource - audio track 無し", () => {
+  it("audio track が無いとき start() が reject し、video track が stop される", async () => {
+    const video = makeFakeTrack("video");
+    installGetDisplayMedia(async () => makeFakeStream([video]));
+
+    const src = new DisplayAudioSource(makeFakeCtx());
+    let caught: unknown = null;
+    try {
+      await src.start();
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toContain("タブの音声共有");
+    expect(video.stopped).toBe(true);
+    expect(src.read()).toBe(DEFAULT_AUDIO_FEATURES);
+  });
+});
