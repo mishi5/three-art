@@ -145,3 +145,18 @@ describe("DisplayAudioSource - audio track 無し", () => {
     expect(src.read()).toBe(DEFAULT_AUDIO_FEATURES);
   });
 });
+
+describe("DisplayAudioSource - 外部停止検知", () => {
+  it("audio track の ended イベント後 read() が DEFAULT を返す", async () => {
+    const audio = makeFakeTrack("audio");
+    installGetDisplayMedia(async () => makeFakeStream([audio]));
+
+    const src = new DisplayAudioSource(makeFakeCtx());
+    await src.start();
+    expect(src.read()).not.toBe(DEFAULT_AUDIO_FEATURES);
+
+    audio._emitEnded();
+
+    expect(src.read()).toBe(DEFAULT_AUDIO_FEATURES);
+  });
+});

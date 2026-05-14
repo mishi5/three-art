@@ -32,6 +32,9 @@ export class DisplayAudioSource implements AudioInput {
         "タブの音声共有が ON になっていません。Chrome タブを選び『タブの音声を共有』を有効にしてください",
       );
     }
+    audioTracks[0]!.addEventListener("ended", () => {
+      this.active = false;
+    });
     this.stream = stream;
     this.node = this.ctx.createMediaStreamSource(stream);
     this.node.connect(this.analyzer.input);
