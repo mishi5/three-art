@@ -161,6 +161,30 @@ describe("DisplayAudioSource - 外部停止検知", () => {
   });
 });
 
+describe("DisplayAudioSource - constraints", () => {
+  it("audio constraints で echoCancellation/noiseSuppression/autoGainControl を明示的に OFF にする", async () => {
+    let captured: MediaStreamConstraints | undefined;
+    const audio = makeFakeTrack("audio");
+    (globalThis as { navigator: unknown }).navigator = {
+      mediaDevices: {
+        getDisplayMedia: async (c: MediaStreamConstraints) => {
+          captured = c;
+          return makeFakeStream([audio]);
+        },
+      },
+    };
+
+    const src = new DisplayAudioSource(makeFakeCtx());
+    await src.start();
+
+    const a = captured?.audio as MediaTrackConstraints;
+    expect(a).toBeDefined();
+    expect(a.echoCancellation).toBe(false);
+    expect(a.noiseSuppression).toBe(false);
+    expect(a.autoGainControl).toBe(false);
+  });
+});
+
 describe("DisplayAudioSource - 二重起動ガード", () => {
   it("start() の in-flight 中に再度 start() を呼んでも getDisplayMedia は 1 回しか呼ばれない", async () => {
     let calls = 0;

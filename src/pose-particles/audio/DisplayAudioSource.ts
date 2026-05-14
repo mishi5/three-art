@@ -24,8 +24,10 @@ export class DisplayAudioSource implements AudioInput {
     if (this.starting || this.active) return;
     this.starting = true;
     try {
+      // Chrome の音声処理パイプライン（echoCancellation / noiseSuppression /
+      // autoGainControl）を明示的に OFF にしてキャプチャレイテンシを抑える。
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        audio: true,
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
         video: { width: 1, height: 1, frameRate: 1 },
       });
       for (const t of stream.getVideoTracks()) t.stop();
