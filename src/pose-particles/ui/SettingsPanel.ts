@@ -67,10 +67,10 @@ export class SettingsPanel {
     lattice.close();
 
     const rain = this.gui.addFolder("Rain (rain mode)");
-    rain.add(settings.rain, "baseSpeed", 0.0, 2.0, 0.01).name("base speed (m/s)");
-    rain.add(settings.rain, "ampGain", 0.0, 20.0, 0.1).name("amp gain (m/s)");
+    rain.add(settings.rain, "baseSpeed", 0.0, 0.8, 0.005).name("base speed (m/s)");
+    rain.add(settings.rain, "ampGain", 0.0, 4.0, 0.02).name("amp gain (m/s)");
     rain.add(settings.rain, "count", 256, 20000, 1).name("count (re-enter mode)");
-    rain.add(settings.rain, "length", 0.005, 0.5, 0.005).name("drop length (m)");
+    rain.add(settings.rain, "length", 0.0, 0.2, 0.002).name("drop length (m)");
     rain.add(settings.rain, "areaWidth", 0.5, 6.0, 0.05).name("area width (m)");
     rain.add(settings.rain, "areaHeight", 0.5, 6.0, 0.05).name("area height (m)");
     rain.add(settings.rain, "binMapping", ["linear", "log"]).name("bin mapping");

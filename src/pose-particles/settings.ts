@@ -329,10 +329,12 @@ export function makeDefaultSettings(): Settings {
       onsetCooldown: 0.12,
     },
     rain: {
-      baseSpeed: 0.15,
-      ampGain: 2.0,
+      // 粒子ごとに生成時の振幅で速度を確定し落下中は維持する。
+      // 既定はゆっくりめ。スライダ範囲も控えめにして微調整しやすくしている。
+      baseSpeed: 0.12,
+      ampGain: 1.0,
       count: 4000,
-      length: 0.06,
+      length: 0.05,
       areaWidth: 2.0,
       areaHeight: 2.4,
       // log: 音楽エネルギーの集中する低域を画面の大半に割り当てる。

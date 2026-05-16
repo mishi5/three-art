@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { expectedRainSpeed, mapBinIndex, stepDisplacement } from "./rain";
+import {
+  advanceParticleY,
+  expectedRainSpeed,
+  mapBinIndex,
+  pickSpawnSpeed,
+} from "./rain";
 
 describe("expectedRainSpeed", () => {
   test("振幅 0 のとき baseSpeed と一致", () => {
@@ -30,9 +35,8 @@ describe("mapBinIndex", () => {
     expect(mapBinIndex(99, 100, 1024, "log")).toBe(1023);
   });
 
-  test("log: 画面中央が低域に強く偏る (linear より遥かに小さい bin)", () => {
+  test("log: 画面中央が低域に強く偏る", () => {
     const mid = mapBinIndex(50, 101, 1024, "log");
-    // pow(1024, 0.5) - 1 = 31
     expect(mid).toBe(31);
     expect(mid).toBeLessThan(mapBinIndex(50, 101, 1024, "linear"));
   });
@@ -43,26 +47,45 @@ describe("mapBinIndex", () => {
   });
 });
 
-describe("stepDisplacement", () => {
-  test("単純な前進", () => {
-    expect(stepDisplacement(0, 1.0, 0.5, 2.0)).toBeCloseTo(0.5, 5);
+describe("pickSpawnSpeed", () => {
+  test("jitter=0.5 は素の baseSpeed+ampGain*amp", () => {
+    expect(pickSpawnSpeed(0.1, 1.0, 0.4, 0.5)).toBeCloseTo(0.5, 5);
   });
 
-  test("areaHeight でラップしても 1 ステップ分しか進まない (連続性)", () => {
-    // 1.8 + 1.0*0.5 = 2.3, mod 2.0 = 0.3
-    expect(stepDisplacement(1.8, 1.0, 0.5, 2.0)).toBeCloseTo(0.3, 5);
+  test("jitter=0 は -15% 係数", () => {
+    expect(pickSpawnSpeed(0.1, 1.0, 0.4, 0)).toBeCloseTo(0.5 * 0.85, 5);
   });
 
-  test("速度が大きく変動しても進む量は speed*dt のみ (瞬間移動しない)", () => {
-    let d = 0;
-    d = stepDisplacement(d, 100.0, 0.016, 2.0); // 速い列
-    const after = stepDisplacement(d, 0.1, 0.016, 2.0); // 急に遅くなっても
-    // 2 ステップ目の前進量は 0.1*0.016 = 0.0016 だけ
-    const advance = ((after - d) % 2.0 + 2.0) % 2.0;
-    expect(advance).toBeCloseTo(0.0016, 5);
+  test("jitter=1 は +15% 係数", () => {
+    expect(pickSpawnSpeed(0.1, 1.0, 0.4, 1)).toBeCloseTo(0.5 * 1.15, 5);
+  });
+});
+
+describe("advanceParticleY", () => {
+  const H = 2.4; // half = 1.2
+
+  test("下端を越えなければ単純に下降 (respawn しない)", () => {
+    const r = advanceParticleY(0, 0.6, 1.0, H);
+    expect(r.y).toBeCloseTo(-0.6, 5);
+    expect(r.respawned).toBe(false);
   });
 
-  test("areaHeight<=0 は 0 を返す", () => {
-    expect(stepDisplacement(1.0, 1.0, 0.1, 0)).toBe(0);
+  test("下端を越えたら上側へラップし respawned=true", () => {
+    const r = advanceParticleY(-1.0, 1.0, 0.5, H);
+    // pos=0.2, new=-0.3, wrap=2.1, y=0.9
+    expect(r.y).toBeCloseTo(0.9, 5);
+    expect(r.respawned).toBe(true);
+  });
+
+  test("1 ステップが領域より大きくても modulo で正しくラップ", () => {
+    const r = advanceParticleY(0, 10, 1.0, H);
+    expect(r.y).toBeCloseTo(-0.4, 5);
+    expect(r.respawned).toBe(true);
+  });
+
+  test("areaHeight<=0 は y=0", () => {
+    const r = advanceParticleY(1.0, 1.0, 0.1, 0);
+    expect(r.y).toBe(0);
+    expect(r.respawned).toBe(false);
   });
 });
