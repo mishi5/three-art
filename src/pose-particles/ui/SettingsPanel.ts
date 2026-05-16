@@ -4,12 +4,28 @@ import { RENDER_MODES, MOTION_TARGETS, makeDefaultSettings, saveSettings, clearS
 import { TWIST_AXES } from "../visuals/twist";
 import { parsePresetYaml, serializePresetYaml } from "./preset-yaml";
 
+/** image モードの画像ソース指定 */
+export type ImageSource =
+  | { kind: "preset"; path: string }
+  | { kind: "file"; file: File };
+
+export interface SettingsPanelCallbacks {
+  /** プリセット切替 / アップロード時に App へ通知 */
+  onImageRequest?: (src: ImageSource) => void;
+  /** gridW / gridH 変更時に App へ通知 (現在の画像で再サンプリング) */
+  onImageRegridRequest?: () => void;
+}
+
+/** 利用可能なプリセット画像 (public/images/presets/ 配下) */
+const IMAGE_PRESETS = ["sample-01.svg", "sample-02.svg"] as const;
+const UPLOADED_TAG = "(uploaded)";
+
 export class SettingsPanel {
   private gui: GUI;
   private settings: Settings;
   private autoControlled: Controller[] = [];
 
-  constructor(settings: Settings, onReanalyze: () => void) {
+  constructor(settings: Settings, onReanalyze: () => void, callbacks: SettingsPanelCallbacks = {}) {
     this.settings = settings;
     this.gui = new GUI({ title: "Settings", width: 300 });
 
@@ -56,15 +72,47 @@ export class SettingsPanel {
     shape.add(settings.shape, "radius", 0.1, 3, 0.05).name("radius / half-size");
     shape.add(settings.shape, "bassPulse", 0, 3, 0.05).name("bass pulse");
 
-    const lattice = this.gui.addFolder("Lattice (lattice mode)");
-    lattice.add(settings.lattice, "resolution", 8, 17, 1).name("resolution NxNxN");
-    lattice.add(settings.lattice, "waveSpeed", 0.5, 3.0, 0.05).name("wave speed (m/s)");
-    lattice.add(settings.lattice, "waveAmplitude", 0.0, 0.5, 0.005).name("wave amplitude (m)");
-    lattice.add(settings.lattice, "waveOscFreq", 1.0, 10.0, 0.1).name("osc freq (Hz)");
-    lattice.add(settings.lattice, "waveDamping", 0.1, 1.5, 0.01).name("damping (sec)");
-    lattice.add(settings.lattice, "onsetThreshold", 0.02, 0.5, 0.005).name("onset threshold");
-    lattice.add(settings.lattice, "onsetCooldown", 0.05, 0.5, 0.005).name("onset cooldown (sec)");
+    // Lattice フォルダ: 一部パラメータ (波速度 / 振動 / 減衰 / onset) は image
+    // モードの中心波動でも共有して使われる。共有項目はラベル末尾に
+    // "[lattice+image]" を付けてどのモードに効くか明示する。
+    const lattice = this.gui.addFolder("Lattice / Wave (lattice + image 共有)");
+    lattice.add(settings.lattice, "resolution", 8, 17, 1).name("resolution NxNxN [lattice]");
+    lattice.add(settings.lattice, "waveSpeed", 0.5, 3.0, 0.05).name("wave speed (m/s) [lattice+image]");
+    lattice.add(settings.lattice, "waveAmplitude", 0.0, 0.5, 0.005).name("wave amplitude (m) [lattice]");
+    lattice.add(settings.lattice, "waveOscFreq", 1.0, 10.0, 0.1).name("osc freq (Hz) [lattice+image]");
+    lattice.add(settings.lattice, "waveDamping", 0.1, 1.5, 0.01).name("damping (sec) [lattice+image]");
+    lattice.add(settings.lattice, "onsetThreshold", 0.02, 0.5, 0.005).name("onset threshold [lattice+image]");
+    lattice.add(settings.lattice, "onsetCooldown", 0.05, 0.5, 0.005).name("onset cooldown (sec) [lattice+image]");
     lattice.close();
+
+    const imageFolder = this.gui.addFolder("Image (image mode)");
+    // プリセット dropdown: 表示専用の "(uploaded)" は実際に選ばれた時もそのまま (画像差替えなし)
+    const presetOptions: Record<string, string> = {};
+    for (const p of IMAGE_PRESETS) presetOptions[p] = p;
+    presetOptions[UPLOADED_TAG] = UPLOADED_TAG;
+    imageFolder.add(settings.image, "preset", presetOptions).name("preset").onChange((v: string) => {
+      if (v !== UPLOADED_TAG) callbacks.onImageRequest?.({ kind: "preset", path: v });
+    });
+    imageFolder.add(
+      { upload: () => this.openImageUpload(callbacks.onImageRequest) },
+      "upload",
+    ).name("upload image…");
+    imageFolder.add(settings.image, "gridW", 8, 120, 1).name("grid W").onChange(() => callbacks.onImageRegridRequest?.());
+    imageFolder.add(settings.image, "gridH", 8, 120, 1).name("grid H").onChange(() => callbacks.onImageRegridRequest?.());
+    imageFolder.add(settings.image, "sizeScale", 0.3, 3.0, 0.05).name("particle size scale");
+    imageFolder.add(settings.image, "particleShape", { circle: "circle", square: "square" }).name("particle shape");
+    this.autoControlled.push(
+      imageFolder.add(settings.image, "pushAmount", 0, 2, 0.05).name("Z push (mid+treble)"),
+    );
+    this.autoControlled.push(
+      imageFolder.add(settings.image, "noiseAmp", 0, 0.5, 0.005).name("noise amp (m)"),
+    );
+    imageFolder.add(settings.image, "noiseScale", 0.5, 8, 0.1).name("noise scale");
+    imageFolder.add(settings.image, "noiseSpeed", 0, 3, 0.05).name("noise speed");
+    this.autoControlled.push(
+      imageFolder.add(settings.image, "waveStrength", 0, 0.5, 0.005).name("wave strength (m) [速度等は Lattice/Wave]"),
+    );
+    imageFolder.close();
 
     const ff = this.gui.addFolder("FragmentField (空間の細片)");
     ff.add(settings.fragmentField, "driftBase", 0, 2, 0.05).name("drift base");
@@ -165,6 +213,23 @@ export class SettingsPanel {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  }
+
+  private openImageUpload(onImageRequest: SettingsPanelCallbacks["onImageRequest"]): void {
+    if (!onImageRequest) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/png,image/jpeg,image/webp";
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      onImageRequest({ kind: "file", file });
+      // dropdown を "(uploaded)" に合わせて表示更新 (実画像は currentImage 側に保持)
+      this.settings.image.preset = UPLOADED_TAG;
+      this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
+      saveSettings(this.settings);
+    });
+    input.click();
   }
 
   private importYaml(): void {

@@ -4,7 +4,9 @@ import type { AudioInput } from "./audio/AudioInput";
 import { JointAnchors } from "./pose/JointAnchors";
 import { PoseInput } from "./pose/PoseInput";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "./types";
-import { PointCloud } from "./visuals/PointCloud";
+import { PointCloud, TOTAL_PARTICLES } from "./visuals/PointCloud";
+import { sampleImageToGrid } from "./visuals/ImageSampler";
+import type { ImageSource } from "./ui/SettingsPanel";
 import { FragmentField } from "./visuals/FragmentField";
 import { SkeletonGuide } from "./visuals/SkeletonGuide";
 import { EdgeOverlay } from "./visuals/EdgeOverlay";
@@ -53,6 +55,7 @@ export class App {
   private sectionTimeline: SectionTimeline;
   private currentSongHash: string | null = null;
   private currentSeries: BandTimeSeries | null = null;
+  private currentImage: HTMLImageElement | null = null;
   private analyzingToast: HTMLDivElement | null = null;
   /** YAML から読み込まれた style プリセット (失敗時は fallback)。 */
   private loadedStyles: ReadonlyArray<StylePreset> = DEFAULT_STYLE_PRESETS;
@@ -69,6 +72,7 @@ export class App {
     this.blurPipeline = new BlurPipeline(this.renderer, this.scene, this.camera);
     this.handleResize();
     this.pointCloud = new PointCloud(this.renderer.getPixelRatio());
+    this.pointCloud.setProjection(this.renderer.domElement.height, this.camera.fov);
     this.scene.add(this.pointCloud.object3D);
     this.fragmentField = new FragmentField(this.renderer.getPixelRatio());
     this.scene.add(this.fragmentField.object3D);
@@ -117,7 +121,14 @@ export class App {
     this.stylesReady = loadStylePresets().then((styles) => {
       this.loadedStyles = styles;
     });
-    this.settingsPanel = new SettingsPanel(this.settings, () => this.reanalyze());
+    this.settingsPanel = new SettingsPanel(this.settings, () => this.reanalyze(), {
+      onImageRequest: (src) => this.loadImage(src),
+      onImageRegridRequest: () => this.refreshImageGrid(),
+    });
+    // 起動時にデフォルトプリセット画像をロード (image モードに切り替える前から準備)
+    this.loadImage({ kind: "preset", path: this.settings.image.preset }).catch((e) => {
+      console.warn("[App] default preset image load failed:", e);
+    });
 
     // Mouse + keyboard camera control. Defaults: left-drag = rotate,
     // right-drag = pan, wheel = zoom. Damping for smoothness.
@@ -147,6 +158,9 @@ export class App {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.blurPipeline.setSize(w, h);
+    // image モード: drawing-buffer 高さと FOV から world→pixel 係数を再計算
+    // (constructor からも呼ばれるが、pointCloud がまだ生成されていない初回呼び出しでは skip)
+    this.pointCloud?.setProjection(this.renderer.domElement.height, this.camera.fov);
   };
 
   async startPose(): Promise<void> {
@@ -474,6 +488,55 @@ export class App {
     }
   }
 
+  /**
+   * 画像ソース (プリセット / アップロード) を非同期にロードし、現在の grid 設定で
+   * PointCloud に流し込む。
+   */
+  async loadImage(src: ImageSource): Promise<void> {
+    let url: string;
+    let revoke = false;
+    if (src.kind === "preset") {
+      // public/ 配下は dev サーバのルートに直接マップされる
+      url = `/images/presets/${src.path}`;
+    } else {
+      url = URL.createObjectURL(src.file);
+      revoke = true;
+    }
+    try {
+      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error(`failed to load image: ${url}`));
+        img.src = url;
+      });
+      this.currentImage = image;
+      this.refreshImageGrid();
+    } finally {
+      if (revoke) URL.revokeObjectURL(url);
+    }
+  }
+
+  /**
+   * 現在の画像と設定 (gridW/gridH) で再サンプリングし PointCloud に注入。
+   * gridW * gridH が粒子総数 (5200) を超える場合は等倍縮小する。
+   */
+  refreshImageGrid(): void {
+    if (!this.currentImage) return;
+    let gw = Math.max(1, Math.floor(this.settings.image.gridW));
+    let gh = Math.max(1, Math.floor(this.settings.image.gridH));
+    if (gw * gh > TOTAL_PARTICLES) {
+      const scale = Math.sqrt(TOTAL_PARTICLES / (gw * gh));
+      gw = Math.max(1, Math.floor(gw * scale));
+      gh = Math.max(1, Math.floor(gh * scale));
+    }
+    try {
+      const grid = sampleImageToGrid(this.currentImage, gw, gh);
+      this.pointCloud.setImage(grid, gw, gh);
+    } catch (e) {
+      console.warn("[App] image regrid failed:", e);
+    }
+  }
+
   stop(): void {
     if (this.rafId !== null) cancelAnimationFrame(this.rafId);
     this.rafId = null;
@@ -503,6 +566,7 @@ function cloneSettings(s: Settings): Settings {
     twist: { ...s.twist },
     blur: { ...s.blur },
     lattice: { ...s.lattice },
+    image: { ...s.image },
     auto: { ...s.auto },
   };
 }
@@ -533,5 +597,8 @@ function applyMotionTo(s: Settings, target: MotionTarget, factor: number): void 
     case "blur.strength":                s.blur.strength *= factor; break;
     case "lattice.waveAmplitude":        s.lattice.waveAmplitude *= factor; break;
     case "lattice.waveOscFreq":          s.lattice.waveOscFreq *= factor; break;
+    case "image.pushAmount":             s.image.pushAmount *= factor; break;
+    case "image.noiseAmp":               s.image.noiseAmp *= factor; break;
+    case "image.waveStrength":           s.image.waveStrength *= factor; break;
   }
 }
