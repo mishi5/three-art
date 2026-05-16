@@ -37,6 +37,8 @@ const vertexShader = /* glsl */ `
   uniform float uImageNoiseScale;
   uniform float uImageNoiseSpeed;
   uniform float uImageWaveStrength; // image 専用波動振幅
+  uniform float uImageSizeScale;    // 粒子サイズ倍率 (image モード)
+  uniform float uImageShape;        // 0=円, 1=矩形 (image モード)
   uniform float uWaveTimes[4];  // 直近 onset 時刻 (-1 = inactive)
   uniform float uWaveSpeed;     // 波速度 m/s
   uniform float uWaveAmplitude; // 弾性振動の最大変位 m
@@ -63,6 +65,7 @@ const vertexShader = /* glsl */ `
 
   varying float vAlpha;
   varying vec3 vColor;
+  varying float vSquare;  // 1.0 = 矩形描画 (image モード + uImageShape), 0.0 = 円
 
   vec3 hsv2rgb(vec3 c) {
     vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
@@ -284,7 +287,7 @@ const vertexShader = /* glsl */ `
       float cellW = uImagePlaneW / max(uImageGridW, 1.0);
       float cellH = uImagePlaneH / max(uImageGridH, 1.0);
       float cellSize = max(cellW, cellH);
-      float ptDrawing = cellSize * uPixelPerWorld * outlier / -mv.z;
+      float ptDrawing = cellSize * uPixelPerWorld * outlier * uImageSizeScale / -mv.z;
       // volume は CSS pixel ベースの追加サイズなので uPixelRatio で drawing pixel に揃える
       ptDrawing += uVolume * uVolumeSize * uPixelRatio;
       gl_PointSize = ptDrawing;
@@ -303,6 +306,8 @@ const vertexShader = /* glsl */ `
     }
     // Treble drives a small alpha boost on top of the layout-derived alpha.
     vAlpha = visAlpha * (0.5 + uTreble * 0.5);
+    // image モードかつ square 指定のときだけ矩形描画フラグを立てる
+    vSquare = (uMode > 3.5 && uImageShape > 0.5) ? 1.0 : 0.0;
   }
 `;
 
@@ -310,13 +315,22 @@ const fragmentShader = /* glsl */ `
   precision mediump float;
   varying float vAlpha;
   varying vec3 vColor;
+  varying float vSquare;
 
   void main() {
     vec2 uv = gl_PointCoord - 0.5;
-    float d = length(uv);
-    float circle = 1.0 - smoothstep(0.4, 0.5, d);
-    if (circle < 0.01) discard;
-    gl_FragColor = vec4(vColor, circle * vAlpha);
+    float mask;
+    if (vSquare > 0.5) {
+      // 矩形: スプライト全面をほぼ塗り、端だけ僅かにアンチエイリアス
+      float m = max(abs(uv.x), abs(uv.y));
+      mask = 1.0 - smoothstep(0.48, 0.5, m);
+    } else {
+      // 円: 従来どおり
+      float d = length(uv);
+      mask = 1.0 - smoothstep(0.4, 0.5, d);
+    }
+    if (mask < 0.01) discard;
+    gl_FragColor = vec4(vColor, mask * vAlpha);
   }
 `;
 
@@ -401,6 +415,8 @@ export class PointCloud {
         uImageNoiseScale: { value: 2.0 },
         uImageNoiseSpeed: { value: 0.5 },
         uImageWaveStrength: { value: 0.15 },
+        uImageSizeScale: { value: 1.0 },
+        uImageShape: { value: 0.0 },
         uWaveTimes: { value: new Float32Array([-1, -1, -1, -1]) },
         uWaveSpeed: { value: 1.2 },
         uWaveAmplitude: { value: 0.15 },
@@ -474,6 +490,8 @@ export class PointCloud {
     u.uImageNoiseScale!.value = settings.image.noiseScale;
     u.uImageNoiseSpeed!.value = settings.image.noiseSpeed;
     u.uImageWaveStrength!.value = settings.image.waveStrength;
+    u.uImageSizeScale!.value = settings.image.sizeScale;
+    u.uImageShape!.value = settings.image.particleShape === "square" ? 1.0 : 0.0;
     // shape.radius がライブで変わっても画像平面のサイズが追従するように再計算
     // (gridW/gridH と aColor は setImage 経由でしか変えない)
     const longest = settings.shape.radius * 2;

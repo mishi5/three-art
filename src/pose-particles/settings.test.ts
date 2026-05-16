@@ -48,6 +48,8 @@ describe("ImageSettings defaults", () => {
     expect(s.image.noiseScale).toBeGreaterThan(0);
     expect(s.image.noiseSpeed).toBeGreaterThanOrEqual(0);
     expect(s.image.waveStrength).toBeGreaterThan(0);
+    expect(s.image.sizeScale).toBeGreaterThan(0);
+    expect(["circle", "square"]).toContain(s.image.particleShape);
   });
 });
 

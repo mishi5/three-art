@@ -72,14 +72,17 @@ export class SettingsPanel {
     shape.add(settings.shape, "radius", 0.1, 3, 0.05).name("radius / half-size");
     shape.add(settings.shape, "bassPulse", 0, 3, 0.05).name("bass pulse");
 
-    const lattice = this.gui.addFolder("Lattice (lattice mode)");
-    lattice.add(settings.lattice, "resolution", 8, 17, 1).name("resolution NxNxN");
-    lattice.add(settings.lattice, "waveSpeed", 0.5, 3.0, 0.05).name("wave speed (m/s)");
-    lattice.add(settings.lattice, "waveAmplitude", 0.0, 0.5, 0.005).name("wave amplitude (m)");
-    lattice.add(settings.lattice, "waveOscFreq", 1.0, 10.0, 0.1).name("osc freq (Hz)");
-    lattice.add(settings.lattice, "waveDamping", 0.1, 1.5, 0.01).name("damping (sec)");
-    lattice.add(settings.lattice, "onsetThreshold", 0.02, 0.5, 0.005).name("onset threshold");
-    lattice.add(settings.lattice, "onsetCooldown", 0.05, 0.5, 0.005).name("onset cooldown (sec)");
+    // Lattice フォルダ: 一部パラメータ (波速度 / 振動 / 減衰 / onset) は image
+    // モードの中心波動でも共有して使われる。共有項目はラベル末尾に
+    // "[lattice+image]" を付けてどのモードに効くか明示する。
+    const lattice = this.gui.addFolder("Lattice / Wave (lattice + image 共有)");
+    lattice.add(settings.lattice, "resolution", 8, 17, 1).name("resolution NxNxN [lattice]");
+    lattice.add(settings.lattice, "waveSpeed", 0.5, 3.0, 0.05).name("wave speed (m/s) [lattice+image]");
+    lattice.add(settings.lattice, "waveAmplitude", 0.0, 0.5, 0.005).name("wave amplitude (m) [lattice]");
+    lattice.add(settings.lattice, "waveOscFreq", 1.0, 10.0, 0.1).name("osc freq (Hz) [lattice+image]");
+    lattice.add(settings.lattice, "waveDamping", 0.1, 1.5, 0.01).name("damping (sec) [lattice+image]");
+    lattice.add(settings.lattice, "onsetThreshold", 0.02, 0.5, 0.005).name("onset threshold [lattice+image]");
+    lattice.add(settings.lattice, "onsetCooldown", 0.05, 0.5, 0.005).name("onset cooldown (sec) [lattice+image]");
     lattice.close();
 
     const imageFolder = this.gui.addFolder("Image (image mode)");
@@ -96,6 +99,8 @@ export class SettingsPanel {
     ).name("upload image…");
     imageFolder.add(settings.image, "gridW", 8, 120, 1).name("grid W").onChange(() => callbacks.onImageRegridRequest?.());
     imageFolder.add(settings.image, "gridH", 8, 120, 1).name("grid H").onChange(() => callbacks.onImageRegridRequest?.());
+    imageFolder.add(settings.image, "sizeScale", 0.3, 3.0, 0.05).name("particle size scale");
+    imageFolder.add(settings.image, "particleShape", { circle: "circle", square: "square" }).name("particle shape");
     this.autoControlled.push(
       imageFolder.add(settings.image, "pushAmount", 0, 2, 0.05).name("Z push (mid+treble)"),
     );
@@ -105,7 +110,7 @@ export class SettingsPanel {
     imageFolder.add(settings.image, "noiseScale", 0.5, 8, 0.1).name("noise scale");
     imageFolder.add(settings.image, "noiseSpeed", 0, 3, 0.05).name("noise speed");
     this.autoControlled.push(
-      imageFolder.add(settings.image, "waveStrength", 0, 0.5, 0.005).name("wave strength (m)"),
+      imageFolder.add(settings.image, "waveStrength", 0, 0.5, 0.005).name("wave strength (m) [速度等は Lattice/Wave]"),
     );
     imageFolder.close();
 

@@ -72,6 +72,10 @@ export interface ImageSettings {
   noiseSpeed: number;
   /** 中心波動振幅 (m)。0..0.5 */
   waveStrength: number;
+  /** 粒子サイズ倍率。セル間隔追従サイズに乗算。0.3..3.0 */
+  sizeScale: number;
+  /** 粒子の形。"circle"=円 (デフォルト)、"square"=矩形 (完全なドット絵的) */
+  particleShape: "circle" | "square";
 }
 
 export interface LatticeSettings {
@@ -342,6 +346,8 @@ export function makeDefaultSettings(): Settings {
       noiseScale: 2.0,
       noiseSpeed: 0.5,
       waveStrength: 0.15,
+      sizeScale: 1.0,
+      particleShape: "circle",
     },
     auto: {
       enabled: false,
