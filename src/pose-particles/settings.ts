@@ -329,13 +329,15 @@ export function makeDefaultSettings(): Settings {
       onsetCooldown: 0.12,
     },
     rain: {
-      baseSpeed: 0.3,
-      ampGain: 4.0,
+      baseSpeed: 0.15,
+      ampGain: 2.0,
       count: 4000,
-      length: 0.04,
+      length: 0.06,
       areaWidth: 2.0,
       areaHeight: 2.4,
-      binMapping: "linear",
+      // log: 音楽エネルギーの集中する低域を画面の大半に割り当てる。
+      // linear だと無音の高域が画面の 8 割を占めてしまう。
+      binMapping: "log",
     },
     auto: {
       enabled: false,
