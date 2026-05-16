@@ -10,6 +10,7 @@ import type { ImageSource } from "./ui/SettingsPanel";
 import { FragmentField } from "./visuals/FragmentField";
 import { SkeletonGuide } from "./visuals/SkeletonGuide";
 import { EdgeOverlay } from "./visuals/EdgeOverlay";
+import { RainField } from "./visuals/rain";
 import { BlurPipeline } from "./visuals/BlurPipeline";
 import { DebugOverlay } from "./ui/DebugOverlay";
 import { SettingsPanel } from "./ui/SettingsPanel";
@@ -34,6 +35,7 @@ export class App {
   readonly fragmentField: FragmentField;
   readonly skeletonGuide: SkeletonGuide;
   readonly edgeOverlay: EdgeOverlay;
+  readonly rainField: RainField;
   readonly blurPipeline: BlurPipeline;
   readonly originMarker: THREE.Mesh;
   readonly centroidMarker: THREE.Mesh;
@@ -80,6 +82,8 @@ export class App {
     this.scene.add(this.skeletonGuide.object3D);
     this.edgeOverlay = new EdgeOverlay();
     this.scene.add(this.edgeOverlay.object3D);
+    this.rainField = new RainField();
+    this.scene.add(this.rainField.object3D);
 
     // diagnostic markers (toggled with B together with the skeleton).
     // BIG so they cannot be hidden by the particle haze.
@@ -412,6 +416,9 @@ export class App {
     this.pointCloud.update(joints, vis, center, gainedAudio, live, t);
     this.fragmentField.update(joints, vis, center, gainedAudio, live, t);
     this.edgeOverlay.update(joints, center, gainedAudio, live, t);
+    this.rainField.update(gainedAudio, live, t);
+    // rain mode hides the body/shape PointCloud entirely.
+    this.pointCloud.object3D.visible = this.settings.mode !== "rain";
 
     // Auto-rotate camera (handled by OrbitControls). Apply each frame so the
     // GUI slider takes effect live and motion can boost it via live.camera.
@@ -431,9 +438,16 @@ export class App {
     // distance for that mode so the new shape is fully visible. Once they're
     // in a mode, OrbitControls owns the camera (mouse drag / wheel / keys).
     if (this.settings.mode !== this.lastMode) {
-      const targetZ = isBones
-        ? 1.0
-        : Math.max(2.0, this.settings.shape.radius * 3.0 * (1.0 + this.settings.shape.bassPulse));
+      let targetZ: number;
+      if (isBones) {
+        targetZ = 1.0;
+      } else if (this.settings.mode === "rain") {
+        // フィット: 描画域の対角の半分が画角に収まる距離 + マージン
+        const halfDiag = Math.hypot(this.settings.rain.areaWidth, this.settings.rain.areaHeight) * 0.5;
+        targetZ = halfDiag * 1.5;
+      } else {
+        targetZ = Math.max(2.0, this.settings.shape.radius * 3.0 * (1.0 + this.settings.shape.bassPulse));
+      }
       this.camera.position.set(0, 0, targetZ);
       this.orbit.target.set(0, 0, 0);
       this.orbit.update();
@@ -567,6 +581,7 @@ function cloneSettings(s: Settings): Settings {
     blur: { ...s.blur },
     lattice: { ...s.lattice },
     image: { ...s.image },
+    rain: { ...s.rain },
     auto: { ...s.auto },
   };
 }

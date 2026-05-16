@@ -7,18 +7,33 @@ import {
 } from "./settings";
 
 describe("RenderMode", () => {
-  test("RENDER_MODES に lattice / image が含まれ全 5 値", () => {
-    expect(RENDER_MODES.length).toBe(5);
+  test("RENDER_MODES に lattice / image / rain が含まれ全 6 値", () => {
+    expect(RENDER_MODES.length).toBe(6);
     expect(RENDER_MODES).toContain("lattice");
     expect(RENDER_MODES).toContain("image");
+    expect(RENDER_MODES).toContain("rain");
   });
 
-  test("modeToInt は lattice=3 / image=4 を返す", () => {
+  test("modeToInt は lattice=3 / image=4 / rain=5 を返す", () => {
     expect(modeToInt("lattice")).toBe(3);
     expect(modeToInt("image")).toBe(4);
+    expect(modeToInt("rain")).toBe(5);
     expect(modeToInt("bones")).toBe(0);
     expect(modeToInt("cube")).toBe(1);
     expect(modeToInt("sphere")).toBe(2);
+  });
+});
+
+describe("RainSettings defaults", () => {
+  test("makeDefaultSettings に rain が含まれ妥当な範囲", () => {
+    const s = makeDefaultSettings();
+    expect(s.rain.baseSpeed).toBeGreaterThan(0);
+    expect(s.rain.ampGain).toBeGreaterThan(0);
+    expect(s.rain.count).toBeGreaterThanOrEqual(256);
+    expect(s.rain.length).toBeGreaterThan(0);
+    expect(s.rain.areaWidth).toBeGreaterThan(0);
+    expect(s.rain.areaHeight).toBeGreaterThan(0);
+    expect(["linear", "log"]).toContain(s.rain.binMapping);
   });
 });
 

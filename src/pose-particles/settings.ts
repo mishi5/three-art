@@ -7,9 +7,9 @@
 import { makeDefaultTwist, type TwistSettings } from "./visuals/twist";
 import { makeDefaultBlur, type BlurSettings } from "./visuals/blur";
 
-export type RenderMode = "bones" | "cube" | "sphere" | "lattice" | "image";
+export type RenderMode = "bones" | "cube" | "sphere" | "lattice" | "image" | "rain";
 
-export const RENDER_MODES: ReadonlyArray<RenderMode> = ["bones", "cube", "sphere", "lattice", "image"];
+export const RENDER_MODES: ReadonlyArray<RenderMode> = ["bones", "cube", "sphere", "lattice", "image", "rain"];
 
 /** Parameters that body motion can be routed into as a multiplicative boost. */
 export const MOTION_TARGETS = [
@@ -51,6 +51,7 @@ export function modeToInt(mode: RenderMode): number {
     case "sphere": return 2;
     case "lattice": return 3;
     case "image": return 4;
+    case "rain": return 5;
   }
 }
 
@@ -93,6 +94,25 @@ export interface LatticeSettings {
   onsetThreshold: number;
   /** onset クールダウン (sec)。0.05..0.5 */
   onsetCooldown: number;
+}
+
+export type RainBinMapping = "linear" | "log";
+
+export interface RainSettings {
+  /** 落下基本速度 (m/s)。鳴っていない帯域でも最低限この速度で落ちる。 */
+  baseSpeed: number;
+  /** 振幅 1 あたりの追加速度 (m/s)。fft[xIndex] * ampGain が追加される。 */
+  ampGain: number;
+  /** 雨粒数。再起動 (mode 再選択) で反映される静的パラメータ。 */
+  count: number;
+  /** 雫の基準長 (m)。実描画長は速度に比例する。 */
+  length: number;
+  /** 描画域横幅 (m)。FFT bin 全体がこの幅にマップされる。 */
+  areaWidth: number;
+  /** 描画域高さ (m)。Y はこの高さでリングバッファ。 */
+  areaHeight: number;
+  /** 周波数 → X のマップ方式 (MVP は linear のみ実装、log は将来)。 */
+  binMapping: RainBinMapping;
 }
 
 export interface AutoSettings {
@@ -200,6 +220,8 @@ export interface Settings {
   lattice: LatticeSettings;
   /** image モード専用パラメータ (Issue #18)。 */
   image: ImageSettings;
+  /** rain モード専用パラメータ (Issue #17)。 */
+  rain: RainSettings;
   /** 曲解析ベースのパラメータ自動制御 (Issue #5)。 */
   auto: AutoSettings;
 }
@@ -348,6 +370,19 @@ export function makeDefaultSettings(): Settings {
       waveStrength: 0.15,
       sizeScale: 1.0,
       particleShape: "circle",
+    },
+    rain: {
+      // 粒子ごとに生成時の振幅で速度を確定し落下中は維持する。
+      // 既定はゆっくりめ。スライダ範囲も控えめにして微調整しやすくしている。
+      baseSpeed: 0.12,
+      ampGain: 1.0,
+      count: 4000,
+      length: 0.05,
+      areaWidth: 2.0,
+      areaHeight: 2.4,
+      // log: 音楽エネルギーの集中する低域を画面の大半に割り当てる。
+      // linear だと無音の高域が画面の 8 割を占めてしまう。
+      binMapping: "log",
     },
     auto: {
       enabled: false,
