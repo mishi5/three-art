@@ -2,9 +2,11 @@ import * as THREE from "three";
 import { NUM_JOINTS, type AudioFeatures, type Joints } from "../types";
 import { modeToInt, type Settings } from "../settings";
 import { axisToInt, effectiveTwistStrength, twistPhase } from "./twist";
+import type { ImageGrid } from "./ImageSampler";
 
 const POINTS_PER_JOINT = 400;
 const SIGMA = 0.08; // メートル
+export const TOTAL_PARTICLES = NUM_JOINTS * POINTS_PER_JOINT;
 
 const vertexShader = /* glsl */ `
   #define MAX_JOINTS 13
@@ -15,15 +17,28 @@ const vertexShader = /* glsl */ `
   uniform float uTime;
   uniform float uVolume;
   uniform float uBass;
+  uniform float uMid;
   uniform float uTreble;
   uniform float uPixelRatio;
+  uniform float uPixelPerWorld;  // world 1m を drawing-buffer pixel に変換する係数 (z=1 時)
   uniform float uBassExpansion;
   uniform float uTrebleShimmer;
   uniform float uAmbientShimmer;
   uniform float uBaseSize;
   uniform float uVolumeSize;
-  uniform float uMode;          // 0=bones, 1=cube, 2=sphere, 3=lattice (float for WebGL1 portability)
+  uniform float uMode;          // 0=bones, 1=cube, 2=sphere, 3=lattice, 4=image (float for WebGL1 portability)
   uniform float uLatticeN;      // 格子解像度 (lattice モードのみ使用)
+  uniform float uImageGridW;    // 画像粒子グリッド W (image モードのみ使用)
+  uniform float uImageGridH;    // 画像粒子グリッド H
+  uniform float uImagePlaneW;   // 画像平面の幅 (m)
+  uniform float uImagePlaneH;   // 画像平面の高さ (m)
+  uniform float uImagePushAmount;  // Z 押し出しゲイン
+  uniform float uImageNoiseAmp;
+  uniform float uImageNoiseScale;
+  uniform float uImageNoiseSpeed;
+  uniform float uImageWaveStrength; // image 専用波動振幅
+  uniform float uImageSizeScale;    // 粒子サイズ倍率 (image モード)
+  uniform float uImageShape;        // 0=円, 1=矩形 (image モード)
   uniform float uWaveTimes[4];  // 直近 onset 時刻 (-1 = inactive)
   uniform float uWaveSpeed;     // 波速度 m/s
   uniform float uWaveAmplitude; // 弾性振動の最大変位 m
@@ -45,10 +60,12 @@ const vertexShader = /* glsl */ `
   attribute float aJointIndex;
   attribute vec3 aOffset;
   attribute float aSeed;
-  attribute float aIndex;       // 0..total-1 のグローバル粒子インデックス (lattice モードのみ使用)
+  attribute float aIndex;       // 0..total-1 のグローバル粒子インデックス (lattice / image モードで使用)
+  attribute vec3 aColor;        // 画像セルの RGB (image モードのみ使用、それ以外は白)
 
   varying float vAlpha;
   varying vec3 vColor;
+  varying float vSquare;  // 1.0 = 矩形描画 (image モード + uImageShape), 0.0 = 円
 
   vec3 hsv2rgb(vec3 c) {
     vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
@@ -177,7 +194,7 @@ const vertexShader = /* glsl */ `
       float radius = uShapeRadius * (1.0 + uBass * uShapeBassPulse) * outlier;
       pos = dir * radius + dir * shimmer;
       visAlpha = 0.85;
-    } else {
+    } else if (uMode < 3.5) {
       // lattice: NxNxN 厳密格子。bass shockwave は別 step で追加。
       int idx = int(aIndex + 0.5);
       int N = int(uLatticeN + 0.5);
@@ -209,20 +226,88 @@ const vertexShader = /* glsl */ `
         pos += outwardDir * shimmer;
         visAlpha = 0.85;
       }
+    } else {
+      // image: 2D 画像平面 (z=0) 上にグリッド配置 + 音声反応 3D 歪み
+      int idx = int(aIndex + 0.5);
+      int gridW = int(uImageGridW + 0.5);
+      int gridH = int(uImageGridH + 0.5);
+      int total = gridW * gridH;
+      if (idx >= total) {
+        pos = vec3(0.0);
+        visAlpha = 0.0;
+      } else {
+        // WebGL1 互換のため整数 %% は割り算で代用
+        int ix = idx - (idx / gridW) * gridW;
+        int iy = idx / gridW;
+        float u = (float(ix) + 0.5) / float(gridW);
+        float v = (float(iy) + 0.5) / float(gridH);
+        // 画像座標 (y は下方向正) → 世界座標 (y 上向き) に反転
+        vec3 imagePos = vec3((u - 0.5) * uImagePlaneW, (0.5 - v) * uImagePlaneH, 0.0);
+
+        // (1) Z 押し出し (中高域 × 輝度)
+        float lum = dot(aColor, vec3(0.299, 0.587, 0.114));
+        imagePos.z += lum * (uMid + uTreble) * uImagePushAmount;
+
+        // (2) 中心からの shockwave (lattice と同式、半径は平面内)
+        float rr = length(imagePos.xy);
+        vec2 outDir = normalize(imagePos.xy + vec2(1e-5));
+        float totalDisp = 0.0;
+        for (int wi = 0; wi < 4; wi++) {
+          float t0 = uWaveTimes[wi];
+          if (t0 < 0.0) continue;
+          float waveAge = (uTime - t0) - rr / uWaveSpeed;
+          if (waveAge < 0.0) continue;
+          float env = exp(-waveAge / uWaveDamping);
+          float osc = sin(waveAge * uWaveOscFreq * 6.2831853);
+          totalDisp += uImageWaveStrength * env * osc;
+        }
+        imagePos.xy += outDir * totalDisp;
+
+        // (3) 安価な smooth noise で XYZ を揺らす (uVolume でスケール)
+        vec3 ns = imagePos * uImageNoiseScale + vec3(uTime * uImageNoiseSpeed);
+        vec3 noise = vec3(
+          sin(ns.x * 1.7 + ns.y * 2.3),
+          sin(ns.y * 1.9 + ns.z * 2.1),
+          sin(ns.z * 2.5 + ns.x * 1.3)
+        );
+        imagePos += noise * uImageNoiseAmp * uVolume;
+
+        pos = imagePos;
+        visAlpha = 0.95;
+      }
     }
 
     pos = applyTwist(pos, uTwistStrength, uTwistPhase, uTwistAxis);
 
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_Position = projectionMatrix * mv;
-    gl_PointSize = (uBaseSize + uVolume * uVolumeSize) * outlier * uPixelRatio * (1.0 / -mv.z);
+    if (uMode > 3.5) {
+      // image: セル間隔 (world m) に追従。隙間が出ないよう大きい方の辺を採用。
+      // cellSize × uPixelPerWorld で drawing-buffer pixel @ z=1 → 1/-mv.z で perspective scale
+      float cellW = uImagePlaneW / max(uImageGridW, 1.0);
+      float cellH = uImagePlaneH / max(uImageGridH, 1.0);
+      float cellSize = max(cellW, cellH);
+      float ptDrawing = cellSize * uPixelPerWorld * outlier * uImageSizeScale / -mv.z;
+      // volume は CSS pixel ベースの追加サイズなので uPixelRatio で drawing pixel に揃える
+      ptDrawing += uVolume * uVolumeSize * uPixelRatio;
+      gl_PointSize = ptDrawing;
+    } else {
+      gl_PointSize = (uBaseSize + uVolume * uVolumeSize) * outlier * uPixelRatio * (1.0 / -mv.z);
+    }
 
-    // Per-particle colour (HSV).
-    float hue = fract(uHueBase + (aSeed - 0.5) * uHueSpread + uBass * uBassHueShift);
-    float bright = 1.0 + uTreble * uTrebleBoost;
-    vColor = hsv2rgb(vec3(hue, uSaturation, bright));
+    if (uMode > 3.5) {
+      // image モード: 粒子色は画像セルの RGB をそのまま使用 (treble で軽くブースト)
+      vColor = aColor * (1.0 + uTreble * uTrebleBoost);
+    } else {
+      // Per-particle colour (HSV).
+      float hue = fract(uHueBase + (aSeed - 0.5) * uHueSpread + uBass * uBassHueShift);
+      float bright = 1.0 + uTreble * uTrebleBoost;
+      vColor = hsv2rgb(vec3(hue, uSaturation, bright));
+    }
     // Treble drives a small alpha boost on top of the layout-derived alpha.
     vAlpha = visAlpha * (0.5 + uTreble * 0.5);
+    // image モードかつ square 指定のときだけ矩形描画フラグを立てる
+    vSquare = (uMode > 3.5 && uImageShape > 0.5) ? 1.0 : 0.0;
   }
 `;
 
@@ -230,13 +315,22 @@ const fragmentShader = /* glsl */ `
   precision mediump float;
   varying float vAlpha;
   varying vec3 vColor;
+  varying float vSquare;
 
   void main() {
     vec2 uv = gl_PointCoord - 0.5;
-    float d = length(uv);
-    float circle = 1.0 - smoothstep(0.4, 0.5, d);
-    if (circle < 0.01) discard;
-    gl_FragColor = vec4(vColor, circle * vAlpha);
+    float mask;
+    if (vSquare > 0.5) {
+      // 矩形: スプライト全面をほぼ塗り、端だけ僅かにアンチエイリアス
+      float m = max(abs(uv.x), abs(uv.y));
+      mask = 1.0 - smoothstep(0.48, 0.5, m);
+    } else {
+      // 円: 従来どおり
+      float d = length(uv);
+      mask = 1.0 - smoothstep(0.4, 0.5, d);
+    }
+    if (mask < 0.01) discard;
+    gl_FragColor = vec4(vColor, mask * vAlpha);
   }
 `;
 
@@ -251,15 +345,19 @@ export class PointCloud {
   readonly object3D: THREE.Points;
   private material: THREE.ShaderMaterial;
   private jointsUniform: Float32Array; // length 39
+  private lastImageAspect = 4 / 3; // image モードの平面サイズ計算用 (デフォルト 4:3)
+
+  private colorAttr: THREE.BufferAttribute;
 
   constructor(pixelRatio: number) {
-    const total = NUM_JOINTS * POINTS_PER_JOINT;
+    const total = TOTAL_PARTICLES;
     const geom = new THREE.BufferGeometry();
 
     const offsets = new Float32Array(total * 3);
     const indices = new Float32Array(total);
     const seeds = new Float32Array(total);
     const aIndexArr = new Float32Array(total);
+    const colors = new Float32Array(total * 3).fill(1); // image モード以外では未使用、初期値は白
     for (let j = 0; j < NUM_JOINTS; j++) {
       for (let p = 0; p < POINTS_PER_JOINT; p++) {
         const i = j * POINTS_PER_JOINT + p;
@@ -276,6 +374,9 @@ export class PointCloud {
     geom.setAttribute("aJointIndex", new THREE.BufferAttribute(indices, 1));
     geom.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1));
     geom.setAttribute("aIndex", new THREE.BufferAttribute(aIndexArr, 1));
+    this.colorAttr = new THREE.BufferAttribute(colors, 3);
+    this.colorAttr.setUsage(THREE.DynamicDrawUsage);
+    geom.setAttribute("aColor", this.colorAttr);
     geom.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 4);
 
     this.jointsUniform = new Float32Array(NUM_JOINTS * 3);
@@ -293,8 +394,11 @@ export class PointCloud {
         uTime: { value: 0 },
         uVolume: { value: 0 },
         uBass: { value: 0 },
+        uMid: { value: 0 },
         uTreble: { value: 0 },
         uPixelRatio: { value: pixelRatio },
+        // 後段の setProjection() で更新する。0 のままだと image モードで粒子が消えるので初期値は適当な大きさ
+        uPixelPerWorld: { value: 1000 },
         uBassExpansion: { value: 1.5 },
         uTrebleShimmer: { value: 0.02 },
         uAmbientShimmer: { value: 0.0 },
@@ -302,6 +406,17 @@ export class PointCloud {
         uVolumeSize: { value: 5.0 },
         uMode: { value: 0.0 },
         uLatticeN: { value: 12.0 },
+        uImageGridW: { value: 80.0 },
+        uImageGridH: { value: 60.0 },
+        uImagePlaneW: { value: 0.8 },
+        uImagePlaneH: { value: 0.6 },
+        uImagePushAmount: { value: 0.5 },
+        uImageNoiseAmp: { value: 0.05 },
+        uImageNoiseScale: { value: 2.0 },
+        uImageNoiseSpeed: { value: 0.5 },
+        uImageWaveStrength: { value: 0.15 },
+        uImageSizeScale: { value: 1.0 },
+        uImageShape: { value: 0.0 },
         uWaveTimes: { value: new Float32Array([-1, -1, -1, -1]) },
         uWaveSpeed: { value: 1.2 },
         uWaveAmplitude: { value: 0.15 },
@@ -355,6 +470,7 @@ export class PointCloud {
     u.uTime!.value = timeSec;
     u.uVolume!.value = audio.volume;
     u.uBass!.value = audio.bass;
+    u.uMid!.value = audio.mid;
     u.uTreble!.value = audio.treble;
     u.uBassExpansion!.value = settings.pointCloud.bassExpansion;
     u.uTrebleShimmer!.value = settings.pointCloud.trebleShimmer;
@@ -369,6 +485,23 @@ export class PointCloud {
     u.uWaveDamping!.value = settings.lattice.waveDamping;
     u.uShapeRadius!.value = settings.shape.radius;
     u.uShapeBassPulse!.value = settings.shape.bassPulse;
+    u.uImagePushAmount!.value = settings.image.pushAmount;
+    u.uImageNoiseAmp!.value = settings.image.noiseAmp;
+    u.uImageNoiseScale!.value = settings.image.noiseScale;
+    u.uImageNoiseSpeed!.value = settings.image.noiseSpeed;
+    u.uImageWaveStrength!.value = settings.image.waveStrength;
+    u.uImageSizeScale!.value = settings.image.sizeScale;
+    u.uImageShape!.value = settings.image.particleShape === "square" ? 1.0 : 0.0;
+    // shape.radius がライブで変わっても画像平面のサイズが追従するように再計算
+    // (gridW/gridH と aColor は setImage 経由でしか変えない)
+    const longest = settings.shape.radius * 2;
+    if (this.lastImageAspect >= 1) {
+      u.uImagePlaneW!.value = longest;
+      u.uImagePlaneH!.value = longest / this.lastImageAspect;
+    } else {
+      u.uImagePlaneH!.value = longest;
+      u.uImagePlaneW!.value = longest * this.lastImageAspect;
+    }
     u.uHueBase!.value = settings.color.hueBase;
     u.uHueSpread!.value = settings.color.hueSpread;
     u.uBassHueShift!.value = settings.color.bassHueShift;
@@ -381,8 +514,44 @@ export class PointCloud {
     u.uTwistAxis!.value = axisToInt(settings.twist.axis);
   }
 
+  /**
+   * world 1m が drawing-buffer 上で何 pixel に対応するか (z=1 時) を更新する。
+   * image モードで粒子サイズをセル間隔から決めるのに使用。
+   * renderer.setSize と camera.fov 変更時に呼ぶこと。
+   */
+  setProjection(drawingBufferHeight: number, fovYDeg: number): void {
+    const fovRad = (fovYDeg * Math.PI) / 180;
+    this.material.uniforms.uPixelPerWorld!.value =
+      drawingBufferHeight / (2 * Math.tan(fovRad / 2));
+  }
+
   setWaveTimes(times: readonly number[]): void {
     const arr = this.material.uniforms.uWaveTimes!.value as Float32Array;
     for (let i = 0; i < 4; i++) arr[i] = times[i] ?? -1;
+  }
+
+  /**
+   * 画像グリッドの RGB を aColor attribute に書き込み、平面サイズ uniform を更新する。
+   * shape.radius を基準に画像のアスペクト比を保持して contain で配置する。
+   */
+  setImage(grid: ImageGrid, gridW: number, gridH: number): void {
+    const total = gridW * gridH;
+    if (total > TOTAL_PARTICLES) {
+      throw new Error(`grid ${gridW}x${gridH}=${total} exceeds particle budget ${TOTAL_PARTICLES}`);
+    }
+    if (grid.colors.length !== total * 3) {
+      throw new Error(`grid.colors length ${grid.colors.length} != ${total * 3}`);
+    }
+    const colors = this.colorAttr.array as Float32Array;
+    // 使う範囲だけ上書き
+    colors.set(grid.colors, 0);
+    // 余り粒子は image モードでは visAlpha=0 で非表示にされるが、念のため白で埋めておく
+    for (let i = total * 3; i < TOTAL_PARTICLES * 3; i++) colors[i] = 1;
+    this.colorAttr.needsUpdate = true;
+
+    this.lastImageAspect = grid.imageAspect;
+    this.material.uniforms.uImageGridW!.value = gridW;
+    this.material.uniforms.uImageGridH!.value = gridH;
+    // 平面サイズは update() 内で毎フレーム shape.radius に追従して再計算する
   }
 }

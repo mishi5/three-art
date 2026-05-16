@@ -122,7 +122,7 @@ export class EdgeOverlay {
   }
 
   update(joints: Joints, center: Float32Array, audio: AudioFeatures, settings: Settings, t: number): void {
-    if (settings.mode === "lattice" || settings.mode === "rain") {
+    if (settings.mode === "lattice" || settings.mode === "image" || settings.mode === "rain") {
       this.object3D.visible = false;
       return;
     }
