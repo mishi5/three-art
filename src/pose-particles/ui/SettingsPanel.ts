@@ -3,6 +3,7 @@ import type { Settings } from "../settings";
 import { RENDER_MODES, MOTION_TARGETS, makeDefaultSettings, saveSettings, clearSettings } from "../settings";
 import { TWIST_AXES } from "../visuals/twist";
 import { parsePresetYaml, serializePresetYaml } from "./preset-yaml";
+import { randomizeSettings } from "./randomize";
 
 /** image モードの画像ソース指定 */
 export type ImageSource =
@@ -24,9 +25,14 @@ export class SettingsPanel {
   private gui: GUI;
   private settings: Settings;
   private autoControlled: Controller[] = [];
+  private callbacks: SettingsPanelCallbacks;
+  /** randomize 実行直前の settings スナップショット (undo 用)。 */
+  private prevSnapshot: Settings | null = null;
+  private undoController: Controller | null = null;
 
   constructor(settings: Settings, onReanalyze: () => void, callbacks: SettingsPanelCallbacks = {}) {
     this.settings = settings;
+    this.callbacks = callbacks;
     this.gui = new GUI({ title: "Settings", width: 300 });
 
     // Mode (top-level, no folder so it's hard to miss)
@@ -190,6 +196,19 @@ export class SettingsPanel {
     presets.add(actions, "exportYaml").name("export preset (.yaml)");
     presets.add(actions, "importYaml").name("import preset (.yaml)");
 
+    // ランダム化 (現在の render mode 関連のみ) / 直前に戻す Undo。
+    // 値域の定義は ./randomize.ts に集約。Auto モード有効時、autoControlled
+    // 対象パラメータは自動制御に上書きされるため見た目に反映されない (仕様)。
+    const randomizeActions = {
+      randomize: () => this.randomize(),
+      undo: () => this.undoRandomize(),
+    };
+    presets.add(randomizeActions, "randomize").name("randomize (current mode)");
+    this.undoController = presets
+      .add(randomizeActions, "undo")
+      .name("undo randomize")
+      .disable();
+
     // Auto-save to localStorage on any change.
     this.gui.onChange(() => saveSettings(settings));
 
@@ -209,6 +228,53 @@ export class SettingsPanel {
     this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
     if (opts.clearStorage) clearSettings();
     else saveSettings(this.settings);
+  }
+
+  /** 現在の render mode 関連パラメータを一様乱数化し、直前状態を保持する。 */
+  private randomize(): void {
+    const before = structuredClone(this.settings) as Settings;
+    const next = randomizeSettings(this.settings, this.settings.mode);
+    this.prevSnapshot = before;
+    deepAssign(
+      this.settings as unknown as Record<string, unknown>,
+      next as unknown as Record<string, unknown>,
+    );
+    this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
+    saveSettings(this.settings);
+    this.undoController?.enable();
+    this.applyImageSideEffects(before, this.settings);
+  }
+
+  /** randomize 直前の状態に戻す。連打しても "直前" (= randomize 直前) に戻る。 */
+  private undoRandomize(): void {
+    if (!this.prevSnapshot) return;
+    const before = structuredClone(this.settings) as Settings;
+    deepAssign(
+      this.settings as unknown as Record<string, unknown>,
+      this.prevSnapshot as unknown as Record<string, unknown>,
+    );
+    this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
+    saveSettings(this.settings);
+    this.applyImageSideEffects(before, this.settings);
+  }
+
+  /**
+   * image モードの構造系変更を App に反映する。preset 変更時は loadImage が
+   * 現在の gridW/gridH で再サンプリングするため、それだけで grid も追従する。
+   * その他 mode (rain 等) は live 更新側が毎フレーム差分検知するため不要。
+   */
+  private applyImageSideEffects(before: Settings, after: Settings): void {
+    if (after.mode !== "image") return;
+    if (before.image.preset !== after.image.preset && after.image.preset !== UPLOADED_TAG) {
+      this.callbacks.onImageRequest?.({ kind: "preset", path: after.image.preset });
+      return;
+    }
+    if (
+      before.image.gridW !== after.image.gridW ||
+      before.image.gridH !== after.image.gridH
+    ) {
+      this.callbacks.onImageRegridRequest?.();
+    }
   }
 
   private exportYaml(): void {
