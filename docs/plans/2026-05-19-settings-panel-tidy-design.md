@@ -3,6 +3,69 @@
 - Issue: https://github.com/mishi5/three-art/issues/23
 - 関連: Issue #18 (https://github.com/mishi5/three-art/issues/18) / PR #20 / Issue #27 (ツールチップ)
 
+## 改訂 (2026-05-19, ユーザ動作確認フィードバック)
+
+初版実装 (PR #30) の動作確認で 2 点の追加要望を受け、設計を以下に拡張する。
+
+### 要望1: mode 連動をパラメータ単位の precise relevance に拡張
+
+Mode ゾーンのフォルダ単位だけでなく、共通フォルダ含む**全パラメータ**を「その
+render mode で実際に効くか」で enable/disable する。粒度はフォルダ単位では不足
+(例: `pointCloud.bassExpansion` は bones 専用だが他の pointCloud 項目は
+bones/cube/sphere/lattice/image で効く)。
+
+レンダリングコード調査に基づく relevance を `param-relevance.ts` の純粋関数
+`paramActiveForMode(path, mode)` に正本化する。`mode-folders.ts`
+(`activeModeFolders`) はこれに包含されるため**廃止**する。
+
+relevance マップ (settings leaf ドット記法パス → 効く mode 集合):
+
+| path 群 | 効く mode |
+|---|---|
+| `audioSmoothing` / `camera.*` / `motion.*` / `blur.*` / `auto.*` / `mode` | 全 mode |
+| `audioGain.*` | bones,cube,sphere,lattice,image (rain 除く) |
+| `color.hueBase` / `hueSpread` / `saturation` / `bassHueShift` | bones,cube,sphere,lattice |
+| `color.trebleBoost` | bones,cube,sphere,lattice,image |
+| `pointCloud.bassExpansion` | bones のみ |
+| `pointCloud.trebleShimmer` / `ambientShimmer` / `baseSize` / `volumeSize` | bones,cube,sphere,lattice,image |
+| `fragmentField.*` | bones のみ |
+| `shape.radius` / `bassPulse` | bones,cube,sphere,lattice,image |
+| `outlier.*` | bones,cube,sphere,lattice,image |
+| `edges.*` | bones,cube,sphere のみ |
+| `twist.*` | bones,cube,sphere,lattice,image |
+| `lattice.resolution` / `onsetThreshold` / `onsetCooldown` | lattice のみ |
+| `lattice.waveSpeed` / `waveAmplitude` / `waveOscFreq` / `waveDamping` | lattice,image (image shockwave 流用) |
+| `image.*` | image のみ |
+| `rain.*` | rain のみ |
+
+→ rain では大半のパラメータが非活性 (粒子群を描画しないため。仕様として正確)。
+未登録パスは fail-open (true) とし誤ロックアウトを避ける (完全性はテストで担保)。
+
+### 要望2: enabled チェックボックス連動の従属非活性化
+
+`twist` / `blur` / `edges` / `auto` の各グループは `enabled` が OFF の間、配下
+パラメータ (enabled 以外) を非活性化する。`enabled` チェックボックス自体は mode
+relevance のみで判定する。
+
+### 統合判定
+
+各コントローラの活性 = `paramActiveForMode(path, mode)`
+**AND** `gatedActive(path)`(従属グループは親 `enabled` が true、enabled 自身は true)。
+settings パスを持たないアクションボタン (reset/export/import/randomize/undo/
+reanalyze) は本判定の対象外 (`undo` の初期 disable 状態を壊さないため)。
+image の `upload` ボタンのみ mode==="image" で gate する。
+
+再評価トリガ: render mode onChange / `twist|blur|edges|auto`.enabled onChange /
+preset 適用・import・randomize・undo 後 / 初期化時。
+
+### テスト追加
+
+- `param-relevance.test.ts`: `makeDefaultSettings()` 全 leaf 網羅 (完全性) +
+  代表挙動 (rain で color/pointCloud/twist 非活性 / bassExpansion=bones 専用 /
+  image の色除外 / lattice+image の wave 共有) のスポット検査。
+
+---
+
 ## 背景と目的
 
 Issue #18 で各パラメータの効くモードを示すため、SettingsPanel のラベル末尾に

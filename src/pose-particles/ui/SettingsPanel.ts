@@ -1,11 +1,16 @@
 import GUI, { Controller } from "lil-gui";
-import type { Settings, RenderMode } from "../settings";
+import type { Settings } from "../settings";
 import { RENDER_MODES, MOTION_TARGETS, makeDefaultSettings, saveSettings, clearSettings } from "../settings";
 import { TWIST_AXES } from "../visuals/twist";
 import { parsePresetYaml, serializePresetYaml } from "./preset-yaml";
 import { randomizeSettings } from "./randomize";
 import { attachParamTooltips } from "./param-tooltip";
-import { activeModeFolders, type ModeFolderKey } from "./mode-folders";
+import { resolveDocKey } from "./param-docs";
+import { paramActiveForMode } from "./param-relevance";
+
+/** enabled チェックボックスで配下を従属させるグループ (Issue #23 改訂)。 */
+const GATED_GROUPS = ["twist", "blur", "edges", "auto"] as const;
+type GatedGroup = typeof GATED_GROUPS[number];
 
 /** image モードの画像ソース指定 */
 export type ImageSource =
@@ -27,8 +32,8 @@ export class SettingsPanel {
   private gui: GUI;
   private settings: Settings;
   private callbacks: SettingsPanelCallbacks;
-  /** Mode ゾーン配下サブフォルダ。mode 連動 disable の対象。 */
-  private modeFolders: Record<ModeFolderKey, GUI>;
+  /** image の upload ボタン (mode==="image" でのみ活性)。 */
+  private imageUploadController: Controller | null = null;
   /** randomize 実行直前の settings スナップショット (undo 用)。 */
   private prevSnapshot: Settings | null = null;
   private undoController: Controller | null = null;
@@ -44,7 +49,7 @@ export class SettingsPanel {
       .name("render mode")
       .onChange((v: string) => {
         console.log("[SettingsPanel] mode →", v, "settings.mode =", settings.mode);
-        this.applyModeActivation(settings.mode);
+        this.applyActivation();
       });
 
     // ---- Audio ----
@@ -82,7 +87,7 @@ export class SettingsPanel {
     ff.add(settings.fragmentField, "noiseScale", 0.05, 3, 0.05).name("noise scale");
     ff.add(settings.fragmentField, "timeSpeed", 0, 1, 0.01).name("noise speed");
     const edges = particles.addFolder("Edges (sub-render)");
-    edges.add(settings.edges, "enabled").name("enabled");
+    edges.add(settings.edges, "enabled").name("enabled").onChange(() => this.applyActivation());
     edges.add(settings.edges, "anchorCount", 16, 256, 1).name("anchor count");
     edges.add(settings.edges, "kNeighbors", 1, 5, 1).name("k neighbours");
     edges.add(settings.edges, "alpha", 0, 1, 0.01).name("opacity");
@@ -111,7 +116,7 @@ export class SettingsPanel {
     imageFolder.add(settings.image, "preset", presetOptions).name("preset").onChange((v: string) => {
       if (v !== UPLOADED_TAG) callbacks.onImageRequest?.({ kind: "preset", path: v });
     });
-    imageFolder.add(
+    this.imageUploadController = imageFolder.add(
       { upload: () => this.openImageUpload(callbacks.onImageRequest) },
       "upload",
     ).name("upload image…");
@@ -134,18 +139,16 @@ export class SettingsPanel {
     rain.add(settings.rain, "areaHeight", 0.5, 6.0, 0.05).name("area height (m)");
     rain.add(settings.rain, "binMapping", ["linear", "log"]).name("bin mapping");
 
-    this.modeFolders = { shape, wave, lattice, image: imageFolder, rain };
-
     // ---- Post-process ----
     const post = this.gui.addFolder("Post-process");
     const twist = post.addFolder("Twist (ねじれ)");
-    twist.add(settings.twist, "enabled").name("enabled");
+    twist.add(settings.twist, "enabled").name("enabled").onChange(() => this.applyActivation());
     twist.add(settings.twist, "axis", [...TWIST_AXES]).name("axis");
     twist.add(settings.twist, "strength", 0, 10, 0.05).name("strength (rad/m)");
     twist.add(settings.twist, "bassDrive", 0, 3, 0.05).name("bass drive");
     twist.add(settings.twist, "phaseSpeed", -3, 3, 0.05).name("phase speed (rad/s)");
     const blur = post.addFolder("Blur (post-process)");
-    blur.add(settings.blur, "enabled").name("enabled");
+    blur.add(settings.blur, "enabled").name("enabled").onChange(() => this.applyActivation());
     blur.add(settings.blur, "strength", 0, 30, 0.1).name("strength (px)");
     blur.add(settings.blur, "iterations", 1, 6, 1).name("iterations");
     blur.add(settings.blur, "bassDrive", 0, 3, 0.05).name("bass drive");
@@ -158,7 +161,7 @@ export class SettingsPanel {
     motion.add(settings.motion, "target", [...MOTION_TARGETS]).name("target param");
     motion.add(settings.motion, "strength", 0, 30, 0.1).name("strength");
     const auto = system.addFolder("Auto Mode");
-    auto.add(settings.auto, "enabled").name("enabled");
+    auto.add(settings.auto, "enabled").name("enabled").onChange(() => this.applyActivation());
     auto.add(settings.auto, "transitionSec", 0.5, 3.0, 0.05).name("transition (s)");
     auto.add(settings.auto, "noveltyThreshold", 0.0, 1.0, 0.01).name("sensitivity (0..1)");
     auto.add(settings.auto, "minSectionSec", 1.0, 10.0, 0.1).name("min section (s)");
@@ -195,9 +198,9 @@ export class SettingsPanel {
     dom.style.maxHeight = "calc(100vh - 200px)";
     dom.style.overflowY = "auto";
 
-    // 現在 mode に応じてモード専用フォルダを enable/disable する (唯一の
-    // disable 機構)。Issue #23 で Auto 連動 disable は廃止した。
-    this.applyModeActivation(settings.mode);
+    // パラメータ単位の mode relevance + enabled 連動でコントローラを
+    // enable/disable する (唯一の disable 機構)。Issue #23。
+    this.applyActivation();
 
     // 各パラメータにホバー説明ツールチップを付与 (Issue #27)。
     attachParamTooltips(this.gui, settings);
@@ -207,7 +210,7 @@ export class SettingsPanel {
   applyPreset(next: Settings, opts: { clearStorage?: boolean } = {}): void {
     deepAssign(this.settings as unknown as Record<string, unknown>, next as unknown as Record<string, unknown>);
     this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
-    this.applyModeActivation(this.settings.mode);
+    this.applyActivation();
     if (opts.clearStorage) clearSettings();
     else saveSettings(this.settings);
   }
@@ -222,7 +225,7 @@ export class SettingsPanel {
       next as unknown as Record<string, unknown>,
     );
     this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
-    this.applyModeActivation(this.settings.mode);
+    this.applyActivation();
     saveSettings(this.settings);
     this.undoController?.enable();
     this.applyImageSideEffects(before, this.settings);
@@ -237,7 +240,7 @@ export class SettingsPanel {
       this.prevSnapshot as unknown as Record<string, unknown>,
     );
     this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
-    this.applyModeActivation(this.settings.mode);
+    this.applyActivation();
     saveSettings(this.settings);
     this.applyImageSideEffects(before, this.settings);
   }
@@ -307,7 +310,7 @@ export class SettingsPanel {
             parsed as unknown as Record<string, unknown>,
           );
           this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
-          this.applyModeActivation(this.settings.mode);
+          this.applyActivation();
           saveSettings(this.settings);
         } catch (e) {
           alert("preset import failed: " + (e instanceof Error ? e.message : String(e)));
@@ -326,19 +329,37 @@ export class SettingsPanel {
   }
 
   /**
-   * 現在の render mode に無関係なモード専用フォルダ内コントローラを disable、
-   * 関連フォルダを enable する。フォルダは畳まず開いたまま (disable により
-   * 自動的に淡色化)。Issue #23。
+   * 従属グループ (twist/blur/edges/auto) のパラメータが、親 `enabled` により
+   * 活性であるべきか。`enabled` チェックボックス自身は常に true (mode
+   * relevance 側で判定)。それ以外のパスは従属対象外なので true。Issue #23。
    */
-  private applyModeActivation(mode: RenderMode): void {
-    const active = activeModeFolders(mode);
-    (Object.keys(this.modeFolders) as ModeFolderKey[]).forEach((key) => {
-      const enable = active.has(key);
-      for (const c of this.modeFolders[key].controllersRecursive()) {
-        if (enable) c.enable();
-        else c.disable();
-      }
-    });
+  private gatedActive(path: string): boolean {
+    const dot = path.indexOf(".");
+    if (dot < 0) return true;
+    const group = path.slice(0, dot) as GatedGroup;
+    if (!(GATED_GROUPS as readonly string[]).includes(group)) return true;
+    if (path.slice(dot + 1) === "enabled") return true;
+    return (this.settings[group] as { enabled: boolean }).enabled === true;
+  }
+
+  /**
+   * 全コントローラを「mode relevance」AND「enabled 連動」で enable/disable
+   * する (唯一の disable 機構)。settings パスを持たないアクションボタンは
+   * 対象外 (undo の初期 disable 状態を壊さないため)。image の upload ボタン
+   * のみ mode==="image" で gate する。フォルダは畳まず開いたまま。Issue #23。
+   */
+  private applyActivation(): void {
+    const mode = this.settings.mode;
+    for (const c of this.gui.controllersRecursive()) {
+      if (c === this.imageUploadController) continue;
+      const path = resolveDocKey(this.settings, c.object as object, c.property as string);
+      if (path === null) continue;
+      const active = paramActiveForMode(path, mode) && this.gatedActive(path);
+      if (active) c.enable();
+      else c.disable();
+    }
+    if (mode === "image") this.imageUploadController?.enable();
+    else this.imageUploadController?.disable();
   }
 }
 
