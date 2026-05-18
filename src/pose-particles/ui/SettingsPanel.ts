@@ -4,6 +4,7 @@ import { RENDER_MODES, MOTION_TARGETS, makeDefaultSettings, saveSettings, clearS
 import { TWIST_AXES } from "../visuals/twist";
 import { parsePresetYaml, serializePresetYaml } from "./preset-yaml";
 import { randomizeSettings } from "./randomize";
+import { attachParamTooltips } from "./param-tooltip";
 
 /** image モードの画像ソース指定 */
 export type ImageSource =
@@ -220,6 +221,9 @@ export class SettingsPanel {
     dom.style.maxHeight = "calc(100vh - 200px)";
     dom.style.overflowY = "auto";
     this.applyAutoDisabled(settings.auto.enabled);
+
+    // 各パラメータにホバー説明ツールチップを付与 (Issue #27)。
+    attachParamTooltips(this.gui, settings);
   }
 
   /** Replaces the live settings object's contents with another set, then refreshes the GUI. */
