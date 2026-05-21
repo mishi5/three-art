@@ -5,6 +5,7 @@ import type {
   PresetPatch,
   PresetStorageAdapter,
 } from "./types";
+import { PRESET_LIMIT } from "./types";
 
 /**
  * プリセットの CRUD + 永続化を担うストア。
@@ -36,6 +37,9 @@ export class PresetStore {
   }
 
   add(input: PresetInput): Preset {
+    if (this.bundle.presets.length >= PRESET_LIMIT) {
+      throw new RangeError(`preset limit reached (${PRESET_LIMIT})`);
+    }
     const now = Date.now();
     const p: Preset = {
       id: cryptoRandomId(),
@@ -72,6 +76,21 @@ export class PresetStore {
     const before = this.bundle.presets.length;
     this.bundle.presets = this.bundle.presets.filter((p) => p.id !== id);
     if (this.bundle.presets.length !== before) this.flush();
+  }
+
+  toBundle(): PresetBundle {
+    return structuredClone(this.bundle);
+  }
+
+  fromBundle(bundle: PresetBundle): void {
+    if (bundle.version !== 1) throw new Error(`unsupported bundle version: ${bundle.version}`);
+    this.bundle = { version: 1, presets: structuredClone(bundle.presets) };
+    this.flush();
+  }
+
+  replaceAll(presets: Preset[]): void {
+    this.bundle = { version: 1, presets: structuredClone(presets) };
+    this.flush();
   }
 
   private flush(): void {

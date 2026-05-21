@@ -1,6 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { PresetStore } from "./PresetStore";
 import type { PresetStorageAdapter, PresetBundle } from "./types";
+import { PRESET_LIMIT } from "./types";
 import { makeDefaultSettings } from "../settings";
 
 function memoryAdapter(initial?: PresetBundle): PresetStorageAdapter {
@@ -118,5 +119,52 @@ describe("PresetStore CRUD", () => {
     });
     const store = new PresetStore(adapter);
     expect(store.list()[0].id).toBe("fixed");
+  });
+});
+
+describe("PresetStore bundle & limit", () => {
+  it("toBundle() returns a bundle snapshot ({ version: 1, presets })", () => {
+    const store = new PresetStore(memoryAdapter());
+    const p = store.add(sampleInput("a"));
+    const b = store.toBundle();
+    expect(b.version).toBe(1);
+    expect(b.presets).toHaveLength(1);
+    expect(b.presets[0].id).toBe(p.id);
+  });
+
+  it("toBundle() returns a deep copy (mutating result does not affect the store)", () => {
+    const store = new PresetStore(memoryAdapter());
+    store.add(sampleInput("a"));
+    const b = store.toBundle();
+    b.presets[0].name = "mutated";
+    expect(store.list()[0].name).toBe("a");
+  });
+
+  it("fromBundle() replaces all presets and persists", () => {
+    const adapter = memoryAdapter();
+    const store = new PresetStore(adapter);
+    store.add(sampleInput("a"));
+    store.fromBundle({
+      version: 1,
+      presets: [
+        { id: "x", name: "X", description: "", thumbnail: "", settings: makeDefaultSettings(), createdAt: 1, updatedAt: 1 },
+      ],
+    });
+    expect(store.list().map((p) => p.id)).toEqual(["x"]);
+    expect(adapter.read().presets.map((p) => p.id)).toEqual(["x"]);
+  });
+
+  it("replaceAll() works the same and accepts a plain array", () => {
+    const store = new PresetStore(memoryAdapter());
+    store.replaceAll([
+      { id: "y", name: "Y", description: "", thumbnail: "", settings: makeDefaultSettings(), createdAt: 2, updatedAt: 2 },
+    ]);
+    expect(store.list().map((p) => p.id)).toEqual(["y"]);
+  });
+
+  it("add() throws RangeError when PRESET_LIMIT is reached", () => {
+    const store = new PresetStore(memoryAdapter());
+    for (let i = 0; i < PRESET_LIMIT; i++) store.add(sampleInput(`p${i}`));
+    expect(() => store.add(sampleInput("over"))).toThrow(RangeError);
   });
 });
