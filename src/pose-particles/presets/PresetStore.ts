@@ -93,6 +93,35 @@ export class PresetStore {
     this.flush();
   }
 
+  /**
+   * 登録順で次のプリセットを返す。末尾の次は先頭にラップ。
+   * currentId が null / 不明なら先頭。空なら null。
+   */
+  nextOf(currentId: string | null): Preset | null {
+    const items = this.list();
+    if (items.length === 0) return null;
+    if (currentId === null) return items[0];
+    const idx = items.findIndex((p) => p.id === currentId);
+    if (idx < 0) return items[0];
+    return items[(idx + 1) % items.length];
+  }
+
+  /**
+   * 直前と被らないランダム選択。1 件しかなければそれを返す。空なら null。
+   * rng は [0,1) を返す関数 (デフォルト Math.random)。テストで決定論化できる。
+   */
+  randomOf(excludeId: string | null, rng: () => number = Math.random): Preset | null {
+    const items = this.list();
+    if (items.length === 0) return null;
+    if (items.length === 1) return items[0];
+    const pool = excludeId === null
+      ? items
+      : items.filter((p) => p.id !== excludeId);
+    // excludeId が一致してすべて除外されたケースは items.length===1 で先に処理済み。
+    const i = Math.min(Math.floor(rng() * pool.length), pool.length - 1);
+    return pool[i];
+  }
+
   private flush(): void {
     this.adapter.write(this.bundle);
   }

@@ -168,3 +168,62 @@ describe("PresetStore bundle & limit", () => {
     expect(() => store.add(sampleInput("over"))).toThrow(RangeError);
   });
 });
+
+describe("PresetStore navigation", () => {
+  it("nextOf(null) returns the first preset in list order", async () => {
+    const store = new PresetStore(memoryAdapter());
+    const a = store.add(sampleInput("a"));
+    await new Promise((r) => setTimeout(r, 2));
+    store.add(sampleInput("b"));
+    expect(store.nextOf(null)?.id).toBe(a.id);
+  });
+
+  it("nextOf(currentId) returns the next preset and wraps to head at the end", async () => {
+    const store = new PresetStore(memoryAdapter());
+    const a = store.add(sampleInput("a"));
+    await new Promise((r) => setTimeout(r, 2));
+    const b = store.add(sampleInput("b"));
+    expect(store.nextOf(a.id)?.id).toBe(b.id);
+    expect(store.nextOf(b.id)?.id).toBe(a.id); // wrap
+  });
+
+  it("nextOf() returns null when the store is empty", () => {
+    const store = new PresetStore(memoryAdapter());
+    expect(store.nextOf(null)).toBeNull();
+    expect(store.nextOf("any")).toBeNull();
+  });
+
+  it("nextOf(unknownId) returns the first preset (treated as null)", () => {
+    const store = new PresetStore(memoryAdapter());
+    const a = store.add(sampleInput("a"));
+    expect(store.nextOf("nope")?.id).toBe(a.id);
+  });
+
+  it("randomOf() never returns the excludeId when there are ≥2 presets", () => {
+    const store = new PresetStore(memoryAdapter());
+    const a = store.add(sampleInput("a"));
+    const b = store.add(sampleInput("b"));
+    // rng が 0 (= 先頭) を返してきても、a を除外したいなら b に進むはず。
+    const rng = () => 0;
+    const r = store.randomOf(a.id, rng);
+    expect(r?.id).toBe(b.id);
+  });
+
+  it("randomOf(null) returns any preset", () => {
+    const store = new PresetStore(memoryAdapter());
+    const a = store.add(sampleInput("a"));
+    const r = store.randomOf(null, () => 0);
+    expect(r?.id).toBe(a.id);
+  });
+
+  it("randomOf() returns the only preset even if it matches excludeId", () => {
+    const store = new PresetStore(memoryAdapter());
+    const a = store.add(sampleInput("a"));
+    expect(store.randomOf(a.id, () => 0)?.id).toBe(a.id);
+  });
+
+  it("randomOf() returns null when empty", () => {
+    const store = new PresetStore(memoryAdapter());
+    expect(store.randomOf(null, () => 0)).toBeNull();
+  });
+});
