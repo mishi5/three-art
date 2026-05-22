@@ -63,6 +63,19 @@ const RELEVANCE: Record<string, ReadonlySet<RenderMode>> = {
   "edges.kNeighbors": new Set(EDGE_MODES),
   "edges.alpha": new Set(EDGE_MODES),
 
+  "edges.wave.enabled": new Set(EDGE_MODES),
+  "edges.wave.subdivisions": new Set(EDGE_MODES),
+  "edges.wave.amplitude": new Set(EDGE_MODES),
+  "edges.wave.audioBoost": new Set(EDGE_MODES),
+  "edges.wave.scale": new Set(EDGE_MODES),
+  "edges.wave.speed": new Set(EDGE_MODES),
+
+  "edges.rewire.enabled": new Set(EDGE_MODES),
+  "edges.rewire.interval": new Set(EDGE_MODES),
+  "edges.rewire.fraction": new Set(EDGE_MODES),
+  "edges.rewire.fadeDuration": new Set(EDGE_MODES),
+  "edges.rewire.candidatePool": new Set(EDGE_MODES),
+
   "twist.enabled": new Set(PARTICLE),
   "twist.axis": new Set(PARTICLE),
   "twist.strength": new Set(PARTICLE),

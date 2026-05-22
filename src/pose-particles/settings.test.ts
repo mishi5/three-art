@@ -68,6 +68,35 @@ describe("ImageSettings defaults", () => {
   });
 });
 
+describe("EdgesSettings new fields (Issue #31)", () => {
+  test("legacy edges fields unchanged", () => {
+    const s = makeDefaultSettings();
+    expect(s.edges.enabled).toBe(false);
+    expect(s.edges.anchorCount).toBe(64);
+    expect(s.edges.kNeighbors).toBe(2);
+    expect(s.edges.alpha).toBe(0.5);
+  });
+
+  test("edges.wave defaults are present and within documented ranges", () => {
+    const s = makeDefaultSettings();
+    expect(s.edges.wave.enabled).toBe(false);
+    expect(s.edges.wave.subdivisions).toBe(8);
+    expect(s.edges.wave.amplitude).toBeCloseTo(0.05);
+    expect(s.edges.wave.audioBoost).toBeCloseTo(1.0);
+    expect(s.edges.wave.scale).toBeCloseTo(2.0);
+    expect(s.edges.wave.speed).toBeCloseTo(0.6);
+  });
+
+  test("edges.rewire defaults are present and within documented ranges", () => {
+    const s = makeDefaultSettings();
+    expect(s.edges.rewire.enabled).toBe(false);
+    expect(s.edges.rewire.interval).toBeCloseTo(1.5);
+    expect(s.edges.rewire.fraction).toBeCloseTo(0.3);
+    expect(s.edges.rewire.fadeDuration).toBeCloseTo(0.4);
+    expect(s.edges.rewire.candidatePool).toBeGreaterThanOrEqual(s.edges.kNeighbors);
+  });
+});
+
 describe("MOTION_TARGETS", () => {
   test("lattice.waveAmplitude と lattice.waveOscFreq を含む", () => {
     expect(MOTION_TARGETS).toContain("lattice.waveAmplitude");

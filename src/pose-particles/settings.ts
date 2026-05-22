@@ -115,6 +115,36 @@ export interface RainSettings {
   binMapping: RainBinMapping;
 }
 
+/** Edges 波打ち (Issue #31)。 */
+export interface EdgesWaveSettings {
+  /** 波打ち on/off。 */
+  enabled: boolean;
+  /** 1 エッジを何分割するか。2..16。 */
+  subdivisions: number;
+  /** 振幅基準 (world m)。0..0.5。 */
+  amplitude: number;
+  /** bass による振幅倍率の係数。amp_eff = amplitude * (1 + bass * audioBoost)。0..3。 */
+  audioBoost: number;
+  /** ノイズ空間周波数。0.5..10。 */
+  scale: number;
+  /** ノイズ流速 (時間方向)。0..3。 */
+  speed: number;
+}
+
+/** Edges リワイヤ (Issue #31)。 */
+export interface EdgesRewireSettings {
+  /** リワイヤ on/off。 */
+  enabled: boolean;
+  /** 切替周期 (秒)。0.2..5.0。0 で実質オフ扱い。 */
+  interval: number;
+  /** 各周期で差し替えるエッジ割合。0..1。 */
+  fraction: number;
+  /** クロスフェード時間 (秒)。0.05..1.0。 */
+  fadeDuration: number;
+  /** 候補プール幅 (最近傍 M 個から k 本選ぶ)。kNeighbors..2*kNeighbors 程度。 */
+  candidatePool: number;
+}
+
 export interface AutoSettings {
   /** 自動制御を有効化する。曲ファイル再生時のみ実効。 */
   enabled: boolean;
@@ -211,6 +241,10 @@ export interface Settings {
     kNeighbors: number;
     /** Edge brightness 0..1. */
     alpha: number;
+    /** Per-edge wavy displacement driven by 3D value noise + bass (Issue #31). */
+    wave: EdgesWaveSettings;
+    /** Periodic rewiring of edges with cross-fade (Issue #31). */
+    rewire: EdgesRewireSettings;
   };
   /** Per-axis rotational twist applied to all particle positions. */
   twist: TwistSettings;
@@ -346,6 +380,21 @@ export function makeDefaultSettings(): Settings {
       anchorCount: 64,
       kNeighbors: 2,
       alpha: 0.5,
+      wave: {
+        enabled: false,
+        subdivisions: 8,
+        amplitude: 0.05,
+        audioBoost: 1.0,
+        scale: 2.0,
+        speed: 0.6,
+      },
+      rewire: {
+        enabled: false,
+        interval: 1.5,
+        fraction: 0.3,
+        fadeDuration: 0.4,
+        candidatePool: 4,
+      },
     },
     twist: makeDefaultTwist(),
     blur: makeDefaultBlur(),
