@@ -55,4 +55,11 @@ describe("param-docs", () => {
     const actionTarget = { reset: () => {} };
     expect(resolveDocKey(s, actionTarget, "reset")).toBeNull();
   });
+
+  test("resolveDocKey supports nested sub-groups (Issue #31)", () => {
+    const s = makeDefaultSettings();
+    expect(resolveDocKey(s, s.edges.wave, "enabled")).toBe("edges.wave.enabled");
+    expect(resolveDocKey(s, s.edges.wave, "amplitude")).toBe("edges.wave.amplitude");
+    expect(resolveDocKey(s, s.edges.rewire, "interval")).toBe("edges.rewire.interval");
+  });
 });
