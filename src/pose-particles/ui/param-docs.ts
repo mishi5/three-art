@@ -45,8 +45,20 @@ export function resolveDocKey(
   property: string,
 ): string | null {
   if (object === settings) return property;
-  for (const [key, value] of Object.entries(settings)) {
-    if (value === object) return `${key}.${property}`;
+  // settings 配下を再帰的に探索し、`object` と参照一致するノードのドット記法パスを返す。
+  // edges.wave / edges.rewire のような入れ子グループに対応するため (Issue #31)。
+  const stack: Array<{ node: unknown; path: string }> = [{ node: settings, path: "" }];
+  while (stack.length > 0) {
+    const { node, path } = stack.pop()!;
+    if (node === null || typeof node !== "object" || Array.isArray(node)) continue;
+    for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+      if (value === object) {
+        return path ? `${path}.${key}.${property}` : `${key}.${property}`;
+      }
+      if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+        stack.push({ node: value, path: path ? `${path}.${key}` : key });
+      }
+    }
   }
   return null;
 }
@@ -192,6 +204,52 @@ export const PARAM_DOCS: Record<string, ParamDoc> = {
   "edges.alpha": {
     summary: "エッジの明るさ/不透明度 (0..1)。",
     effect: "上げるほど線がはっきり見える。0 で線が消える。",
+  },
+
+  "edges.wave.enabled": {
+    summary: "エッジを細分化しノイズで波打たせるか (Issue #31)。",
+    effect: "ON で各エッジが内部頂点ごとに揺らぎ、生きたワイヤのように見える。OFF で直線。",
+  },
+  "edges.wave.subdivisions": {
+    summary: "1 エッジを何分割するか (2..16)。",
+    effect: "上げるほど波形がなめらか・細かくなる。下げるとカクついた折れ線になる。",
+  },
+  "edges.wave.amplitude": {
+    summary: "波の振幅基準 (world m, 0..0.5)。",
+    effect: "上げるほどエッジが大きくうねる。0 で実質直線。",
+  },
+  "edges.wave.audioBoost": {
+    summary: "bass による振幅ブースト係数 (0..3)。amp_eff = amplitude * (1 + bass * audioBoost)。",
+    effect: "上げると低音が強いとき大きく揺れる。0 で音と無関係な定常揺らぎ。",
+  },
+  "edges.wave.scale": {
+    summary: "ノイズ空間周波数 (0.5..10)。",
+    effect: "上げるとエッジ上で細かく波打つ。下げるとゆったり大きくうねる。",
+  },
+  "edges.wave.speed": {
+    summary: "ノイズ流速 (0..3)。波形が時間方向に流れる速さ。",
+    effect: "上げるほど波が速く動く。0 で時間停止 (静的な波)。",
+  },
+
+  "edges.rewire.enabled": {
+    summary: "エッジの結線を一定間隔でランダムに差し替えるか (Issue #31)。",
+    effect: "ON でエッジ構成が周期的に変わり、フェードで自然に入れ替わる。OFF で固定。",
+  },
+  "edges.rewire.interval": {
+    summary: "リワイヤの周期 (秒, 0.2..5.0)。0 で実質オフ扱い。",
+    effect: "短いほど頻繁にエッジが入れ替わる。長いと変化がゆっくり。",
+  },
+  "edges.rewire.fraction": {
+    summary: "各周期で差し替えるエッジ割合 (0..1)。",
+    effect: "上げるほど一度に多くのエッジが入れ替わる。0 で何も入れ替わらない。",
+  },
+  "edges.rewire.fadeDuration": {
+    summary: "古/新エッジのクロスフェード時間 (秒, 0.05..1.0)。",
+    effect: "短いとパッと切り替わる。長いと滑らかに溶けるように入れ替わる。",
+  },
+  "edges.rewire.candidatePool": {
+    summary: "新エッジ候補プール幅 (近傍 M 本から k 本選ぶ, kNeighbors..2*kNeighbors 目安)。",
+    effect: "小さいほど局所的な再結線で似た見た目を保つ。大きいほど大胆に組み替わる。",
   },
 
   "twist.enabled": {
