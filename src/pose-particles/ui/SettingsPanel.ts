@@ -208,11 +208,15 @@ export class SettingsPanel {
 
   /** Replaces the live settings object's contents with another set, then refreshes the GUI. */
   applyPreset(next: Settings, opts: { clearStorage?: boolean } = {}): void {
+    const before = structuredClone(this.settings) as Settings;
     deepAssign(this.settings as unknown as Record<string, unknown>, next as unknown as Record<string, unknown>);
     this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
     this.applyActivation();
     if (opts.clearStorage) clearSettings();
     else saveSettings(this.settings);
+    // Issue #26: プリセット切替時に image preset / grid が変わったら App に通知する。
+    // randomize / undoRandomize と同じパスを通す。
+    this.applyImageSideEffects(before, this.settings);
   }
 
   /** 現在の render mode 関連パラメータを一様乱数化し、直前状態を保持する。 */
