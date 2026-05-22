@@ -22,6 +22,12 @@ export interface SettingsPanelCallbacks {
   onImageRequest?: (src: ImageSource) => void;
   /** gridW / gridH 変更時に App へ通知 (現在の画像で再サンプリング) */
   onImageRegridRequest?: () => void;
+  /** Issue #26: プリセット管理モーダルを開く */
+  onOpenPresetManager?: () => void;
+  /** Issue #26: 次のプリセットへ即時切替 */
+  onNextPreset?: () => void;
+  /** Issue #26: ランダムなプリセットへ即時切替 */
+  onRandomPreset?: () => void;
 }
 
 /** 利用可能なプリセット画像 (public/images/presets/ 配下) */
@@ -186,6 +192,16 @@ export class SettingsPanel {
       .add(randomizeActions, "undo")
       .name("undo randomize")
       .disable();
+
+    // Issue #26: プリセット管理機能
+    const managerActions = {
+      manage: () => callbacks.onOpenPresetManager?.(),
+      next: () => callbacks.onNextPreset?.(),
+      random: () => callbacks.onRandomPreset?.(),
+    };
+    presets.add(managerActions, "manage").name("manage presets…");
+    presets.add(managerActions, "next").name("next preset ▶");
+    presets.add(managerActions, "random").name("random preset");
 
     // Auto-save to localStorage on any change.
     this.gui.onChange(() => saveSettings(settings));
