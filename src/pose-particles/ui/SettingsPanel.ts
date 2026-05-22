@@ -22,6 +22,12 @@ export interface SettingsPanelCallbacks {
   onImageRequest?: (src: ImageSource) => void;
   /** gridW / gridH 変更時に App へ通知 (現在の画像で再サンプリング) */
   onImageRegridRequest?: () => void;
+  /** Issue #26: プリセット管理モーダルを開く */
+  onOpenPresetManager?: () => void;
+  /** Issue #26: 次のプリセットへ即時切替 */
+  onNextPreset?: () => void;
+  /** Issue #26: ランダムなプリセットへ即時切替 */
+  onRandomPreset?: () => void;
 }
 
 /** 利用可能なプリセット画像 (public/images/presets/ 配下) */
@@ -202,6 +208,16 @@ export class SettingsPanel {
       .name("undo randomize")
       .disable();
 
+    // Issue #26: プリセット管理機能
+    const managerActions = {
+      manage: () => callbacks.onOpenPresetManager?.(),
+      next: () => callbacks.onNextPreset?.(),
+      random: () => callbacks.onRandomPreset?.(),
+    };
+    presets.add(managerActions, "manage").name("manage presets…");
+    presets.add(managerActions, "next").name("next preset ▶");
+    presets.add(managerActions, "random").name("random preset");
+
     // Auto-save to localStorage on any change.
     this.gui.onChange(() => saveSettings(settings));
 
@@ -223,11 +239,15 @@ export class SettingsPanel {
 
   /** Replaces the live settings object's contents with another set, then refreshes the GUI. */
   applyPreset(next: Settings, opts: { clearStorage?: boolean } = {}): void {
+    const before = structuredClone(this.settings) as Settings;
     deepAssign(this.settings as unknown as Record<string, unknown>, next as unknown as Record<string, unknown>);
     this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
     this.applyActivation();
     if (opts.clearStorage) clearSettings();
     else saveSettings(this.settings);
+    // Issue #26: プリセット切替時に image preset / grid が変わったら App に通知する。
+    // randomize / undoRandomize と同じパスを通す。
+    this.applyImageSideEffects(before, this.settings);
   }
 
   /** 現在の render mode 関連パラメータを一様乱数化し、直前状態を保持する。 */

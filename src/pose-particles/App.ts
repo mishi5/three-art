@@ -14,6 +14,10 @@ import { RainField } from "./visuals/rain";
 import { BlurPipeline } from "./visuals/BlurPipeline";
 import { DebugOverlay } from "./ui/DebugOverlay";
 import { SettingsPanel } from "./ui/SettingsPanel";
+import { PresetStore } from "./presets/PresetStore";
+import { localStorageAdapter } from "./presets/storage";
+import { captureThumbnail } from "./presets/thumbnail-capture";
+import { PresetManagerPanel } from "./ui/PresetManagerPanel";
 import { loadSettings, type Settings, type RenderMode, type MotionTarget } from "./settings";
 import { fileHash } from "./automation/fileHash";
 import { AnalysisCache, type CachePayload, type BandTimeSeries, type SectionBoundary } from "./automation/AnalysisCache";
@@ -46,6 +50,8 @@ export class App {
   private onsetDetector = new OnsetDetector();
   readonly settings: Settings = loadSettings();
   private settingsPanel: SettingsPanel;
+  private presetStore: PresetStore;
+  private presetManager: PresetManagerPanel;
   private orbit: OrbitControls;
   private lastMode: RenderMode | null = null;
   private poseInput: PoseInput | null = null;
@@ -128,6 +134,32 @@ export class App {
     this.settingsPanel = new SettingsPanel(this.settings, () => this.reanalyze(), {
       onImageRequest: (src) => this.loadImage(src),
       onImageRegridRequest: () => this.refreshImageGrid(),
+      // 下の 3 callbacks は this.presetManager / this.presetStore が後で初期化されるが、
+      // ユーザがボタンを押すのは構築完了後なので closure で安全に参照できる。
+      onOpenPresetManager: () => this.presetManager.show(),
+      onNextPreset: () => {
+        const p = this.presetStore.nextOf(this.presetManager.getActivePresetId());
+        if (!p) return;
+        this.settingsPanel.applyPreset(p.settings);
+        this.presetManager.setActivePresetId(p.id);
+      },
+      onRandomPreset: () => {
+        const p = this.presetStore.randomOf(this.presetManager.getActivePresetId());
+        if (!p) return;
+        this.settingsPanel.applyPreset(p.settings);
+        this.presetManager.setActivePresetId(p.id);
+      },
+    });
+
+    // Issue #26: プリセット管理機能
+    this.presetStore = new PresetStore(localStorageAdapter());
+    this.presetManager = new PresetManagerPanel(this.presetStore, {
+      getCurrentSettings: () => structuredClone(this.settings),
+      onApply: (preset) => {
+        this.settingsPanel.applyPreset(preset.settings);
+        this.presetManager.setActivePresetId(preset.id);
+      },
+      captureThumbnail: () => captureThumbnail(this.renderer, this.scene, this.camera),
     });
     // 起動時にデフォルトプリセット画像をロード (image モードに切り替える前から準備)
     this.loadImage({ kind: "preset", path: this.settings.image.preset }).catch((e) => {
@@ -217,6 +249,7 @@ export class App {
   /** SettingsPanel / SectionTimeline / ファイル選択パネルをまとめて表示・非表示する。 */
   private applyUiVisibility(): void {
     this.settingsPanel.setVisible(this.uiVisible);
+    if (!this.uiVisible) this.presetManager.hide();   // ← 追加 (Issue #26)
     if (this.uiVisible && this.audioInput instanceof FileAudioSource && this.currentSeries !== null) {
       this.sectionTimeline.show();
     } else {
@@ -558,6 +591,7 @@ export class App {
     this.audioInput?.stop();
     this.debugOverlay?.dispose();
     this.settingsPanel.dispose();
+    this.presetManager.dispose();
     this.sectionTimeline.dispose();
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("keydown", this.onKeyDown);
