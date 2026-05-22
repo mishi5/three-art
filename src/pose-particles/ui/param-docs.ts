@@ -45,8 +45,20 @@ export function resolveDocKey(
   property: string,
 ): string | null {
   if (object === settings) return property;
-  for (const [key, value] of Object.entries(settings)) {
-    if (value === object) return `${key}.${property}`;
+  // settings 配下を再帰的に探索し、`object` と参照一致するノードのドット記法パスを返す。
+  // edges.wave / edges.rewire のような入れ子グループに対応するため (Issue #31)。
+  const stack: Array<{ node: unknown; path: string }> = [{ node: settings, path: "" }];
+  while (stack.length > 0) {
+    const { node, path } = stack.pop()!;
+    if (node === null || typeof node !== "object" || Array.isArray(node)) continue;
+    for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+      if (value === object) {
+        return path ? `${path}.${key}.${property}` : `${key}.${property}`;
+      }
+      if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+        stack.push({ node: value, path: path ? `${path}.${key}` : key });
+      }
+    }
   }
   return null;
 }

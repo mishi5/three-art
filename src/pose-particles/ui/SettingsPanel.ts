@@ -92,6 +92,21 @@ export class SettingsPanel {
     edges.add(settings.edges, "kNeighbors", 1, 5, 1).name("k neighbours");
     edges.add(settings.edges, "alpha", 0, 1, 0.01).name("opacity");
 
+    const edgeWave = edges.addFolder("Wave (noise displacement)");
+    edgeWave.add(settings.edges.wave, "enabled").name("enabled");
+    edgeWave.add(settings.edges.wave, "subdivisions", 2, 16, 1).name("subdivisions");
+    edgeWave.add(settings.edges.wave, "amplitude", 0, 0.5, 0.005).name("amplitude (m)");
+    edgeWave.add(settings.edges.wave, "audioBoost", 0, 3, 0.05).name("bass boost");
+    edgeWave.add(settings.edges.wave, "scale", 0.5, 10, 0.1).name("noise scale");
+    edgeWave.add(settings.edges.wave, "speed", 0, 3, 0.05).name("noise speed");
+
+    const edgeRewire = edges.addFolder("Rewire (periodic shuffle)");
+    edgeRewire.add(settings.edges.rewire, "enabled").name("enabled");
+    edgeRewire.add(settings.edges.rewire, "interval", 0, 5, 0.05).name("interval (s)");
+    edgeRewire.add(settings.edges.rewire, "fraction", 0, 1, 0.05).name("fraction");
+    edgeRewire.add(settings.edges.rewire, "fadeDuration", 0.05, 1, 0.01).name("fade (s)");
+    edgeRewire.add(settings.edges.rewire, "candidatePool", 1, 10, 1).name("candidate pool");
+
     // ---- Mode (モード専用ゾーン: mode 連動 disable の対象) ----
     const modeZone = this.gui.addFolder("Mode");
     const shape = modeZone.addFolder("Shape (cube / sphere)");
