@@ -46,7 +46,7 @@ presets:
 `;
     const b = parseBundleYaml(text);
     expect(b.presets).toHaveLength(1);
-    const p = b.presets[0];
+    const p = b.presets[0]!;
     expect(p.id).toBe("x");
     expect(p.name).toBe("untitled");
     expect(p.description).toBe("");
@@ -78,6 +78,6 @@ presets:
     settings: ${JSON.stringify(makeDefaultSettings())}
 `;
     const b = parseBundleYaml(text);
-    expect(b.presets[0].id.length).toBeGreaterThan(0);
+    expect(b.presets[0]!.id.length).toBeGreaterThan(0);
   });
 });

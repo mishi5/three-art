@@ -47,8 +47,8 @@ describe("captureThumbnail", () => {
       "setRenderTarget",
     ]);
     // 1 回目は rt object、最後は null で reset
-    expect(calls[0].args[0]).not.toBeNull();
-    expect(calls[3].args[0]).toBeNull();
+    expect(calls[0]!.args[0]).not.toBeNull();
+    expect(calls[3]!.args[0]).toBeNull();
     // 戻り値が encode の出力
     expect(url).toBe("data:image/webp;base64,fake-8x4");
   });

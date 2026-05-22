@@ -34,7 +34,7 @@ function makeStubStorage(throwQuota = false): MemStorage {
 describe("localStorageAdapter", () => {
   beforeEach(() => {
     // テストごとに独立した globalThis.localStorage を差し替え
-    (globalThis as { localStorage?: MemStorage }).localStorage = makeStubStorage();
+    (globalThis as unknown as { localStorage?: MemStorage }).localStorage = makeStubStorage();
   });
 
   it("read() returns empty bundle when storage is empty", () => {
@@ -65,7 +65,7 @@ describe("localStorageAdapter", () => {
   });
 
   it("write() rethrows QuotaExceededError so the caller can show a UI message", () => {
-    (globalThis as { localStorage?: MemStorage }).localStorage = makeStubStorage(true);
+    (globalThis as unknown as { localStorage?: MemStorage }).localStorage = makeStubStorage(true);
     const a = localStorageAdapter();
     expect(() => a.write({ version: 1, presets: [] })).toThrow();
   });

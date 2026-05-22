@@ -58,15 +58,13 @@ export class PresetStore {
   update(id: string, patch: PresetPatch): Preset {
     const idx = this.bundle.presets.findIndex((p) => p.id === id);
     if (idx < 0) throw new Error(`preset not found: ${id}`);
-    const prev = this.bundle.presets[idx];
-    const next: Preset = {
-      ...prev,
-      ...(patch.name !== undefined ? { name: patch.name.length > 0 ? patch.name : "untitled" } : {}),
-      ...(patch.description !== undefined ? { description: patch.description } : {}),
-      ...(patch.thumbnail !== undefined ? { thumbnail: patch.thumbnail } : {}),
-      ...(patch.settings !== undefined ? { settings: structuredClone(patch.settings) } : {}),
-      updatedAt: Date.now(),
-    };
+    // idx >= 0 を確認済みなので prev は確実に存在する (noUncheckedIndexedAccess 対策)。
+    const prev = this.bundle.presets[idx]!;
+    const next: Preset = { ...prev, updatedAt: Date.now() };
+    if (patch.name !== undefined) next.name = patch.name.length > 0 ? patch.name : "untitled";
+    if (patch.description !== undefined) next.description = patch.description;
+    if (patch.thumbnail !== undefined) next.thumbnail = patch.thumbnail;
+    if (patch.settings !== undefined) next.settings = structuredClone(patch.settings);
     this.bundle.presets[idx] = next;
     this.flush();
     return next;
@@ -100,10 +98,10 @@ export class PresetStore {
   nextOf(currentId: string | null): Preset | null {
     const items = this.list();
     if (items.length === 0) return null;
-    if (currentId === null) return items[0];
+    if (currentId === null) return items[0] ?? null;
     const idx = items.findIndex((p) => p.id === currentId);
-    if (idx < 0) return items[0];
-    return items[(idx + 1) % items.length];
+    if (idx < 0) return items[0] ?? null;
+    return items[(idx + 1) % items.length] ?? null;
   }
 
   /**
@@ -113,13 +111,13 @@ export class PresetStore {
   randomOf(excludeId: string | null, rng: () => number = Math.random): Preset | null {
     const items = this.list();
     if (items.length === 0) return null;
-    if (items.length === 1) return items[0];
+    if (items.length === 1) return items[0] ?? null;
     const pool = excludeId === null
       ? items
       : items.filter((p) => p.id !== excludeId);
     // excludeId が一致してすべて除外されたケースは items.length===1 で先に処理済み。
     const i = Math.min(Math.floor(rng() * pool.length), pool.length - 1);
-    return pool[i];
+    return pool[i] ?? null;
   }
 
   private flush(): void {

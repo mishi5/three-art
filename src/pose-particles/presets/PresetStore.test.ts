@@ -118,7 +118,7 @@ describe("PresetStore CRUD", () => {
       }],
     });
     const store = new PresetStore(adapter);
-    expect(store.list()[0].id).toBe("fixed");
+    expect(store.list()[0]!.id).toBe("fixed");
   });
 });
 
@@ -129,15 +129,15 @@ describe("PresetStore bundle & limit", () => {
     const b = store.toBundle();
     expect(b.version).toBe(1);
     expect(b.presets).toHaveLength(1);
-    expect(b.presets[0].id).toBe(p.id);
+    expect(b.presets[0]!.id).toBe(p.id);
   });
 
   it("toBundle() returns a deep copy (mutating result does not affect the store)", () => {
     const store = new PresetStore(memoryAdapter());
     store.add(sampleInput("a"));
     const b = store.toBundle();
-    b.presets[0].name = "mutated";
-    expect(store.list()[0].name).toBe("a");
+    b.presets[0]!.name = "mutated";
+    expect(store.list()[0]!.name).toBe("a");
   });
 
   it("fromBundle() replaces all presets and persists", () => {

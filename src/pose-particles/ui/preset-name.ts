@@ -8,7 +8,7 @@ export function nextDefaultPresetName(existingNames: string[]): string {
   for (const n of existingNames) {
     const m = re.exec(n);
     if (!m) continue;
-    const v = Number.parseInt(m[1], 10);
+    const v = Number.parseInt(m[1] ?? "", 10);
     if (Number.isFinite(v) && v > max) max = v;
   }
   return `untitled #${max + 1}`;
