@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "bun --hot ./pose-particles.html",
     "build": "bun build ./pose-particles.html --outdir dist --minify",
-    "test": "bun test"
+    "test": "bun test --isolate"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.0",
@@ -14,8 +14,10 @@
     "yaml": "^2.8.4"
   },
   "devDependencies": {
+    "@happy-dom/global-registrator": "^20.9.0",
     "@types/bun": "latest",
     "@types/three": "^0.170.0",
+    "happy-dom": "^20.9.0",
     "typescript": "^5.6.0"
   }
 }
