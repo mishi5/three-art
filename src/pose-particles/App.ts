@@ -14,10 +14,13 @@ import { RainField } from "./visuals/rain";
 import { BlurPipeline } from "./visuals/BlurPipeline";
 import { DebugOverlay } from "./ui/DebugOverlay";
 import { SettingsPanel } from "./ui/SettingsPanel";
+import { QuickActionsBar } from "./ui/QuickActionsBar";
 import { PresetStore } from "./presets/PresetStore";
 import { localStorageAdapter } from "./presets/storage";
 import { captureThumbnail } from "./presets/thumbnail-capture";
 import { PresetManagerPanel } from "./ui/PresetManagerPanel";
+import { MicAudioSource } from "./audio/MicAudioSource";
+import { DisplayAudioSource } from "./audio/DisplayAudioSource";
 import { loadSettings, type Settings, type RenderMode, type MotionTarget } from "./settings";
 import { fileHash } from "./automation/fileHash";
 import { AnalysisCache, type CachePayload, type BandTimeSeries, type SectionBoundary } from "./automation/AnalysisCache";
@@ -52,6 +55,7 @@ export class App {
   private settingsPanel: SettingsPanel;
   private presetStore: PresetStore;
   private presetManager: PresetManagerPanel;
+  private quickActions: QuickActionsBar;
   private orbit: OrbitControls;
   private lastMode: RenderMode | null = null;
   private poseInput: PoseInput | null = null;
@@ -134,8 +138,24 @@ export class App {
     this.settingsPanel = new SettingsPanel(this.settings, () => this.reanalyze(), {
       onImageRequest: (src) => this.loadImage(src),
       onImageRegridRequest: () => this.refreshImageGrid(),
-      // 下の 3 callbacks は this.presetManager / this.presetStore が後で初期化されるが、
-      // ユーザがボタンを押すのは構築完了後なので closure で安全に参照できる。
+    });
+
+    // Issue #26: プリセット管理機能
+    this.presetStore = new PresetStore(localStorageAdapter());
+    this.presetManager = new PresetManagerPanel(this.presetStore, {
+      getCurrentSettings: () => structuredClone(this.settings),
+      onApply: (preset) => {
+        this.settingsPanel.applyPreset(preset.settings);
+        this.presetManager.setActivePresetId(preset.id);
+      },
+      captureThumbnail: () => captureThumbnail(this.renderer, this.scene, this.camera),
+    });
+
+    // Issue #34: 頻用ボタンをまとめた上部バー。SettingsPanel.randomize/undo は
+    //   ここから直接呼び、状態は setOnUndoStateChange 経由で同期する。
+    this.quickActions = new QuickActionsBar({
+      onRandomize: () => this.settingsPanel.randomize(),
+      onUndoRandomize: () => this.settingsPanel.undoRandomize(),
       onOpenPresetManager: () => this.presetManager.show(),
       onNextPreset: () => {
         const p = this.presetStore.nextOf(this.presetManager.getActivePresetId());
@@ -149,18 +169,15 @@ export class App {
         this.settingsPanel.applyPreset(p.settings);
         this.presetManager.setActivePresetId(p.id);
       },
-    });
-
-    // Issue #26: プリセット管理機能
-    this.presetStore = new PresetStore(localStorageAdapter());
-    this.presetManager = new PresetManagerPanel(this.presetStore, {
-      getCurrentSettings: () => structuredClone(this.settings),
-      onApply: (preset) => {
-        this.settingsPanel.applyPreset(preset.settings);
-        this.presetManager.setActivePresetId(preset.id);
+      onSelectAudioSource: (kind) => {
+        if (kind === "mic") this.startMic();
+        else if (kind === "display") this.startDisplay();
       },
-      captureThumbnail: () => captureThumbnail(this.renderer, this.scene, this.camera),
+      onSelectAudioFile: (file) => this.startFileAudio(file),
     });
+    this.settingsPanel.setOnUndoStateChange((enabled) => this.quickActions.setUndoEnabled(enabled));
+    // 起動オーバーレイが消えるまで Quick Actions は隠す。
+    this.quickActions.setVisible(false);
     // 起動時にデフォルトプリセット画像をロード (image モードに切り替える前から準備)
     this.loadImage({ kind: "preset", path: this.settings.image.preset }).catch((e) => {
       console.warn("[App] default preset image load failed:", e);
@@ -246,9 +263,10 @@ export class App {
     }
   };
 
-  /** SettingsPanel / SectionTimeline / ファイル選択パネルをまとめて表示・非表示する。 */
+  /** SettingsPanel / SectionTimeline / QuickActions をまとめて表示・非表示する。 */
   private applyUiVisibility(): void {
     this.settingsPanel.setVisible(this.uiVisible);
+    this.quickActions.setVisible(this.uiVisible);
     if (!this.uiVisible) this.presetManager.hide();   // ← 追加 (Issue #26)
     if (this.uiVisible && this.audioInput instanceof FileAudioSource && this.currentSeries !== null) {
       this.sectionTimeline.show();
@@ -267,6 +285,72 @@ export class App {
   setAudio(audio: AudioInput | null): void {
     this.audioInput?.stop();
     this.audioInput = audio;
+  }
+
+  /** Issue #34: 起動オーバーレイ完了後に Quick Actions を表示する。 */
+  showQuickActions(): void {
+    this.quickActions.setVisible(true);
+  }
+
+  /**
+   * Issue #34: ファイル音声ソース。`<input type=file>` から渡された File を
+   * デコード再生し、解析を起動する。エラーは QuickActionsBar のステータスへ。
+   */
+  private async startFileAudio(file: File): Promise<void> {
+    try {
+      const ctx = this.getOrCreateAudioContext();
+      const src = new FileAudioSource(ctx);
+      await src.loadFromFile(file);
+      await src.start();
+      this.setAudio(src);
+      await this.onSongLoaded(file);
+      this.quickActions.setAudioStatus(`再生中: ${file.name}`);
+    } catch (e) {
+      this.quickActions.setAudioStatus(
+        e instanceof Error ? e.message : "ファイル読込失敗",
+        true,
+      );
+    }
+  }
+
+  /** Issue #34: マイク入力に切り替える。 */
+  private async startMic(): Promise<void> {
+    try {
+      const ctx = this.getOrCreateAudioContext();
+      const mic = new MicAudioSource(ctx);
+      await mic.start();
+      this.setAudio(mic);
+      this.quickActions.setAudioStatus("マイク使用中");
+    } catch (e) {
+      this.quickActions.setAudioStatus(
+        e instanceof Error ? e.message : "マイク起動失敗",
+        true,
+      );
+    }
+  }
+
+  /** Issue #34: PC 音声 (画面共有) に切り替える。 */
+  private async startDisplay(): Promise<void> {
+    try {
+      this.quickActions.setAudioStatus("PC音声を取得中…");
+      const ctx = this.getOrCreateAudioContext();
+      const display = new DisplayAudioSource(ctx);
+      await display.start();
+      this.setAudio(display);
+      this.quickActions.setAudioStatus("PC音声 使用中");
+    } catch (e) {
+      const msg = this.displayAudioErrorMessage(e);
+      this.quickActions.setAudioStatus(msg, true);
+    }
+  }
+
+  private displayAudioErrorMessage(e: unknown): string {
+    if (e instanceof Error) {
+      if (e.name === "NotAllowedError") return "PC音声の取得がキャンセルされました";
+      if (e.name === "NotSupportedError") return "このブラウザは PC 音声取得に対応していません";
+      return e.message;
+    }
+    return "PC音声の取得に失敗しました";
   }
 
   async onSongLoaded(file: File): Promise<void> {
@@ -593,6 +677,7 @@ export class App {
     this.settingsPanel.dispose();
     this.presetManager.dispose();
     this.sectionTimeline.dispose();
+    this.quickActions.dispose();
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("keydown", this.onKeyDown);
   }

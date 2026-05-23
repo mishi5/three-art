@@ -1,19 +1,14 @@
 import type { App } from "../App";
-import { DisplayAudioSource } from "../audio/DisplayAudioSource";
-import { FileAudioSource } from "../audio/FileAudioSource";
-import { MicAudioSource } from "../audio/MicAudioSource";
 
-type Mode = "none" | "file" | "mic" | "display";
-
-const btnCss = `
-  flex: 1; padding: 6px 8px; background: rgba(255,255,255,0.1);
-  color: #fff; border: 1px solid rgba(255,255,255,0.2);
-  border-radius: 4px; cursor: pointer; font-size: 12px;
-`;
-
+/**
+ * 起動オーバーレイ専用のクラス。
+ *
+ * Issue #34 以降: 旧 `showControlPanel` (音声ソース切替パネル) は
+ * `QuickActionsBar` に統合済み。本クラスは「開始」ボタンのオーバーレイのみを
+ * 担当する。
+ */
 export class UI {
   private root: HTMLElement;
-  private mode: Mode = "none";
 
   constructor(private app: App) {
     const root = document.getElementById("ui-root");
@@ -58,7 +53,9 @@ export class UI {
         if (ctx.state === "suspended") await ctx.resume();
         await this.app.startPose();
         overlay.remove();
-        this.showControlPanel();
+        // Issue #34: Quick Actions バーは App 側で常時生成済み (起動オーバーレイ
+        // よりも下の z-index に置いているので overlay 表示中は隠れている)。
+        this.app.showQuickActions();
       } catch (e) {
         err.style.display = "block";
         err.textContent =
@@ -67,125 +64,5 @@ export class UI {
         btn.textContent = "再試行";
       }
     });
-  }
-
-  private showControlPanel(): void {
-    const panel = document.createElement("div");
-    panel.style.cssText = `
-      position: fixed; top: 16px; right: 16px;
-      background: rgba(20,20,20,0.7); padding: 12px;
-      border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
-      color: #fff; font-family: system-ui; font-size: 12px;
-      backdrop-filter: blur(4px); z-index: 50;
-      display: flex; flex-direction: column; gap: 8px; min-width: 200px;
-    `;
-    panel.innerHTML = `
-      <div style="display:flex;gap:4px">
-        <button data-mode="file"    style="${btnCss}">ファイル</button>
-        <button data-mode="mic"     style="${btnCss}">マイク</button>
-        <button data-mode="display" style="${btnCss}">PC音声</button>
-      </div>
-      <div id="file-controls" style="display:none">
-        <input id="file-input" type="file" accept="audio/*" style="font-size:11px;color:#ccc">
-        <div id="file-status" style="margin-top:6px;opacity:0.7"></div>
-      </div>
-      <div id="mic-status" style="display:none;opacity:0.7">マイク使用中</div>
-      <div id="display-status" style="display:none;opacity:0.7">PC音声 使用中</div>
-      <div id="audio-error" style="color:#f88;display:none"></div>
-    `;
-    this.root.appendChild(panel);
-
-    const fileCtrl = panel.querySelector("#file-controls") as HTMLDivElement;
-    const fileInput = panel.querySelector("#file-input") as HTMLInputElement;
-    const fileStatus = panel.querySelector("#file-status") as HTMLDivElement;
-    const micStatus = panel.querySelector("#mic-status") as HTMLDivElement;
-    const displayStatus = panel.querySelector("#display-status") as HTMLDivElement;
-    const errBox = panel.querySelector("#audio-error") as HTMLDivElement;
-
-    panel.querySelectorAll<HTMLButtonElement>("button[data-mode]").forEach((b) => {
-      b.addEventListener("click", () => {
-        const mode = b.dataset.mode as Mode;
-        fileCtrl.style.display = "none";
-        micStatus.style.display = "none";
-        displayStatus.style.display = "none";
-        if (mode === "file") {
-          fileCtrl.style.display = "block";
-          this.switchToFile();
-        } else if (mode === "mic") {
-          micStatus.style.display = "block";
-          this.switchToMic(errBox);
-        } else if (mode === "display") {
-          displayStatus.style.display = "block";
-          displayStatus.textContent = "PC音声を取得中…";
-          this.switchToDisplay(errBox, displayStatus);
-        }
-      });
-    });
-
-    fileInput.addEventListener("change", async () => {
-      const file = fileInput.files?.[0];
-      if (!file) return;
-      try {
-        const ctx = this.app.getOrCreateAudioContext();
-        const src = new FileAudioSource(ctx);
-        await src.loadFromFile(file);
-        await src.start();
-        this.app.setAudio(src);
-        await this.app.onSongLoaded(file);
-        fileStatus.textContent = `再生中: ${file.name}`;
-        errBox.style.display = "none";
-      } catch (e) {
-        errBox.style.display = "block";
-        errBox.textContent = e instanceof Error ? e.message : "ファイル読込失敗";
-      }
-    });
-  }
-
-  private switchToFile(): void {
-    this.app.setAudio(null);
-    this.mode = "file";
-  }
-
-  private async switchToMic(errBox: HTMLElement): Promise<void> {
-    try {
-      const ctx = this.app.getOrCreateAudioContext();
-      const mic = new MicAudioSource(ctx);
-      await mic.start();
-      this.app.setAudio(mic);
-      this.mode = "mic";
-      errBox.style.display = "none";
-    } catch (e) {
-      errBox.style.display = "block";
-      errBox.textContent =
-        e instanceof Error ? e.message : "マイク起動失敗";
-      this.mode = "none";
-    }
-  }
-
-  private async switchToDisplay(errBox: HTMLElement, statusEl: HTMLElement): Promise<void> {
-    try {
-      const ctx = this.app.getOrCreateAudioContext();
-      const display = new DisplayAudioSource(ctx);
-      await display.start();
-      this.app.setAudio(display);
-      this.mode = "display";
-      statusEl.textContent = "PC音声 使用中";
-      errBox.style.display = "none";
-    } catch (e) {
-      const msg = this.displayErrorMessage(e);
-      errBox.style.display = "block";
-      errBox.textContent = msg;
-      statusEl.style.display = "none";
-      this.mode = "none";
-    }
-  }
-
-  private displayErrorMessage(e: unknown): string {
-    if (e instanceof Error) {
-      if (e.name === "NotAllowedError") return "PC音声の取得がキャンセルされました";
-      if (e.name === "NotSupportedError") return "このブラウザは PC 音声取得に対応していません";
-      return e.message;
-    }
-    return "PC音声の取得に失敗しました";
   }
 }

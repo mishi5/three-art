@@ -22,17 +22,29 @@ export interface SettingsPanelCallbacks {
   onImageRequest?: (src: ImageSource) => void;
   /** gridW / gridH 変更時に App へ通知 (現在の画像で再サンプリング) */
   onImageRegridRequest?: () => void;
-  /** Issue #26: プリセット管理モーダルを開く */
-  onOpenPresetManager?: () => void;
-  /** Issue #26: 次のプリセットへ即時切替 */
-  onNextPreset?: () => void;
-  /** Issue #26: ランダムなプリセットへ即時切替 */
-  onRandomPreset?: () => void;
 }
 
 /** 利用可能なプリセット画像 (public/images/presets/ 配下) */
 const IMAGE_PRESETS = ["sample-01.svg", "sample-02.svg"] as const;
 const UPLOADED_TAG = "(uploaded)";
+
+/** Issue #34: タブ化のためのトップレベルフォルダ名 (表示順)。 */
+const TAB_NAMES = ["Audio", "Look", "Particles", "Mode", "Post-process", "System"] as const;
+type TabName = typeof TAB_NAMES[number];
+
+/**
+ * Issue #34: 幅 340px の lil-gui に 6 タブを横並びで収めるための短縮表示。
+ * `data-settings-tab` 属性は元のフォルダ名 (TAB_NAMES) を使い、表示テキストは
+ * このマップで上書きする。Post-process は full にすると Particles と被って溢れる。
+ */
+const TAB_LABELS: Record<TabName, string> = {
+  Audio: "Audio",
+  Look: "Look",
+  Particles: "Parts",
+  Mode: "Mode",
+  "Post-process": "Post",
+  System: "Sys",
+};
 
 export class SettingsPanel {
   private gui: GUI;
@@ -42,12 +54,20 @@ export class SettingsPanel {
   private imageUploadController: Controller | null = null;
   /** randomize 実行直前の settings スナップショット (undo 用)。 */
   private prevSnapshot: Settings | null = null;
-  private undoController: Controller | null = null;
+  /** Issue #34: タブ切替対象のトップレベルフォルダ (name → folder)。 */
+  private tabFolders: Map<TabName, GUI> = new Map();
+  /** Issue #34: タブバー DOM。 */
+  private tabBar: HTMLDivElement | null = null;
+  /** Issue #34: Quick Actions の undo ボタン状態同期用 callback。 */
+  private onUndoStateChange: ((enabled: boolean) => void) | null = null;
 
   constructor(settings: Settings, onReanalyze: () => void, callbacks: SettingsPanelCallbacks = {}) {
     this.settings = settings;
     this.callbacks = callbacks;
-    this.gui = new GUI({ title: "Settings", width: 300 });
+    // Issue #34: タブバー (6 タブ) を収め、内部 slider が横スクロールに
+    //   ならない幅。300 では Post-process タブと slider の数値表示が
+    //   微妙に溢れていた。
+    this.gui = new GUI({ title: "Settings", width: 340 });
 
     // render mode (top-level, no folder so it's hard to miss)
     this.gui
@@ -60,6 +80,7 @@ export class SettingsPanel {
 
     // ---- Audio ----
     const audio = this.gui.addFolder("Audio");
+    this.tabFolders.set("Audio", audio);
     audio.add(settings.audioGain, "volume", 0, 5, 0.05);
     audio.add(settings.audioGain, "bass", 0, 5, 0.05);
     audio.add(settings.audioGain, "mid", 0, 5, 0.05);
@@ -68,6 +89,7 @@ export class SettingsPanel {
 
     // ---- Look ----
     const look = this.gui.addFolder("Look");
+    this.tabFolders.set("Look", look);
     const color = look.addFolder("Color");
     color.add(settings.color, "saturation", 0, 1, 0.01).name("saturation (0=mono)");
     color.add(settings.color, "hueBase", 0, 1, 0.01).name("hue base");
@@ -80,6 +102,7 @@ export class SettingsPanel {
 
     // ---- Particles ----
     const particles = this.gui.addFolder("Particles");
+    this.tabFolders.set("Particles", particles);
     const pc = particles.addFolder("PointCloud (体の点群)");
     pc.add(settings.pointCloud, "bassExpansion", 0, 8, 0.1).name("bass expansion");
     pc.add(settings.pointCloud, "trebleShimmer", 0, 0.2, 0.005).name("treble shimmer");
@@ -115,6 +138,7 @@ export class SettingsPanel {
 
     // ---- Mode (モード専用ゾーン: mode 連動 disable の対象) ----
     const modeZone = this.gui.addFolder("Mode");
+    this.tabFolders.set("Mode", modeZone);
     const shape = modeZone.addFolder("Shape (cube / sphere)");
     shape.add(settings.shape, "radius", 0.1, 3, 0.05).name("radius / half-size");
     shape.add(settings.shape, "bassPulse", 0, 3, 0.05).name("bass pulse");
@@ -162,6 +186,7 @@ export class SettingsPanel {
 
     // ---- Post-process ----
     const post = this.gui.addFolder("Post-process");
+    this.tabFolders.set("Post-process", post);
     const twist = post.addFolder("Twist (ねじれ)");
     twist.add(settings.twist, "enabled").name("enabled").onChange(() => this.applyActivation());
     twist.add(settings.twist, "axis", [...TWIST_AXES]).name("axis");
@@ -176,6 +201,7 @@ export class SettingsPanel {
 
     // ---- System ----
     const system = this.gui.addFolder("System");
+    this.tabFolders.set("System", system);
     const cam = system.addFolder("Camera");
     cam.add(settings.camera, "autoRotateSpeed", -10, 10, 0.1).name("auto rotate (0=off)");
     const motion = system.addFolder("Motion influence");
@@ -189,6 +215,9 @@ export class SettingsPanel {
     auto.add(settings.auto, "styleStrength", 0.0, 1.0, 0.01).name("style blend (0..1)");
     auto.add({ reanalyze: () => onReanalyze() }, "reanalyze").name("Re-analyze");
 
+    // Issue #34: 頻用ボタン (randomize / undo / manage / next / random) は
+    //   QuickActionsBar に移譲した。lil-gui には低頻度の
+    //   reset / export / import のみ残す。
     const presets = system.addFolder("Preset");
     const actions = {
       reset: () => this.applyPreset(makeDefaultSettings(), { clearStorage: true }),
@@ -198,36 +227,33 @@ export class SettingsPanel {
     presets.add(actions, "reset").name("reset to defaults");
     presets.add(actions, "exportYaml").name("export preset (.yaml)");
     presets.add(actions, "importYaml").name("import preset (.yaml)");
-    const randomizeActions = {
-      randomize: () => this.randomize(),
-      undo: () => this.undoRandomize(),
-    };
-    presets.add(randomizeActions, "randomize").name("randomize (current mode)");
-    this.undoController = presets
-      .add(randomizeActions, "undo")
-      .name("undo randomize")
-      .disable();
-
-    // Issue #26: プリセット管理機能
-    const managerActions = {
-      manage: () => callbacks.onOpenPresetManager?.(),
-      next: () => callbacks.onNextPreset?.(),
-      random: () => callbacks.onRandomPreset?.(),
-    };
-    presets.add(managerActions, "manage").name("manage presets…");
-    presets.add(managerActions, "next").name("next preset ▶");
-    presets.add(managerActions, "random").name("random preset");
 
     // Auto-save to localStorage on any change.
     this.gui.onChange(() => saveSettings(settings));
 
     const dom = this.gui.domElement;
     dom.style.position = "fixed";
-    dom.style.top = "180px";
+    // Issue #34: 上部 Quick Actions バー (top:16, 高さ ~48px) と
+    //   重ならないよう top を 80px へ下げる。タブバーが更に 32px 占めるので
+    //   実質コンテンツは 112px から始まる。
+    dom.style.top = "80px";
     dom.style.right = "16px";
     dom.style.zIndex = "55";
-    dom.style.maxHeight = "calc(100vh - 200px)";
+    dom.style.maxHeight = "calc(100vh - 100px)";
     dom.style.overflowY = "auto";
+    // Issue #34: lil-gui 内部 slider の数値表示やラベルが幅をギリギリ超えると
+    //   横スクロールバーが出るため、明示的に抑止する。
+    dom.style.overflowX = "hidden";
+
+    // Issue #34: トップレベルフォルダの排他切替タブを lil-gui のタイトル直下へ挿入。
+    this.tabBar = this.buildTabBar();
+    const title = dom.querySelector(".title");
+    if (title && title.parentElement === dom) {
+      title.insertAdjacentElement("afterend", this.tabBar);
+    } else {
+      dom.insertBefore(this.tabBar, dom.firstChild);
+    }
+    this.switchTab("Audio");
 
     // パラメータ単位の mode relevance + enabled 連動でコントローラを
     // enable/disable する (唯一の disable 機構)。Issue #23。
@@ -235,6 +261,65 @@ export class SettingsPanel {
 
     // 各パラメータにホバー説明ツールチップを付与 (Issue #27)。
     attachParamTooltips(this.gui, settings);
+  }
+
+  /**
+   * Issue #34: トップレベルフォルダを排他的に切替えるタブバーを構築する。
+   * クリック時に active 以外を `close()` して縦スクロールを抑える。
+   */
+  private buildTabBar(): HTMLDivElement {
+    const bar = document.createElement("div");
+    bar.setAttribute("data-role", "settings-tabs");
+    bar.style.cssText = `
+      display: flex; gap: 2px; padding: 4px 6px;
+      background: rgba(0,0,0,0.3);
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      overflow: hidden;
+      box-sizing: border-box; width: 100%;
+    `;
+    for (const name of TAB_NAMES) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = TAB_LABELS[name];
+      btn.title = name; // フルラベルはホバーで確認できる
+      btn.setAttribute("data-settings-tab", name);
+      btn.style.cssText = `
+        flex: 1 1 0;
+        min-width: 0;
+        min-height: 28px;
+        background: transparent;
+        color: #ddd;
+        border: 1px solid transparent;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 11px; font-family: system-ui, sans-serif;
+        padding: 4px 2px;
+        text-overflow: ellipsis; overflow: hidden; white-space: nowrap;
+      `;
+      btn.addEventListener("click", () => this.switchTab(name));
+      bar.appendChild(btn);
+    }
+    return bar;
+  }
+
+  /**
+   * Issue #34: `active` のフォルダのみ open、他は close。タブ button にも
+   * `qa-tab-active` クラスを当てて見た目を切り替える。
+   */
+  private switchTab(active: TabName): void {
+    for (const [name, folder] of this.tabFolders) {
+      if (name === active) folder.open();
+      else folder.close();
+    }
+    if (this.tabBar) {
+      for (const btn of this.tabBar.querySelectorAll<HTMLButtonElement>("button[data-settings-tab]")) {
+        const isActive = btn.getAttribute("data-settings-tab") === active;
+        btn.classList.toggle("qa-tab-active", isActive);
+        btn.style.background = isActive ? "rgba(255,255,255,0.12)" : "transparent";
+        btn.style.color = isActive ? "#fff" : "#ddd";
+        btn.style.borderColor = isActive ? "rgba(255,255,255,0.25)" : "transparent";
+      }
+    }
   }
 
   /** Replaces the live settings object's contents with another set, then refreshes the GUI. */
@@ -250,8 +335,11 @@ export class SettingsPanel {
     this.applyImageSideEffects(before, this.settings);
   }
 
-  /** 現在の render mode 関連パラメータを一様乱数化し、直前状態を保持する。 */
-  private randomize(): void {
+  /**
+   * 現在の render mode 関連パラメータを一様乱数化し、直前状態を保持する。
+   * Issue #34: QuickActionsBar から呼ぶため public 化。
+   */
+  randomize(): void {
     const before = structuredClone(this.settings) as Settings;
     const next = randomizeSettings(this.settings, this.settings.mode);
     this.prevSnapshot = before;
@@ -262,12 +350,15 @@ export class SettingsPanel {
     this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
     this.applyActivation();
     saveSettings(this.settings);
-    this.undoController?.enable();
     this.applyImageSideEffects(before, this.settings);
+    this.onUndoStateChange?.(true);
   }
 
-  /** randomize 直前の状態に戻す。連打しても "直前" (= randomize 直前) に戻る。 */
-  private undoRandomize(): void {
+  /**
+   * randomize 直前の状態に戻す。連打しても "直前" (= randomize 直前) に戻る。
+   * Issue #34: QuickActionsBar から呼ぶため public 化。
+   */
+  undoRandomize(): void {
     if (!this.prevSnapshot) return;
     const before = structuredClone(this.settings) as Settings;
     deepAssign(
@@ -278,6 +369,22 @@ export class SettingsPanel {
     this.applyActivation();
     saveSettings(this.settings);
     this.applyImageSideEffects(before, this.settings);
+    // 履歴は 1 段なので undo 後は再度 disabled へ。
+    this.prevSnapshot = null;
+    this.onUndoStateChange?.(false);
+  }
+
+  /** Issue #34: QuickActionsBar の undo ボタン活性判定に使う。 */
+  canUndoRandomize(): boolean {
+    return this.prevSnapshot !== null;
+  }
+
+  /**
+   * Issue #34: undo 可否が変化するたびに通知する callback を登録する。
+   * QuickActionsBar.setUndoEnabled と接続する想定。
+   */
+  setOnUndoStateChange(cb: (enabled: boolean) => void): void {
+    this.onUndoStateChange = cb;
   }
 
   /**

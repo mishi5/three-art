@@ -1,0 +1,5 @@
+# テスト設定。
+# happy-dom は DOM-using テスト (QuickActionsBar.test.ts / SettingsPanel.test.ts)
+# が個別に `registerHappyDom()` を呼ぶ方式にしている。preload で全テストに
+# DOM を被せると localStorage / MediaStream など既存テストの globalThis 書換が
+# readonly エラーになるため、preload はしない。
