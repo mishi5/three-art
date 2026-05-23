@@ -32,6 +32,20 @@ const UPLOADED_TAG = "(uploaded)";
 const TAB_NAMES = ["Audio", "Look", "Particles", "Mode", "Post-process", "System"] as const;
 type TabName = typeof TAB_NAMES[number];
 
+/**
+ * Issue #34: 幅 340px の lil-gui に 6 タブを横並びで収めるための短縮表示。
+ * `data-settings-tab` 属性は元のフォルダ名 (TAB_NAMES) を使い、表示テキストは
+ * このマップで上書きする。Post-process は full にすると Particles と被って溢れる。
+ */
+const TAB_LABELS: Record<TabName, string> = {
+  Audio: "Audio",
+  Look: "Look",
+  Particles: "Parts",
+  Mode: "Mode",
+  "Post-process": "Post",
+  System: "Sys",
+};
+
 export class SettingsPanel {
   private gui: GUI;
   private settings: Settings;
@@ -50,7 +64,10 @@ export class SettingsPanel {
   constructor(settings: Settings, onReanalyze: () => void, callbacks: SettingsPanelCallbacks = {}) {
     this.settings = settings;
     this.callbacks = callbacks;
-    this.gui = new GUI({ title: "Settings", width: 300 });
+    // Issue #34: タブバー (6 タブ) を収め、内部 slider が横スクロールに
+    //   ならない幅。300 では Post-process タブと slider の数値表示が
+    //   微妙に溢れていた。
+    this.gui = new GUI({ title: "Settings", width: 340 });
 
     // render mode (top-level, no folder so it's hard to miss)
     this.gui
@@ -224,6 +241,9 @@ export class SettingsPanel {
     dom.style.zIndex = "55";
     dom.style.maxHeight = "calc(100vh - 100px)";
     dom.style.overflowY = "auto";
+    // Issue #34: lil-gui 内部 slider の数値表示やラベルが幅をギリギリ超えると
+    //   横スクロールバーが出るため、明示的に抑止する。
+    dom.style.overflowX = "hidden";
 
     // Issue #34: トップレベルフォルダの排他切替タブを lil-gui のタイトル直下へ挿入。
     this.tabBar = this.buildTabBar();
@@ -254,14 +274,18 @@ export class SettingsPanel {
       display: flex; gap: 2px; padding: 4px 6px;
       background: rgba(0,0,0,0.3);
       border-bottom: 1px solid rgba(255,255,255,0.1);
+      overflow: hidden;
+      box-sizing: border-box; width: 100%;
     `;
     for (const name of TAB_NAMES) {
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.textContent = name;
+      btn.textContent = TAB_LABELS[name];
+      btn.title = name; // フルラベルはホバーで確認できる
       btn.setAttribute("data-settings-tab", name);
       btn.style.cssText = `
-        flex: 1 1 auto;
+        flex: 1 1 0;
+        min-width: 0;
         min-height: 28px;
         background: transparent;
         color: #ddd;
@@ -269,7 +293,8 @@ export class SettingsPanel {
         border-radius: 3px;
         cursor: pointer;
         font-size: 11px; font-family: system-ui, sans-serif;
-        padding: 4px 6px;
+        padding: 4px 2px;
+        text-overflow: ellipsis; overflow: hidden; white-space: nowrap;
       `;
       btn.addEventListener("click", () => this.switchTab(name));
       bar.appendChild(btn);
