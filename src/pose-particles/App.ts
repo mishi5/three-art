@@ -148,7 +148,7 @@ export class App {
         this.settingsPanel.applyPreset(preset.settings);
         this.presetManager.setActivePresetId(preset.id);
       },
-      captureThumbnail: () => captureThumbnail(this.renderer, this.scene, this.camera),
+      captureThumbnail: () => this.captureThumbnailForPreset(),
     });
 
     // Issue #34: 頻用ボタンをまとめた上部バー。SettingsPanel.randomize/undo は
@@ -680,6 +680,27 @@ export class App {
     this.quickActions.dispose();
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("keydown", this.onKeyDown);
+  }
+
+  /**
+   * Issue #36: プリセット用サムネ生成。粒子の gl_PointSize は drawing buffer
+   * pixel 単位で計算されるため、実画面 (例: ~2160px) 基準の uPixelRatio /
+   * uPixelPerWorld のままサムネ RT (144px 高) に描くと粒子が相対的に巨大化し、
+   * 加算合成で白飛びする。サムネ用に PointCloud / FragmentField の関連 uniform
+   * を一時的に縮小してから描画し、終わったら元に戻す。
+   */
+  private captureThumbnailForPreset(): string {
+    const fullDrawingH = this.renderer.domElement.height;
+    const fullPixelRatio = this.renderer.getPixelRatio();
+    const thumbH = 144;
+    // 「サムネ内に占める相対サイズ」を実画面と揃えるため、pixelRatio に
+    // (thumbH / fullDrawingH) を掛けて縮小する。
+    const thumbPixelRatio = fullPixelRatio * (thumbH / Math.max(1, fullDrawingH));
+    return this.pointCloud.withRenderScale(thumbH, thumbPixelRatio, this.camera.fov, () =>
+      this.fragmentField.withRenderScale(thumbPixelRatio, () =>
+        captureThumbnail(this.renderer, this.scene, this.camera),
+      ),
+    );
   }
 }
 

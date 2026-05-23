@@ -2,6 +2,37 @@
 
 対象 Issue: https://github.com/mishi5/three-art/issues/36
 
+## 追記 (2026-05-24): 主因の修正
+
+OutputPass を通す修正だけでは「あまり改善されない」とユーザから報告。実機で
+比較すると、`untitled #7` のサムネは依然として強く白飛びしていた。再調査の結果、
+**より支配的な原因は `gl_PointSize` の解像度ミスマッチ** だった。
+
+- `PointCloud` の vertex shader は `gl_PointSize = (uBaseSize + ...) * uPixelRatio * (1/-mv.z)`
+  のように drawing buffer pixel 単位で粒子サイズを決めている。
+- `uPixelRatio` はコンストラクタ時に `renderer.getPixelRatio()` (例: 2.0) で固定され、
+  `uPixelPerWorld` は `setProjection(drawingBufferHeight, fov)` で実画面の drawing buffer
+  高さ (例: 2160px) を元に算出される。
+- 一方サムネ生成時の RT は 256×144。Three.js は RT 描画時に viewport を RT サイズに
+  自動セットするので、上記の **「実画面基準の絶対ピクセルサイズ」のまま**
+  サムネ RT に描画され、粒子が 15 倍ほど巨大に映る → 加算合成で完全に飽和して白飛び。
+
+### 追加修正
+
+`PointCloud` / `FragmentField` に `withRenderScale(...)` を生やし、サムネ生成時に
+uniform を「サムネ RT サイズ基準」に一時上書き＋ fn 実行後復元する仕組みを追加。
+`App.ts` 側に `captureThumbnailForPreset()` を新設し、
+
+```
+thumbPixelRatio = fullPixelRatio * (thumbH / fullDrawingBufferH)
+```
+
+を計算して PointCloud / FragmentField 双方の uniform をスケールダウンしてから
+`captureThumbnail` を呼ぶ。これで実画面と同じ「相対サイズ」の粒子が描かれ、
+加算合成の白飛びが解消する。
+
+OutputPass 経由化 (初回コミット分) も sRGB 色変換のために必要なので残置。
+
 ## 問題
 
 `src/pose-particles/presets/thumbnail-capture.ts:25` の `captureThumbnail()` は

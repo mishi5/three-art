@@ -525,6 +525,32 @@ export class PointCloud {
       drawingBufferHeight / (2 * Math.tan(fovRad / 2));
   }
 
+  /**
+   * Issue #36: サムネ生成用に gl_PointSize 関連 uniform (uPixelRatio,
+   * uPixelPerWorld) を「サムネ RT サイズ基準」に一時上書きし、fn 実行後に
+   * 元の値へ復元する。実画面の drawing buffer (例: 2000px) 基準の uniform で
+   * サムネ RT (例: 144px) に描くと、粒子が相対的に巨大化して加算合成で
+   * 白飛びするため。fn が throw しても uniform は確実に戻す。
+   */
+  withRenderScale<T>(
+    drawingBufferHeight: number,
+    pixelRatio: number,
+    fovYDeg: number,
+    fn: () => T,
+  ): T {
+    const u = this.material.uniforms;
+    const savedPixelRatio = u.uPixelRatio!.value as number;
+    const savedPixelPerWorld = u.uPixelPerWorld!.value as number;
+    u.uPixelRatio!.value = pixelRatio;
+    this.setProjection(drawingBufferHeight, fovYDeg);
+    try {
+      return fn();
+    } finally {
+      u.uPixelRatio!.value = savedPixelRatio;
+      u.uPixelPerWorld!.value = savedPixelPerWorld;
+    }
+  }
+
   setWaveTimes(times: readonly number[]): void {
     const arr = this.material.uniforms.uWaveTimes!.value as Float32Array;
     for (let i = 0; i < 4; i++) arr[i] = times[i] ?? -1;

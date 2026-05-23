@@ -221,4 +221,21 @@ export class FragmentField {
     u.uTwistPhase!.value = twistPhase(settings.twist, timeSec);
     u.uTwistAxis!.value = axisToInt(settings.twist.axis);
   }
+
+  /**
+   * Issue #36: サムネ生成時に uPixelRatio を一時的に縮小し、fn 実行後に
+   * 元の値へ復元する。実画面 (大きい drawing buffer) 基準の uPixelRatio で
+   * サムネ RT (小さい drawing buffer) に描くと粒子が過大になり白飛びするため。
+   * fn が throw しても uniform は確実に戻す。
+   */
+  withRenderScale<T>(pixelRatio: number, fn: () => T): T {
+    const u = this.material.uniforms;
+    const saved = u.uPixelRatio!.value as number;
+    u.uPixelRatio!.value = pixelRatio;
+    try {
+      return fn();
+    } finally {
+      u.uPixelRatio!.value = saved;
+    }
+  }
 }
