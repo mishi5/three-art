@@ -690,15 +690,24 @@ export class App {
    * を一時的に縮小してから描画し、終わったら元に戻す。
    */
   private captureThumbnailForPreset(): string {
+    const fullDrawingW = this.renderer.domElement.width;
     const fullDrawingH = this.renderer.domElement.height;
     const fullPixelRatio = this.renderer.getPixelRatio();
+    const thumbW = 256;
     const thumbH = 144;
     // 「サムネ内に占める相対サイズ」を実画面と揃えるため、pixelRatio に
     // (thumbH / fullDrawingH) を掛けて縮小する。
     const thumbPixelRatio = fullPixelRatio * (thumbH / Math.max(1, fullDrawingH));
     return this.pointCloud.withRenderScale(thumbH, thumbPixelRatio, this.camera.fov, () =>
       this.fragmentField.withRenderScale(thumbPixelRatio, () =>
-        captureThumbnail(this.renderer, this.scene, this.camera),
+        captureThumbnail(this.renderer, this.scene, this.camera, {
+          width: thumbW,
+          height: thumbH,
+          // 実画面で適用されている blur をサムネにも再現する。radius/iterations は
+          // 現在の BlurPipeline 状態を見て、サムネ RT サイズ向けにスケーリングされる。
+          extraPasses: () =>
+            this.blurPipeline.createBlurPassesForTarget(thumbW, thumbH, fullDrawingW),
+        }),
       ),
     );
   }

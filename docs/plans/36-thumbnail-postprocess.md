@@ -33,6 +33,28 @@ thumbPixelRatio = fullPixelRatio * (thumbH / fullDrawingBufferH)
 
 OutputPass 経由化 (初回コミット分) も sRGB 色変換のために必要なので残置。
 
+## 追記 2 (2026-05-24): Blur 再現
+
+「白飛びは解消したが Blur が掛からない」とユーザから報告。当初 plan で「Blur 再現は対象外」としていた仮想 issue を本 PR 内に取り込んで対応する。
+
+### スケーリング設計
+
+BlurPipeline の `uTexel = 1/(w*dpr)` (実画面の drawing buffer 1 pixel)、`uRadius` は pixel 単位の歩幅。UV 換算では `step = uRadius / (w*dpr)`。
+
+サムネ RT (`targetW × targetH`) では viewport が RT サイズに自動セットされるので、`uTexel = 1/targetW`。`step_thumb = radius_thumb / targetW` を実画面と同じ UV 範囲にするには:
+
+```
+radius_thumb = radius_full × targetW / fullDrawingBufferW
+```
+
+### 追加実装
+
+- `BlurPipeline.createBlurPassesForTarget(targetW, targetH, fullSourceDrawingBufferW)` を追加。現在 enabled な blur pair を見て、`uTexel = 1/target*`, `uRadius = baseRadius * (targetW / fullSourceW)` でスケーリングした新規 ShaderPass 列を返す (H+V 一対 × N)。blur が無効なら空配列。
+- `captureThumbnail` の opts に `extraPasses?: () => Pass[]` を追加。RenderPass の後、OutputPass の前に挿入される。dispose は captureThumbnail 側で行う。
+- `App.captureThumbnailForPreset()` で `extraPasses: () => this.blurPipeline.createBlurPassesForTarget(thumbW, thumbH, fullDrawingW)` を渡す。
+
+BlurPipeline の単体テスト 6 件追加 (空配列 / 2N 個 / cap / uTexel / radius スケール / uDirection 交互)。
+
 ## 問題
 
 `src/pose-particles/presets/thumbnail-capture.ts:25` の `captureThumbnail()` は

@@ -108,4 +108,40 @@ export class BlurPipeline {
   render(): void {
     this.composer.render();
   }
+
+  /**
+   * Issue #36: サムネ生成用に、現在 enabled な blur 設定をサムネ RT サイズに
+   * スケーリングした新しい ShaderPass 列を返す。RenderPass の後、OutputPass の
+   * 前に挿入する想定。返したパスの dispose は呼び出し側が担当する。
+   *
+   *   - `uTexel` は サムネ RT 上の 1 pixel (= `1/targetW`, `1/targetH`)
+   *   - `uRadius` は `targetW / fullSourceDrawingBufferW` で縮小し、実画面の blur と
+   *     「相対 UV 範囲」が一致するようにする
+   *
+   * blur が無効 (radius=0 / 全 pair disabled) なら空配列を返す。
+   */
+  createBlurPassesForTarget(
+    targetW: number,
+    targetH: number,
+    fullSourceDrawingBufferW: number,
+  ): ShaderPass[] {
+    const passes: ShaderPass[] = [];
+    const texelW = 1 / Math.max(1, targetW);
+    const texelH = 1 / Math.max(1, targetH);
+    const scale = Math.max(1, targetW) / Math.max(1, fullSourceDrawingBufferW);
+    for (const pair of this.blurPairs) {
+      if (!pair.horizontal.enabled) continue;
+      const baseRadius = pair.horizontal.uniforms.uRadius!.value as number;
+      if (baseRadius <= 0) continue;
+      const radius = baseRadius * scale;
+      const h = this.makeBlurPass(1, 0);
+      const v = this.makeBlurPass(0, 1);
+      (h.uniforms.uTexel!.value as THREE.Vector2).set(texelW, texelH);
+      (v.uniforms.uTexel!.value as THREE.Vector2).set(texelW, texelH);
+      h.uniforms.uRadius!.value = radius;
+      v.uniforms.uRadius!.value = radius;
+      passes.push(h, v);
+    }
+    return passes;
+  }
 }

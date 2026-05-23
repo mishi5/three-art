@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { Pass } from "three/examples/jsm/postprocessing/Pass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 
@@ -14,6 +15,12 @@ export interface ThumbnailCaptureOptions {
   quality?: number;
   /** テスト用フック。指定すると Canvas を使わずこの関数の戻り値を返す。 */
   encode?: (buf: Uint8Array, w: number, h: number, mime: string, quality: number) => string;
+  /**
+   * RenderPass の後・OutputPass の前に挿入する追加パス (Blur など)。
+   * 渡したパスの dispose は captureThumbnail 側が描画後に行う。
+   * 呼び出しの都度評価したいので関数で受ける。
+   */
+  extraPasses?: () => Pass[];
   /**
    * テスト用フック。指定時は EffectComposer 経由の描画をスキップし、
    * この関数が返した w*h*4 バイトのバッファを encode に渡す。
@@ -55,7 +62,9 @@ export function captureThumbnail(
   const mime = opts.mime ?? "image/webp";
   const quality = opts.quality ?? 0.7;
 
-  const capture = opts.__captureForTest ?? captureViaComposer;
+  const extraPasses = opts.extraPasses?.() ?? [];
+  const capture = opts.__captureForTest
+    ?? ((r, s, c, ww, hh) => captureViaComposer(r, s, c, ww, hh, extraPasses));
   const buf = capture(renderer, scene, camera, w, h);
 
   const encode = opts.encode ?? encodeWithCanvas;
@@ -73,6 +82,7 @@ function captureViaComposer(
   camera: THREE.Camera,
   w: number,
   h: number,
+  extraPasses: Pass[],
 ): Uint8Array {
   // composer に渡す初期 RT。Uint8 で読み出したいので UnsignedByteType を強制する
   // (EffectComposer のデフォルトは HalfFloatType で、readRenderTargetPixels(Uint8Array) と
@@ -86,6 +96,7 @@ function captureViaComposer(
   const renderPass = new RenderPass(scene, camera);
   const outputPass = new OutputPass();
   composer.addPass(renderPass);
+  for (const pass of extraPasses) composer.addPass(pass);
   composer.addPass(outputPass);
 
   const buf = new Uint8Array(w * h * 4);
@@ -97,6 +108,7 @@ function captureViaComposer(
     // composer.dispose() は内部の renderTarget1 / renderTarget2 を両方 dispose する。
     composer.dispose();
     renderPass.dispose?.();
+    for (const p of extraPasses) p.dispose?.();
     outputPass.dispose();
   }
   return buf;
