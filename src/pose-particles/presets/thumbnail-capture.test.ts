@@ -2,74 +2,101 @@ import { describe, it, expect } from "bun:test";
 import { captureThumbnail } from "./thumbnail-capture";
 
 /**
- * 最低限のオフスクリーン canvas が無いと toDataURL が動かないので、bun の
- * グローバルに document を生やしておく必要がある場合のみ自前で stub する。
- * 通常 bun は OffscreenCanvas / document を持たないので、bufferToDataURL は
- * 「呼ばれた」ことだけ検証する内部 hook を使う。
- *
  * テスト戦略:
- *   - WebGLRenderTarget は three.js 本物を使い (Three.js は WebGL コンテキストが
- *     無くてもオブジェクト構築は通る)、renderer / scene / camera はメソッド呼び出しを
- *     記録する fake を渡す。
- *   - readRenderTargetPixels は buf に 0 を埋める fake。
- *   - encode 部は内部 hook (__encodeForTest) を差し替えて固定文字列を返す。
+ *   - 実画面の OutputPass / tone mapping を経由したサムネ描画を再現するため、
+ *     captureThumbnail は EffectComposer (RenderPass + OutputPass) を内部で
+ *     構築する。bun + happy-dom には本物の WebGL コンテキストが無いので、
+ *     その経路は `__captureForTest` フックで差し替えてテストする。
+ *   - encode 部は既存の `encode` フックで差し替え、合成 data URL を返す。
  */
 
-type Call = { name: string; args: unknown[] };
-
-function makeFakeRenderer(): { calls: Call[]; renderer: any } {
-  const calls: Call[] = [];
-  const renderer = {
-    setRenderTarget(rt: unknown) { calls.push({ name: "setRenderTarget", args: [rt] }); },
-    render(scene: unknown, camera: unknown) { calls.push({ name: "render", args: [scene, camera] }); },
-    readRenderTargetPixels(rt: unknown, x: number, y: number, w: number, h: number, buf: Uint8Array) {
-      calls.push({ name: "readRenderTargetPixels", args: [rt, x, y, w, h, buf.length] });
-      buf.fill(0);
-    },
-  };
-  return { calls, renderer };
-}
-
 describe("captureThumbnail", () => {
-  it("renders into a fresh WebGLRenderTarget then disposes it (no leak)", () => {
-    const { calls, renderer } = makeFakeRenderer();
-    const scene = {} as any;
-    const camera = {} as any;
-    const url = captureThumbnail(renderer as any, scene, camera, {
-      width: 8, height: 4,
-      encode: (_buf, w, h) => `data:image/webp;base64,fake-${w}x${h}`,
-    });
-    // 呼び出し順: setRenderTarget(rt) → render(scene,camera) → readRenderTargetPixels(rt,...) → setRenderTarget(null)
-    expect(calls.map((c) => c.name)).toEqual([
-      "setRenderTarget",
-      "render",
-      "readRenderTargetPixels",
-      "setRenderTarget",
-    ]);
-    // 1 回目は rt object、最後は null で reset
-    expect(calls[0]!.args[0]).not.toBeNull();
-    expect(calls[3]!.args[0]).toBeNull();
-    // 戻り値が encode の出力
-    expect(url).toBe("data:image/webp;base64,fake-8x4");
+  it("delegates rendering to __captureForTest and forwards the buffer to encode", () => {
+    const calls: Array<{ w: number; h: number; rendererSeen: unknown }> = [];
+    const fakeBuf = new Uint8Array(8 * 4 * 4);
+    fakeBuf[0] = 42; // encode に渡るか追跡できる印
+    const url = captureThumbnail(
+      { __renderer: true } as any,
+      { __scene: true } as any,
+      { __camera: true } as any,
+      {
+        width: 8,
+        height: 4,
+        __captureForTest: (renderer, _scene, _camera, w, h) => {
+          calls.push({ w, h, rendererSeen: renderer });
+          return fakeBuf;
+        },
+        encode: (buf, w, h, mime, quality) =>
+          `data:${mime};fake;${w}x${h};${quality};firstByte=${buf[0]}`,
+      },
+    );
+    expect(calls.length).toBe(1);
+    expect(calls[0]!.w).toBe(8);
+    expect(calls[0]!.h).toBe(4);
+    expect((calls[0]!.rendererSeen as { __renderer: boolean }).__renderer).toBe(true);
+    expect(url).toBe("data:image/webp;fake;8x4;0.7;firstByte=42");
   });
 
   it("uses default size 256x144 when not specified", () => {
-    const { calls, renderer } = makeFakeRenderer();
-    captureThumbnail(renderer as any, {} as any, {} as any, {
-      encode: (_buf, w, h) => `data:image/webp;base64,fake-${w}x${h}`,
+    let seenW = 0;
+    let seenH = 0;
+    captureThumbnail({} as any, {} as any, {} as any, {
+      __captureForTest: (_r, _s, _c, w, h) => {
+        seenW = w;
+        seenH = h;
+        return new Uint8Array(w * h * 4);
+      },
+      encode: () => "",
     });
-    const read = calls.find((c) => c.name === "readRenderTargetPixels")!;
-    expect(read.args[3]).toBe(256);
-    expect(read.args[4]).toBe(144);
+    expect(seenW).toBe(256);
+    expect(seenH).toBe(144);
   });
 
-  it("passes a buffer of w*h*4 bytes to readRenderTargetPixels", () => {
-    const { calls, renderer } = makeFakeRenderer();
-    captureThumbnail(renderer as any, {} as any, {} as any, {
-      width: 10, height: 5,
-      encode: () => "x",
+  it("passes scene and camera through to the capture step", () => {
+    const scene = { __id: "scene-x" } as any;
+    const camera = { __id: "camera-y" } as any;
+    let receivedScene: any = null;
+    let receivedCamera: any = null;
+    captureThumbnail({} as any, scene, camera, {
+      width: 2,
+      height: 2,
+      __captureForTest: (_r, s, c, w, h) => {
+        receivedScene = s;
+        receivedCamera = c;
+        return new Uint8Array(w * h * 4);
+      },
+      encode: () => "",
     });
-    const read = calls.find((c) => c.name === "readRenderTargetPixels")!;
-    expect(read.args[5]).toBe(10 * 5 * 4);
+    expect(receivedScene.__id).toBe("scene-x");
+    expect(receivedCamera.__id).toBe("camera-y");
+  });
+
+  it("returns whatever encode returns", () => {
+    const url = captureThumbnail({} as any, {} as any, {} as any, {
+      width: 1,
+      height: 1,
+      __captureForTest: (_r, _s, _c, w, h) => new Uint8Array(w * h * 4),
+      encode: () => "data:image/png;base64,sentinel",
+    });
+    expect(url).toBe("data:image/png;base64,sentinel");
+  });
+
+  it("forwards mime and quality from options into encode", () => {
+    let seenMime = "";
+    let seenQuality = -1;
+    captureThumbnail({} as any, {} as any, {} as any, {
+      width: 1,
+      height: 1,
+      mime: "image/png",
+      quality: 0.42,
+      __captureForTest: (_r, _s, _c, w, h) => new Uint8Array(w * h * 4),
+      encode: (_b, _w, _h, mime, q) => {
+        seenMime = mime;
+        seenQuality = q;
+        return "";
+      },
+    });
+    expect(seenMime).toBe("image/png");
+    expect(seenQuality).toBe(0.42);
   });
 });

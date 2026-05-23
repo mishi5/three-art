@@ -1,4 +1,7 @@
 import * as THREE from "three";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 
 export interface ThumbnailCaptureOptions {
   /** デフォルト 256 */
@@ -11,16 +14,35 @@ export interface ThumbnailCaptureOptions {
   quality?: number;
   /** テスト用フック。指定すると Canvas を使わずこの関数の戻り値を返す。 */
   encode?: (buf: Uint8Array, w: number, h: number, mime: string, quality: number) => string;
+  /**
+   * テスト用フック。指定時は EffectComposer 経由の描画をスキップし、
+   * この関数が返した w*h*4 バイトのバッファを encode に渡す。
+   * bun + happy-dom のように本物の WebGL コンテキストが無い環境用のエスケープハッチ。
+   */
+  __captureForTest?: (
+    renderer: THREE.WebGLRenderer,
+    scene: THREE.Scene,
+    camera: THREE.Camera,
+    w: number,
+    h: number,
+  ) => Uint8Array;
 }
 
 /**
  * シーンを 1 回だけ独立 RT に描き、結果を data URL (WebP/PNG) として返す。
  *
- * preserveDrawingBuffer に依存しないため、毎フレーム保持コストはかからない。
- * RT は呼び出しごとに作って即時 dispose するので GPU メモリも常時占有しない。
+ * 内部で `EffectComposer (RenderPass + OutputPass)` を一時構築する。
+ * これにより本番描画と同じく `renderer.outputColorSpace` (sRGB) と
+ * `renderer.toneMapping` が適用され、リニア色空間でピクセル化した
+ * サムネが全体的に明るく見える (Issue #36) 問題を回避する。
  *
- * 注意: BlurPipeline 等の post-process は通っていない「scene+camera のみの
- * 描画結果」が得られる。サムネとしては十分。
+ * preserveDrawingBuffer に依存しないため、毎フレーム保持コストはかからない。
+ * composer / RT は呼び出しごとに作って即時 dispose するので GPU メモリも
+ * 常時占有しない。
+ *
+ * 注意: 本実装は `BlurPipeline` の blur パスは通っていない。blur 半径が
+ * texel 単位で表現されており、サムネサイズに合わせると過剰/過小になるため、
+ * 「OutputPass による色変換のみ」を最優先で揃えている。
  */
 export function captureThumbnail(
   renderer: THREE.WebGLRenderer,
@@ -33,22 +55,51 @@ export function captureThumbnail(
   const mime = opts.mime ?? "image/webp";
   const quality = opts.quality ?? 0.7;
 
-  const rt = new THREE.WebGLRenderTarget(w, h, {
+  const capture = opts.__captureForTest ?? captureViaComposer;
+  const buf = capture(renderer, scene, camera, w, h);
+
+  const encode = opts.encode ?? encodeWithCanvas;
+  return encode(buf, w, h, mime, quality);
+}
+
+/**
+ * デフォルトの描画ステップ: 専用 EffectComposer (RenderPass + OutputPass) を
+ * 構築し、`renderToScreen = false` で内部 swap buffer に書き、`readBuffer` から
+ * ピクセルを読み出す。最後に composer と pass を dispose して GPU リソースを回収する。
+ */
+function captureViaComposer(
+  renderer: THREE.WebGLRenderer,
+  scene: THREE.Scene,
+  camera: THREE.Camera,
+  w: number,
+  h: number,
+): Uint8Array {
+  // composer に渡す初期 RT。Uint8 で読み出したいので UnsignedByteType を強制する
+  // (EffectComposer のデフォルトは HalfFloatType で、readRenderTargetPixels(Uint8Array) と
+  //  型が合わない)。
+  const target = new THREE.WebGLRenderTarget(w, h, {
     type: THREE.UnsignedByteType,
     format: THREE.RGBAFormat,
   });
-  try {
-    renderer.setRenderTarget(rt);
-    renderer.render(scene, camera);
-    const buf = new Uint8Array(w * h * 4);
-    renderer.readRenderTargetPixels(rt, 0, 0, w, h, buf);
-    renderer.setRenderTarget(null);
+  const composer = new EffectComposer(renderer, target);
+  composer.renderToScreen = false;
+  const renderPass = new RenderPass(scene, camera);
+  const outputPass = new OutputPass();
+  composer.addPass(renderPass);
+  composer.addPass(outputPass);
 
-    const encode = opts.encode ?? encodeWithCanvas;
-    return encode(buf, w, h, mime, quality);
+  const buf = new Uint8Array(w * h * 4);
+  try {
+    composer.render();
+    // 各 pass で swapBuffers されるので、最終出力は readBuffer 側に書かれている。
+    renderer.readRenderTargetPixels(composer.readBuffer, 0, 0, w, h, buf);
   } finally {
-    rt.dispose();
+    // composer.dispose() は内部の renderTarget1 / renderTarget2 を両方 dispose する。
+    composer.dispose();
+    renderPass.dispose?.();
+    outputPass.dispose();
   }
+  return buf;
 }
 
 /**
