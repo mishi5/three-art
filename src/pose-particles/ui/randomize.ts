@@ -103,6 +103,18 @@ export const RANDOMIZE_DESCRIPTORS: ReadonlyArray<ParamDescriptor> = [
   num("edges.anchorCount", 16, 256, 1, BONES),
   num("edges.kNeighbors", 1, 5, 1, BONES),
   num("edges.alpha", 0, 1, 0.01, BONES),
+  // edges 波打ち / リワイヤ (Issue #31)。値域は SettingsPanel と一致させる。
+  bool("edges.wave.enabled", BONES),
+  num("edges.wave.subdivisions", 2, 16, 1, BONES),
+  num("edges.wave.amplitude", 0, 0.5, 0.005, BONES),
+  num("edges.wave.audioBoost", 0, 3, 0.05, BONES),
+  num("edges.wave.scale", 0.5, 10, 0.1, BONES),
+  num("edges.wave.speed", 0, 3, 0.05, BONES),
+  bool("edges.rewire.enabled", BONES),
+  num("edges.rewire.interval", 0, 5, 0.05, BONES),
+  num("edges.rewire.fraction", 0, 1, 0.05, BONES),
+  num("edges.rewire.fadeDuration", 0.05, 1, 0.01, BONES),
+  num("edges.rewire.candidatePool", 1, 10, 1, BONES),
 
   // --- cube / sphere 専用 ---
   num("shape.radius", 0.1, 3, 0.05, SHAPE),

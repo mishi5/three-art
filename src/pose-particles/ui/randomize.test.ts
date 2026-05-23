@@ -5,6 +5,7 @@ import {
   descriptorsForMode,
 } from "./randomize";
 import { makeDefaultSettings, RENDER_MODES, type RenderMode } from "../settings";
+import { settingsLeafPaths } from "./param-docs";
 
 /** Deterministic PRNG so range/clamp assertions are reproducible. */
 function mulberry32(seed: number): () => number {
@@ -48,6 +49,20 @@ describe("RANDOMIZE_DESCRIPTORS", () => {
 
   it("never targets auto.* (control system, not 演出)", () => {
     expect(RANDOMIZE_DESCRIPTORS.some((d) => d.spec.path.startsWith("auto."))).toBe(false);
+  });
+
+  /**
+   * drift 検知: Settings に leaf を追加したのに descriptor を追加し忘れる
+   * 事故 (Issue #37 で実際に起きた、edges.wave/rewire が漏れた件) を防ぐ。
+   * 明示的に除外する leaf 以外、全 leaf が descriptor に登録されていること。
+   */
+  it("covers every Settings leaf except explicit exclusions", () => {
+    const allLeaves = settingsLeafPaths(makeDefaultSettings());
+    const isExcluded = (p: string): boolean =>
+      p === "mode" || p.startsWith("auto.");
+    const covered = new Set(RANDOMIZE_DESCRIPTORS.map((d) => d.spec.path));
+    const missing = allLeaves.filter((p) => !isExcluded(p) && !covered.has(p));
+    expect(missing).toEqual([]);
   });
 });
 
