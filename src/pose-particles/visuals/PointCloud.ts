@@ -28,6 +28,15 @@ const vertexShader = /* glsl */ `
   uniform float uVolumeSize;
   uniform float uMode;          // 0=bones, 1=cube, 2=sphere, 3=lattice, 4=image (float for WebGL1 portability)
   uniform float uLatticeN;      // 格子解像度 (lattice モードのみ使用)
+  uniform float uLatticeBaseShape;       // 0=cube, 1=sphere
+  uniform float uLatticeNoiseScale;
+  uniform float uLatticeNoiseAmount;
+  uniform float uLatticeNoiseSeed;
+  uniform float uLatticeTwist;
+  uniform float uLatticeBend;
+  uniform float uLatticeTaper;
+  uniform float uLatticeRippleFreq;
+  uniform float uLatticeRippleAmp;
   uniform float uImageGridW;    // 画像粒子グリッド W (image モードのみ使用)
   uniform float uImageGridH;    // 画像粒子グリッド H
   uniform float uImagePlaneW;   // 画像平面の幅 (m)
@@ -195,7 +204,7 @@ const vertexShader = /* glsl */ `
       pos = dir * radius + dir * shimmer;
       visAlpha = 0.85;
     } else if (uMode < 3.5) {
-      // lattice: NxNxN 厳密格子。bass shockwave は別 step で追加。
+      // lattice: NxNxN 厳密格子 + 形状歪み + bass shockwave (Issue #14, #41)
       int idx = int(aIndex + 0.5);
       int N = int(uLatticeN + 0.5);
       int N3 = N * N * N;
@@ -210,8 +219,14 @@ const vertexShader = /* glsl */ `
         vec3 cell = vec3(float(ix), float(iy), float(iz));
         float cellSize = uShapeRadius * 2.0 / max(float(N - 1), 1.0);
         vec3 latticePos = (cell - vec3(float(N - 1) * 0.5)) * cellSize;
-        vec3 outwardDir = normalize(latticePos + vec3(1e-5));
-        float r = length(latticePos);
+
+        // shapePos に対して順に: baseShape mapping → 軸変形 → ノイズ warp → ripple
+        // (Issue #41 で段階的に追加。現在はまだ何もしない。)
+        vec3 shapePos = latticePos;
+
+        // shockwave 重畳 (中心は歪み後位置)
+        vec3 outwardDir = normalize(shapePos + vec3(1e-5));
+        float r = length(shapePos);
         float totalDisp = 0.0;
         for (int wi = 0; wi < 4; wi++) {
           float t0 = uWaveTimes[wi];
@@ -222,7 +237,7 @@ const vertexShader = /* glsl */ `
           float osc = sin(waveAge * uWaveOscFreq * 6.2831853);
           totalDisp += uWaveAmplitude * env * osc;
         }
-        pos = latticePos + outwardDir * totalDisp;
+        pos = shapePos + outwardDir * totalDisp;
         pos += outwardDir * shimmer;
         visAlpha = 0.85;
       }
@@ -406,6 +421,15 @@ export class PointCloud {
         uVolumeSize: { value: 5.0 },
         uMode: { value: 0.0 },
         uLatticeN: { value: 12.0 },
+        uLatticeBaseShape: { value: 0.0 },     // cube
+        uLatticeNoiseScale: { value: 1.0 },
+        uLatticeNoiseAmount: { value: 0.0 },
+        uLatticeNoiseSeed: { value: 1.0 },
+        uLatticeTwist: { value: 0.0 },
+        uLatticeBend: { value: 0.0 },
+        uLatticeTaper: { value: 1.0 },
+        uLatticeRippleFreq: { value: 2.0 },
+        uLatticeRippleAmp: { value: 0.0 },
         uImageGridW: { value: 80.0 },
         uImageGridH: { value: 60.0 },
         uImagePlaneW: { value: 0.8 },
@@ -479,6 +503,15 @@ export class PointCloud {
     u.uVolumeSize!.value = settings.pointCloud.volumeSize;
     u.uMode!.value = modeToInt(settings.mode);
     u.uLatticeN!.value = settings.lattice.resolution;
+    u.uLatticeBaseShape!.value = settings.lattice.baseShape === "sphere" ? 1.0 : 0.0;
+    u.uLatticeNoiseScale!.value = settings.lattice.noiseScale;
+    u.uLatticeNoiseAmount!.value = settings.lattice.noiseAmount;
+    u.uLatticeNoiseSeed!.value = settings.lattice.noiseSeed;
+    u.uLatticeTwist!.value = settings.lattice.twist;
+    u.uLatticeBend!.value = settings.lattice.bend;
+    u.uLatticeTaper!.value = settings.lattice.taper;
+    u.uLatticeRippleFreq!.value = settings.lattice.rippleFreq;
+    u.uLatticeRippleAmp!.value = settings.lattice.rippleAmp;
     u.uWaveSpeed!.value = settings.lattice.waveSpeed;
     u.uWaveAmplitude!.value = settings.lattice.waveAmplitude;
     u.uWaveOscFreq!.value = settings.lattice.waveOscFreq;
