@@ -308,6 +308,26 @@ const vertexShader = /* glsl */ `
           float t = mix(tInv, uLatticeTaper, clamp(u, 0.0, 1.0));
           shapePos.xz *= t;
         }
+        // ノイズ warp (3D simplex)。seed は origin offset として効かせる。
+        if (uLatticeNoiseAmount > 0.0) {
+          vec3 q = shapePos * uLatticeNoiseScale + vec3(uLatticeNoiseSeed * 17.3);
+          vec3 offset = vec3(
+            snoise(q),
+            snoise(q + vec3(31.0, 0.0, 0.0)),
+            snoise(q + vec3(0.0, 41.0, 0.0))
+          );
+          shapePos += offset * uLatticeNoiseAmount;
+        }
+        // ripple: 各軸が他軸の三角関数で揺らされる
+        if (uLatticeRippleAmp > 0.0) {
+          vec3 rq = shapePos * uLatticeRippleFreq;
+          vec3 ripple = vec3(
+            sin(rq.y) * cos(rq.z),
+            sin(rq.z) * cos(rq.x),
+            sin(rq.x) * cos(rq.y)
+          );
+          shapePos += ripple * uLatticeRippleAmp;
+        }
 
         // shockwave 重畳 (中心は歪み後位置)
         vec3 outwardDir = normalize(shapePos + vec3(1e-5));
