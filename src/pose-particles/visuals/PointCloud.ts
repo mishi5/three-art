@@ -27,6 +27,7 @@ const vertexShader = /* glsl */ `
   uniform float uBaseSize;
   uniform float uVolumeSize;
   uniform float uMode;          // 0=bones, 1=cube, 2=sphere, 3=lattice, 4=image (float for WebGL1 portability)
+  uniform float uPolyhedron;    // 4 | 6 | 8 | 12 (cube モード時の正多面体面数。Issue #40)
   uniform float uLatticeN;      // 格子解像度 (lattice モードのみ使用)
   uniform float uImageGridW;    // 画像粒子グリッド W (image モードのみ使用)
   uniform float uImageGridH;    // 画像粒子グリッド H
@@ -405,6 +406,7 @@ export class PointCloud {
         uBaseSize: { value: 3.0 },
         uVolumeSize: { value: 5.0 },
         uMode: { value: 0.0 },
+        uPolyhedron: { value: 6.0 },
         uLatticeN: { value: 12.0 },
         uImageGridW: { value: 80.0 },
         uImageGridH: { value: 60.0 },
@@ -478,6 +480,7 @@ export class PointCloud {
     u.uBaseSize!.value = settings.pointCloud.baseSize;
     u.uVolumeSize!.value = settings.pointCloud.volumeSize;
     u.uMode!.value = modeToInt(settings.mode);
+    u.uPolyhedron!.value = settings.shape.polyhedron;
     u.uLatticeN!.value = settings.lattice.resolution;
     u.uWaveSpeed!.value = settings.lattice.waveSpeed;
     u.uWaveAmplitude!.value = settings.lattice.waveAmplitude;
