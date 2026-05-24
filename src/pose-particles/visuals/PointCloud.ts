@@ -273,6 +273,18 @@ const vertexShader = /* glsl */ `
         // shapePos に対して順に: baseShape mapping → 軸変形 → ノイズ warp → ripple
         // (Issue #41 で段階的に追加。現在はまだ何もしない。)
         vec3 shapePos = latticePos;
+        if (uLatticeBaseShape > 0.5) {
+          // cube-to-sphere mapping (Philip Nowell). [-uShapeRadius, +uShapeRadius]^3
+          // を単位立方体に正規化 -> 球に押し込み -> 元のスケールへ戻す。
+          float invR = 1.0 / max(uShapeRadius, 1e-5);
+          vec3 n = latticePos * invR;            // [-1, 1]^3 に正規化
+          vec3 n2 = n * n;
+          vec3 mapped;
+          mapped.x = n.x * sqrt(max(1.0 - n2.y * 0.5 - n2.z * 0.5 + n2.y * n2.z / 3.0, 0.0));
+          mapped.y = n.y * sqrt(max(1.0 - n2.z * 0.5 - n2.x * 0.5 + n2.z * n2.x / 3.0, 0.0));
+          mapped.z = n.z * sqrt(max(1.0 - n2.x * 0.5 - n2.y * 0.5 + n2.x * n2.y / 3.0, 0.0));
+          shapePos = mapped * uShapeRadius;
+        }
 
         // shockwave 重畳 (中心は歪み後位置)
         vec3 outwardDir = normalize(shapePos + vec3(1e-5));
