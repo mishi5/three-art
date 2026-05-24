@@ -11,6 +11,9 @@ export type RenderMode = "bones" | "cube" | "sphere" | "lattice" | "image" | "ra
 
 export const RENDER_MODES: ReadonlyArray<RenderMode> = ["bones", "cube", "sphere", "lattice", "image", "rain"];
 
+export type PolyhedronFaces = 4 | 6 | 8 | 12;
+export const POLYHEDRON_FACES: ReadonlyArray<PolyhedronFaces> = [4, 6, 8, 12];
+
 /** Parameters that body motion can be routed into as a multiplicative boost. */
 export const MOTION_TARGETS = [
   "off",
@@ -199,10 +202,12 @@ export interface Settings {
     timeSpeed: number;
   };
   shape: {
-    /** Half-extent of the cube / radius of the sphere (m). */
+    /** 外接球半径 (中心 → 頂点距離) (m)。Issue #40 で cube モードも sphere と同じ「頂点距離」semantics に統一。 */
     radius: number;
     /** Bass-driven radial pulse strength. */
     bassPulse: number;
+    /** cube モード時の正多面体面数 (4=tetra / 6=cube / 8=octa / 12=dodeca)。default 6。Issue #40。 */
+    polyhedron: PolyhedronFaces;
   };
   color: {
     /** Base hue (0..1, wraps). 0=red, 0.33=green, 0.66=blue. */
@@ -356,6 +361,7 @@ export function makeDefaultSettings(): Settings {
       // ~0.4m fits comfortably in view at camera z=1.0, FOV 50°.
       radius: 0.4,
       bassPulse: 0.5,
+      polyhedron: 6,
     },
     color: {
       hueBase: 0.6,
