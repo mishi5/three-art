@@ -286,6 +286,29 @@ const vertexShader = /* glsl */ `
           shapePos = mapped * uShapeRadius;
         }
 
+        // 軸変形 (twist y軸まわり -> bend y軸まわり -> taper y方向)
+        // すべてデフォルト値 (twist=0, bend=0, taper=1) で恒等変換になる。
+        if (uLatticeTwist != 0.0) {
+          float a = uLatticeTwist * shapePos.y;
+          float ca = cos(a);
+          float sa = sin(a);
+          shapePos.xz = mat2(ca, -sa, sa, ca) * shapePos.xz;
+        }
+        if (uLatticeBend != 0.0) {
+          float a = uLatticeBend * shapePos.y;
+          float ca = cos(a);
+          float sa = sin(a);
+          shapePos.xy = mat2(ca, -sa, sa, ca) * shapePos.xy;
+        }
+        if (uLatticeTaper != 1.0) {
+          // y = +uShapeRadius で xz スケール = uLatticeTaper
+          // y = -uShapeRadius で xz スケール = 1/uLatticeTaper
+          float tInv = 1.0 / max(uLatticeTaper, 1e-3);
+          float u = 0.5 + shapePos.y / (2.0 * uShapeRadius);
+          float t = mix(tInv, uLatticeTaper, clamp(u, 0.0, 1.0));
+          shapePos.xz *= t;
+        }
+
         // shockwave 重畳 (中心は歪み後位置)
         vec3 outwardDir = normalize(shapePos + vec3(1e-5));
         float r = length(shapePos);
