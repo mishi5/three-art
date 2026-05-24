@@ -37,6 +37,10 @@ export const MOTION_TARGETS = [
   "blur.strength",
   "lattice.waveAmplitude",
   "lattice.waveOscFreq",
+  "lattice.noiseAmount",
+  "lattice.twist",
+  "lattice.bend",
+  "lattice.rippleAmp",
   "image.pushAmount",
   "image.noiseAmp",
   "image.waveStrength",
@@ -79,6 +83,8 @@ export interface ImageSettings {
   particleShape: "circle" | "square";
 }
 
+export type LatticeBaseShape = "cube" | "sphere";
+
 export interface LatticeSettings {
   /** 格子解像度 NxNxN。8..17 */
   resolution: number;
@@ -94,6 +100,25 @@ export interface LatticeSettings {
   onsetThreshold: number;
   /** onset クールダウン (sec)。0.05..0.5 */
   onsetCooldown: number;
+  // --- 形状歪み (Issue #41) ---
+  /** ベース形状。"cube" は現状互換 (NxNxN 立方格子)、"sphere" は cube-to-sphere マッピング。 */
+  baseShape: LatticeBaseShape;
+  /** ノイズ warp の空間周波数 (1/m)。0.1..3.0。 */
+  noiseScale: number;
+  /** ノイズ warp の振幅 (m)。0..0.5。0 で歪みなし。 */
+  noiseAmount: number;
+  /** ノイズ warp のシード (1..16 整数)。形を変えるキー。 */
+  noiseSeed: number;
+  /** y 軸まわりのねじり (rad/m)。-π..+π。0 で歪みなし。 */
+  twist: number;
+  /** y 軸まわりの曲げ (rad/m)。-π/4..+π/4。0 で歪みなし。 */
+  bend: number;
+  /** 上下スケール差。0.3..1.7。1.0 で歪みなし。 */
+  taper: number;
+  /** ripple の空間周波数 (1/m)。0.5..6.0。 */
+  rippleFreq: number;
+  /** ripple の振幅 (m)。0..0.3。0 で歪みなし。 */
+  rippleAmp: number;
 }
 
 export type RainBinMapping = "linear" | "log";
@@ -406,6 +431,16 @@ export function makeDefaultSettings(): Settings {
       waveDamping: 0.4,
       onsetThreshold: 0.15,
       onsetCooldown: 0.12,
+      // 形状歪み (Issue #41) — デフォルトは「歪みなし」で従来挙動と完全互換
+      baseShape: "cube",
+      noiseScale: 1.0,
+      noiseAmount: 0.0,
+      noiseSeed: 1,
+      twist: 0.0,
+      bend: 0.0,
+      taper: 1.0,
+      rippleFreq: 2.0,
+      rippleAmp: 0.0,
     },
     image: {
       preset: "sample-01.svg",

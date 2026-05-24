@@ -127,6 +127,16 @@ export const RANDOMIZE_DESCRIPTORS: ReadonlyArray<ParamDescriptor> = [
   // --- lattice 専用 ---
   num("lattice.resolution", 8, 17, 1, LATTICE),
   num("lattice.waveAmplitude", 0.0, 0.5, 0.005, LATTICE),
+  // --- lattice 形状歪み (Issue #41) ---
+  enm("lattice.baseShape", ["cube", "sphere"], LATTICE),
+  num("lattice.noiseScale", 0.1, 3.0, 0.05, LATTICE),
+  num("lattice.noiseAmount", 0.0, 0.5, 0.005, LATTICE),
+  num("lattice.noiseSeed", 1, 16, 1, LATTICE),
+  num("lattice.twist", -Math.PI, Math.PI, 0.05, LATTICE),
+  num("lattice.bend", -Math.PI / 4, Math.PI / 4, 0.02, LATTICE),
+  num("lattice.taper", 0.3, 1.7, 0.02, LATTICE),
+  num("lattice.rippleFreq", 0.5, 6.0, 0.1, LATTICE),
+  num("lattice.rippleAmp", 0.0, 0.3, 0.005, LATTICE),
 
   // --- lattice + image 共有 (波動) ---
   num("lattice.waveSpeed", 0.5, 3.0, 0.05, LATTICE_IMAGE),

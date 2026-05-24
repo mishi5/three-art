@@ -318,6 +318,42 @@ export const PARAM_DOCS: Record<string, ParamDoc> = {
     summary: "onset 検出後の不応時間 (sec)。lattice + image 共有。",
     effect: "上げるほど波の発生間隔が空く。下げると連続して波立つ。",
   },
+  "lattice.baseShape": {
+    summary: "lattice のベース形状 (cube / sphere)。",
+    effect: "cube は立方格子。sphere は格子全体を球体ボリュームにマッピングする。",
+  },
+  "lattice.noiseScale": {
+    summary: "ノイズ warp の空間周波数 (1/m)。",
+    effect: "上げるほど細かいうねりに、下げるほど大ぶりなうねりになる。",
+  },
+  "lattice.noiseAmount": {
+    summary: "ノイズ warp の振幅 (m, 0..0.5)。",
+    effect: "上げるほど格子が連続的にうねって歪む。0 でノイズ歪みなし。",
+  },
+  "lattice.noiseSeed": {
+    summary: "ノイズのシード (整数)。",
+    effect: "変えると別のうねり形になる。形は変えたいが量は変えたくないときに使う。",
+  },
+  "lattice.twist": {
+    summary: "y 軸まわりのねじり (rad/m)。",
+    effect: "上下に行くほど xz 平面が回転する。0 でねじりなし。",
+  },
+  "lattice.bend": {
+    summary: "y 軸まわりの曲げ (rad/m)。",
+    effect: "上下に行くほど xy 平面で傾く (片側に倒れる)。0 で曲げなし。",
+  },
+  "lattice.taper": {
+    summary: "上下スケール差 (0.3..1.7)。",
+    effect: "1 より大きいと上が広がり下がすぼまる、小さいと逆。1.0 で歪みなし。",
+  },
+  "lattice.rippleFreq": {
+    summary: "ripple の空間周波数 (1/m)。",
+    effect: "上げるほど細かい凹凸、下げるほど大きな凹凸になる。",
+  },
+  "lattice.rippleAmp": {
+    summary: "ripple の振幅 (m, 0..0.3)。",
+    effect: "上げるほど三角関数的な凹凸が強く出る。0 で ripple なし。",
+  },
 
   "image.preset": {
     summary: "ドット化するプリセット画像 (uploaded はアップロード済み画像)。",

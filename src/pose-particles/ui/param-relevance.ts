@@ -95,6 +95,16 @@ const RELEVANCE: Record<string, ReadonlySet<RenderMode>> = {
   "lattice.waveDamping": new Set(WAVE_SHARED),
   "lattice.onsetThreshold": new Set(["lattice"]),
   "lattice.onsetCooldown": new Set(["lattice"]),
+  // 形状歪み (Issue #41): 全て lattice 専用
+  "lattice.baseShape": new Set(["lattice"]),
+  "lattice.noiseScale": new Set(["lattice"]),
+  "lattice.noiseAmount": new Set(["lattice"]),
+  "lattice.noiseSeed": new Set(["lattice"]),
+  "lattice.twist": new Set(["lattice"]),
+  "lattice.bend": new Set(["lattice"]),
+  "lattice.taper": new Set(["lattice"]),
+  "lattice.rippleFreq": new Set(["lattice"]),
+  "lattice.rippleAmp": new Set(["lattice"]),
 
   "image.preset": new Set(["image"]),
   "image.gridW": new Set(["image"]),

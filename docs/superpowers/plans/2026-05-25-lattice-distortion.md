@@ -190,14 +190,14 @@ export interface LatticeSettings {
 ```ts
   // --- lattice 形状歪み (Issue #41) ---
   enm("lattice.baseShape", ["cube", "sphere"], LATTICE),
-  num("lattice.noiseScale", 0.5, 2.5, 0.05, LATTICE),
-  num("lattice.noiseAmount", 0.0, 0.3, 0.005, LATTICE),
+  num("lattice.noiseScale", 0.1, 3.0, 0.05, LATTICE),
+  num("lattice.noiseAmount", 0.0, 0.5, 0.005, LATTICE),
   num("lattice.noiseSeed", 1, 16, 1, LATTICE),
   num("lattice.twist", -Math.PI, Math.PI, 0.05, LATTICE),
   num("lattice.bend", -Math.PI / 4, Math.PI / 4, 0.02, LATTICE),
-  num("lattice.taper", 0.5, 1.5, 0.02, LATTICE),
-  num("lattice.rippleFreq", 1.0, 4.0, 0.1, LATTICE),
-  num("lattice.rippleAmp", 0.0, 0.15, 0.005, LATTICE),
+  num("lattice.taper", 0.3, 1.7, 0.02, LATTICE),
+  num("lattice.rippleFreq", 0.5, 6.0, 0.1, LATTICE),
+  num("lattice.rippleAmp", 0.0, 0.3, 0.005, LATTICE),
 ```
 
 ### Step 1.7: `param-relevance.ts` に 9 エントリ追加
@@ -223,7 +223,7 @@ export interface LatticeSettings {
 
 ```ts
   "lattice.baseShape": {
-    summary: "lattice のベース形状 (cube / sphere)。Issue #41。",
+    summary: "lattice のベース形状 (cube / sphere)。",
     effect: "cube は立方格子。sphere は格子全体を球体ボリュームにマッピングする。",
   },
   "lattice.noiseScale": {
@@ -247,7 +247,7 @@ export interface LatticeSettings {
     effect: "上下に行くほど xy 平面で傾く (片側に倒れる)。0 で曲げなし。",
   },
   "lattice.taper": {
-    summary: "上下スケール差 (0.5..1.5)。",
+    summary: "上下スケール差 (0.3..1.7)。",
     effect: "1 より大きいと上が広がり下がすぼまる、小さいと逆。1.0 で歪みなし。",
   },
   "lattice.rippleFreq": {
