@@ -48,6 +48,7 @@ const RELEVANCE: Record<string, ReadonlySet<RenderMode>> = {
   // bones では PointCloud 内未使用だが EdgeOverlay で参照されるため実効。
   "shape.radius": new Set(PARTICLE),
   "shape.bassPulse": new Set(PARTICLE),
+  "shape.polyhedron": new Set(["cube"]),
 
   "camera.autoRotateSpeed": new Set(ALL),
 
