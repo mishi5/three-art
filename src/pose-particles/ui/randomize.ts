@@ -25,11 +25,16 @@ export interface ParamDescriptor {
 }
 
 // --- mode グループ -------------------------------------------------------
+// param-relevance.ts と歩調を合わせること (各 leaf が「実際に効く mode」=
+// relevance のキー集合に対応)。
 const ALL: ReadonlyArray<RenderMode> = ["bones", "cube", "sphere", "lattice", "image", "rain"];
 /** PointCloud で点を描く mode (image=独自グリッド, rain=線分なので除外)。 */
 const POINT: ReadonlyArray<RenderMode> = ["bones", "cube", "sphere", "lattice"];
 const BONES: ReadonlyArray<RenderMode> = ["bones"];
-const SHAPE: ReadonlyArray<RenderMode> = ["cube", "sphere"];
+/** shape.* が効く mode (Issue #37): relevance の PARTICLE と一致 (image は色を画像 RGB から取るため除外、rain は粒子群を描かないため除外)。 */
+const SHAPE_MODES: ReadonlyArray<RenderMode> = ["bones", "cube", "sphere", "lattice"];
+/** EdgeOverlay が描画される mode (Issue #37): relevance の EDGE_MODES と一致。 */
+const EDGE: ReadonlyArray<RenderMode> = ["bones", "cube", "sphere"];
 const LATTICE: ReadonlyArray<RenderMode> = ["lattice"];
 /** 中心波動を共有する lattice + image。 */
 const LATTICE_IMAGE: ReadonlyArray<RenderMode> = ["lattice", "image"];
@@ -55,9 +60,6 @@ function enm(
 ): ParamDescriptor {
   return { spec: { path, kind: "enum", options }, modes };
 }
-
-/** image.preset の実プリセット ("(uploaded)" タグは乱数対象に含めない)。 */
-const IMAGE_PRESET_OPTIONS = ["sample-01.svg", "sample-02.svg"] as const;
 
 export const RANDOMIZE_DESCRIPTORS: ReadonlyArray<ParamDescriptor> = [
   // --- common (全 mode) ---
@@ -97,28 +99,30 @@ export const RANDOMIZE_DESCRIPTORS: ReadonlyArray<ParamDescriptor> = [
   num("pointCloud.baseSize", 0, 10, 0.1, POINT),
   num("pointCloud.volumeSize", 0, 20, 0.1, POINT),
 
-  // --- bones 専用 (関節クラスタ / アンカー辺) ---
+  // --- bones 専用 (関節クラスタ) ---
   num("pointCloud.bassExpansion", 0, 8, 0.1, BONES),
-  bool("edges.enabled", BONES),
-  num("edges.anchorCount", 16, 256, 1, BONES),
-  num("edges.kNeighbors", 1, 5, 1, BONES),
-  num("edges.alpha", 0, 1, 0.01, BONES),
-  // edges 波打ち / リワイヤ (Issue #31)。値域は SettingsPanel と一致させる。
-  bool("edges.wave.enabled", BONES),
-  num("edges.wave.subdivisions", 2, 16, 1, BONES),
-  num("edges.wave.amplitude", 0, 0.5, 0.005, BONES),
-  num("edges.wave.audioBoost", 0, 3, 0.05, BONES),
-  num("edges.wave.scale", 0.5, 10, 0.1, BONES),
-  num("edges.wave.speed", 0, 3, 0.05, BONES),
-  bool("edges.rewire.enabled", BONES),
-  num("edges.rewire.interval", 0, 5, 0.05, BONES),
-  num("edges.rewire.fraction", 0, 1, 0.05, BONES),
-  num("edges.rewire.fadeDuration", 0.05, 1, 0.01, BONES),
-  num("edges.rewire.candidatePool", 1, 10, 1, BONES),
 
-  // --- cube / sphere 専用 ---
-  num("shape.radius", 0.1, 3, 0.05, SHAPE),
-  num("shape.bassPulse", 0, 3, 0.05, SHAPE),
+  // --- EdgeOverlay (bones/cube/sphere; Issue #37 で cube/sphere まで拡張) ---
+  bool("edges.enabled", EDGE),
+  num("edges.anchorCount", 16, 256, 1, EDGE),
+  num("edges.kNeighbors", 1, 5, 1, EDGE),
+  num("edges.alpha", 0, 1, 0.01, EDGE),
+  // edges 波打ち / リワイヤ (Issue #31)。値域は SettingsPanel と一致させる。
+  bool("edges.wave.enabled", EDGE),
+  num("edges.wave.subdivisions", 2, 16, 1, EDGE),
+  num("edges.wave.amplitude", 0, 0.5, 0.005, EDGE),
+  num("edges.wave.audioBoost", 0, 3, 0.05, EDGE),
+  num("edges.wave.scale", 0.5, 10, 0.1, EDGE),
+  num("edges.wave.speed", 0, 3, 0.05, EDGE),
+  bool("edges.rewire.enabled", EDGE),
+  num("edges.rewire.interval", 0, 5, 0.05, EDGE),
+  num("edges.rewire.fraction", 0, 1, 0.05, EDGE),
+  num("edges.rewire.fadeDuration", 0.05, 1, 0.01, EDGE),
+  num("edges.rewire.candidatePool", 1, 10, 1, EDGE),
+
+  // --- shape.* (bones/cube/sphere/lattice; Issue #37 で bones/lattice まで拡張) ---
+  num("shape.radius", 0.1, 3, 0.05, SHAPE_MODES),
+  num("shape.bassPulse", 0, 3, 0.05, SHAPE_MODES),
 
   // --- lattice 専用 ---
   num("lattice.resolution", 8, 17, 1, LATTICE),
@@ -132,7 +136,9 @@ export const RANDOMIZE_DESCRIPTORS: ReadonlyArray<ParamDescriptor> = [
   num("lattice.onsetCooldown", 0.05, 0.5, 0.005, LATTICE_IMAGE),
 
   // --- image 専用 ---
-  enm("image.preset", [...IMAGE_PRESET_OPTIONS], IMAGE),
+  // image.preset (Issue #37): プリセットファイルが見つからない環境でロード
+  // エラーになるため、ランダム化対象から除外。プリセット切替はユーザが GUI
+  // から明示的に行う。
   num("image.gridW", 8, 120, 1, IMAGE),
   num("image.gridH", 8, 120, 1, IMAGE),
   num("image.pushAmount", 0, 2, 0.05, IMAGE),

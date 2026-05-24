@@ -55,11 +55,16 @@ describe("RANDOMIZE_DESCRIPTORS", () => {
    * drift 検知: Settings に leaf を追加したのに descriptor を追加し忘れる
    * 事故 (Issue #37 で実際に起きた、edges.wave/rewire が漏れた件) を防ぐ。
    * 明示的に除外する leaf 以外、全 leaf が descriptor に登録されていること。
+   *
+   * 除外:
+   * - `mode`: render mode 自体 (ランダム化対象外)
+   * - `auto.*`: 制御系 (演出ではない)
+   * - `image.preset`: ファイル欠落でロードエラーになるため (Issue #37)
    */
   it("covers every Settings leaf except explicit exclusions", () => {
     const allLeaves = settingsLeafPaths(makeDefaultSettings());
     const isExcluded = (p: string): boolean =>
-      p === "mode" || p.startsWith("auto.");
+      p === "mode" || p.startsWith("auto.") || p === "image.preset";
     const covered = new Set(RANDOMIZE_DESCRIPTORS.map((d) => d.spec.path));
     const missing = allLeaves.filter((p) => !isExcluded(p) && !covered.has(p));
     expect(missing).toEqual([]);
@@ -80,47 +85,53 @@ describe("descriptorsForMode", () => {
     }
   });
 
-  it("image mode includes image.* and shared lattice wave, excludes rain/shape/edges", () => {
+  it("image mode includes image.* and shared lattice wave, excludes rain/shape/edges; never image.preset (Issue #37)", () => {
     const p = paths("image");
     expect(p).toContain("image.gridW");
-    expect(p).toContain("image.preset");
     expect(p).toContain("lattice.waveSpeed");
+    expect(p).not.toContain("image.preset"); // #37: preset 欠落でロードエラーを誘発するため対象外
     expect(p).not.toContain("lattice.resolution");
     expect(p).not.toContain("rain.baseSpeed");
     expect(p).not.toContain("shape.radius");
     expect(p).not.toContain("edges.enabled");
   });
 
-  it("bones mode includes joint/edge params, excludes shape/image/rain/lattice", () => {
+  it("bones mode includes joint/edge/shape params (Issue #37), excludes image/rain/lattice", () => {
     const p = paths("bones");
     expect(p).toContain("pointCloud.bassExpansion");
     expect(p).toContain("edges.enabled");
+    expect(p).toContain("edges.wave.amplitude");
+    expect(p).toContain("edges.rewire.interval");
     expect(p).toContain("pointCloud.baseSize");
-    expect(p).not.toContain("shape.radius");
+    expect(p).toContain("shape.radius"); // #37: bones にも追加 (relevance: PARTICLE)
     expect(p).not.toContain("image.gridW");
     expect(p).not.toContain("rain.baseSpeed");
     expect(p).not.toContain("lattice.waveSpeed");
   });
 
-  it("cube/sphere modes include shape, exclude bones-only edges/bassExpansion", () => {
+  it("cube/sphere modes include shape and edges (Issue #37), exclude bones-only bassExpansion", () => {
     for (const m of ["cube", "sphere"] as const) {
       const p = paths(m);
       expect(p).toContain("shape.radius");
       expect(p).toContain("pointCloud.baseSize");
-      expect(p).not.toContain("edges.enabled");
+      expect(p).toContain("edges.enabled"); // #37: EdgeOverlay は cube/sphere でも描画される
+      expect(p).toContain("edges.wave.amplitude");
+      expect(p).toContain("edges.rewire.interval");
       expect(p).not.toContain("pointCloud.bassExpansion");
       expect(p).not.toContain("image.gridW");
     }
   });
 
-  it("lattice mode includes full lattice.* incl resolution", () => {
+  it("lattice mode includes full lattice.* incl resolution and shape (Issue #37)", () => {
     const p = paths("lattice");
     expect(p).toContain("lattice.resolution");
     expect(p).toContain("lattice.waveAmplitude");
     expect(p).toContain("lattice.waveSpeed");
     expect(p).toContain("pointCloud.baseSize");
+    expect(p).toContain("shape.radius"); // #37: lattice にも追加 (relevance: PARTICLE)
     expect(p).not.toContain("image.gridW");
     expect(p).not.toContain("rain.baseSpeed");
+    expect(p).not.toContain("edges.enabled");
   });
 
   it("rain mode includes rain.* only for mode-specific group", () => {
@@ -213,10 +224,11 @@ describe("randomizeSettings", () => {
     }
   });
 
-  it("image.preset never randomizes to the (uploaded) tag", () => {
+  it("image.preset is never mutated (Issue #37: removed from descriptors)", () => {
     for (let seed = 0; seed < 50; seed++) {
-      const out = randomizeSettings(makeDefaultSettings(), "image", mulberry32(seed + 1));
-      expect(out.image.preset).not.toBe("(uploaded)");
+      const base = makeDefaultSettings();
+      const out = randomizeSettings(base, "image", mulberry32(seed + 1));
+      expect(out.image.preset).toBe(base.image.preset);
     }
   });
 });
