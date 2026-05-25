@@ -140,6 +140,12 @@ export class SettingsPanel {
     const modeZone = this.gui.addFolder("Mode");
     this.tabFolders.set("Mode", modeZone);
     const shape = modeZone.addFolder("Shape (cube / sphere)");
+    shape.add(settings.shape, "polyhedron", {
+      "4 (tetrahedron)": 4,
+      "6 (cube)": 6,
+      "8 (octahedron)": 8,
+      "12 (dodecahedron)": 12,
+    }).name("polyhedron faces");
     shape.add(settings.shape, "radius", 0.1, 3, 0.05).name("radius / half-size");
     shape.add(settings.shape, "bassPulse", 0, 3, 0.05).name("bass pulse");
 

@@ -4,6 +4,7 @@ import {
   modeToInt,
   makeDefaultSettings,
   MOTION_TARGETS,
+  POLYHEDRON_FACES,
 } from "./settings";
 
 describe("RenderMode", () => {
@@ -138,5 +139,16 @@ describe("MOTION_TARGETS", () => {
     expect(MOTION_TARGETS).toContain("image.pushAmount");
     expect(MOTION_TARGETS).toContain("image.noiseAmp");
     expect(MOTION_TARGETS).toContain("image.waveStrength");
+  });
+});
+
+describe("ShapeSettings polyhedron (Issue #40)", () => {
+  test("makeDefaultSettings().shape.polyhedron === 6 (現状 cube の見た目互換)", () => {
+    const s = makeDefaultSettings();
+    expect(s.shape.polyhedron).toBe(6);
+  });
+
+  test("POLYHEDRON_FACES は 4/6/8/12 の 4 値", () => {
+    expect(POLYHEDRON_FACES).toEqual([4, 6, 8, 12]);
   });
 });

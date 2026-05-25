@@ -16,7 +16,8 @@ import { setByPath } from "../automation/setByPath";
 export type RandSpec =
   | { path: string; kind: "number"; min: number; max: number; step: number }
   | { path: string; kind: "boolean" }
-  | { path: string; kind: "enum"; options: ReadonlyArray<string> };
+  | { path: string; kind: "enum"; options: ReadonlyArray<string> }
+  | { path: string; kind: "numEnum"; options: ReadonlyArray<number> };
 
 export interface ParamDescriptor {
   spec: RandSpec;
@@ -31,6 +32,7 @@ const ALL: ReadonlyArray<RenderMode> = ["bones", "cube", "sphere", "lattice", "i
 /** PointCloud で点を描く mode (image=独自グリッド, rain=線分なので除外)。 */
 const POINT: ReadonlyArray<RenderMode> = ["bones", "cube", "sphere", "lattice"];
 const BONES: ReadonlyArray<RenderMode> = ["bones"];
+const CUBE: ReadonlyArray<RenderMode> = ["cube"];
 /** shape.* が効く mode (Issue #37): relevance の PARTICLE と一致 (image は色を画像 RGB から取るため除外、rain は粒子群を描かないため除外)。 */
 const SHAPE_MODES: ReadonlyArray<RenderMode> = ["bones", "cube", "sphere", "lattice"];
 /** EdgeOverlay が描画される mode (Issue #37): relevance の EDGE_MODES と一致。 */
@@ -59,6 +61,13 @@ function enm(
   modes: ReadonlyArray<RenderMode>,
 ): ParamDescriptor {
   return { spec: { path, kind: "enum", options }, modes };
+}
+function numEnm(
+  path: string,
+  options: ReadonlyArray<number>,
+  modes: ReadonlyArray<RenderMode>,
+): ParamDescriptor {
+  return { spec: { path, kind: "numEnum", options }, modes };
 }
 
 export const RANDOMIZE_DESCRIPTORS: ReadonlyArray<ParamDescriptor> = [
@@ -123,6 +132,8 @@ export const RANDOMIZE_DESCRIPTORS: ReadonlyArray<ParamDescriptor> = [
   // --- shape.* (bones/cube/sphere/lattice; Issue #37 で bones/lattice まで拡張) ---
   num("shape.radius", 0.1, 3, 0.05, SHAPE_MODES),
   num("shape.bassPulse", 0, 3, 0.05, SHAPE_MODES),
+  // --- shape.polyhedron (cube 専用; Issue #40) ---
+  numEnm("shape.polyhedron", [4, 6, 8, 12], CUBE),
 
   // --- lattice 専用 ---
   num("lattice.resolution", 8, 17, 1, LATTICE),
@@ -209,7 +220,11 @@ export function randomizeSettings(
       value = steppedNumber(spec, rng);
     } else if (spec.kind === "boolean") {
       value = rng() < 0.5;
+    } else if (spec.kind === "numEnum") {
+      const idx = Math.min(spec.options.length - 1, Math.floor(rng() * spec.options.length));
+      value = spec.options[idx];
     } else {
+      // enum (string)
       const idx = Math.min(spec.options.length - 1, Math.floor(rng() * spec.options.length));
       value = spec.options[idx];
     }

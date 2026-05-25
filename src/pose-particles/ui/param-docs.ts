@@ -144,6 +144,10 @@ export const PARAM_DOCS: Record<string, ParamDoc> = {
     summary: "低音に応じた立体の放射状パルス強度。",
     effect: "上げるほど低音で立体が大きく脈動する。0 で脈動しない。",
   },
+  "shape.polyhedron": {
+    summary: "cube モードの正多面体面数 (4=正四面体 / 6=正六面体 / 8=正八面体 / 12=正十二面体)。",
+    effect: "面数を変えると粒子表面の形状が切り替わる。cube モード以外では効果なし。",
+  },
 
   "color.hueBase": {
     summary: "基準色相 (0..1, ループ。0=赤 0.33=緑 0.66=青)。",

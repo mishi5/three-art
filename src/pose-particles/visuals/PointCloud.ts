@@ -27,6 +27,7 @@ const vertexShader = /* glsl */ `
   uniform float uBaseSize;
   uniform float uVolumeSize;
   uniform float uMode;          // 0=bones, 1=cube, 2=sphere, 3=lattice, 4=image (float for WebGL1 portability)
+  uniform float uPolyhedron;    // 4 | 6 | 8 | 12 (cube モード時の正多面体面数。Issue #40)
   uniform float uLatticeN;      // 格子解像度 (lattice モードのみ使用)
   uniform float uLatticeBaseShape;       // 0=cube, 1=sphere
   uniform float uLatticeNoiseScale;
@@ -195,6 +196,104 @@ const vertexShader = /* glsl */ `
     return uVisibility[12];
   }
 
+  // ---- 正多面体サンプリング (Issue #40) ----
+  // 全関数は外接球半径 1 の単位多面体上の点を返す。
+  // caller 側で uShapeRadius を掛けて scale する。
+
+  vec3 sampleTri(vec3 A, vec3 B, vec3 C, vec2 r) {
+    float s = sqrt(r.x);
+    return (1.0 - s) * A + s * (1.0 - r.y) * B + s * r.y * C;
+  }
+
+  vec3 sampleTetrahedron(float faceHash, vec2 r) {
+    // 頂点 (1,1,1) / sqrt(3), (1,-1,-1) / sqrt(3), (-1,1,-1) / sqrt(3), (-1,-1,1) / sqrt(3)
+    float inv = 1.0 / sqrt(3.0);
+    vec3 v0 = vec3( 1.0,  1.0,  1.0) * inv;
+    vec3 v1 = vec3( 1.0, -1.0, -1.0) * inv;
+    vec3 v2 = vec3(-1.0,  1.0, -1.0) * inv;
+    vec3 v3 = vec3(-1.0, -1.0,  1.0) * inv;
+    if      (faceHash < 0.25) return sampleTri(v0, v1, v2, r);
+    else if (faceHash < 0.50) return sampleTri(v0, v2, v3, r);
+    else if (faceHash < 0.75) return sampleTri(v0, v3, v1, r);
+    else                      return sampleTri(v1, v3, v2, r);
+  }
+
+  vec3 sampleCube(float faceHash, vec2 r) {
+    // 既存ロジックを 1/sqrt(3) で正規化 (外接球半径 1)
+    vec2 uv = (r - 0.5) * 2.0;
+    vec3 p;
+    if      (faceHash < 0.16667) p = vec3( 1.0, uv.x, uv.y);
+    else if (faceHash < 0.33333) p = vec3(-1.0, uv.x, uv.y);
+    else if (faceHash < 0.50000) p = vec3(uv.x,  1.0, uv.y);
+    else if (faceHash < 0.66667) p = vec3(uv.x, -1.0, uv.y);
+    else if (faceHash < 0.83333) p = vec3(uv.x, uv.y,  1.0);
+    else                         p = vec3(uv.x, uv.y, -1.0);
+    return p / sqrt(3.0);
+  }
+
+  vec3 sampleOctahedron(float faceHash, vec2 r) {
+    // 6 頂点はすでに外接球半径 1
+    vec3 px = vec3( 1.0,  0.0,  0.0);
+    vec3 nx = vec3(-1.0,  0.0,  0.0);
+    vec3 py = vec3( 0.0,  1.0,  0.0);
+    vec3 ny = vec3( 0.0, -1.0,  0.0);
+    vec3 pz = vec3( 0.0,  0.0,  1.0);
+    vec3 nz = vec3( 0.0,  0.0, -1.0);
+    // 8 octant の三角形
+    if      (faceHash < 0.125) return sampleTri(px, py, pz, r);
+    else if (faceHash < 0.250) return sampleTri(px, pz, ny, r);
+    else if (faceHash < 0.375) return sampleTri(px, ny, nz, r);
+    else if (faceHash < 0.500) return sampleTri(px, nz, py, r);
+    else if (faceHash < 0.625) return sampleTri(nx, pz, py, r);
+    else if (faceHash < 0.750) return sampleTri(nx, ny, pz, r);
+    else if (faceHash < 0.875) return sampleTri(nx, nz, ny, r);
+    else                       return sampleTri(nx, py, nz, r);
+  }
+
+  vec3 dodecaFaceNormal(int i) {
+    // 12 面の単位法線 (= 正二十面体頂点を 1/sqrt(2+phi) で正規化)
+    // phi = (1+sqrt(5))/2 ≈ 1.61803, 1/sqrt(2+phi) ≈ 0.52573, phi/sqrt(2+phi) ≈ 0.85065
+    if (i == 0)  return vec3(0.0,  0.52573,  0.85065);
+    if (i == 1)  return vec3(0.0,  0.52573, -0.85065);
+    if (i == 2)  return vec3(0.0, -0.52573,  0.85065);
+    if (i == 3)  return vec3(0.0, -0.52573, -0.85065);
+    if (i == 4)  return vec3( 0.52573,  0.85065, 0.0);
+    if (i == 5)  return vec3( 0.52573, -0.85065, 0.0);
+    if (i == 6)  return vec3(-0.52573,  0.85065, 0.0);
+    if (i == 7)  return vec3(-0.52573, -0.85065, 0.0);
+    if (i == 8)  return vec3( 0.85065, 0.0,  0.52573);
+    if (i == 9)  return vec3( 0.85065, 0.0, -0.52573);
+    if (i == 10) return vec3(-0.85065, 0.0,  0.52573);
+    return            vec3(-0.85065, 0.0, -0.52573);  // i == 11
+  }
+
+  vec3 sampleDodecahedron(float faceHash, vec3 r) {
+    // faceHash で 12 面選択、r.z で 5 fan 三角形選択、r.xy で重心サンプリング
+    int faceIdx = int(floor(faceHash * 12.0));
+    if (faceIdx > 11) faceIdx = 11;
+    vec3 n = dodecaFaceNormal(faceIdx);
+
+    // 面平面の orthonormal basis (法線から構成、向きの一意性は不要 = 重心サンプリングは回転対称)
+    vec3 helper = abs(n.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 u = normalize(cross(helper, n));
+    vec3 v = cross(n, u);
+
+    // 面の幾何
+    float rIn  = 0.79465447;   // 単位 dodecahedron の inradius (中心 → 面)
+    float rho  = 0.60706548;   // 面中心 → pentagon 頂点 (face plane 上)
+    vec3 center = n * rIn;
+
+    // 5 fan 三角形 (center, ringK, ringK+1) のうち 1 つを選択
+    int k = int(floor(r.z * 5.0));
+    if (k > 4) k = 4;
+    float twoPi = 6.2831853;
+    float a0 = float(k) * (twoPi / 5.0);
+    float a1 = float(k + 1) * (twoPi / 5.0);
+    vec3 vert0 = center + rho * (cos(a0) * u + sin(a0) * v);
+    vec3 vert1 = center + rho * (cos(a1) * u + sin(a1) * v);
+    return sampleTri(center, vert0, vert1, r.xy);
+  }
+
   void main() {
     int jointIdx = int(aJointIndex + 0.5);
     vec3 pos;
@@ -227,21 +326,23 @@ const vertexShader = /* glsl */ `
       float visGate = smoothstep(0.2, 0.6, vis);
       visAlpha = (1.0 - smoothstep(0.0, 0.15, d)) * visGate;
     } else if (uMode < 1.5) {
-      // cube: particles uniformly on the SURFACE of a centred cube
-      // Pick a face uniformly (6 faces) using a separate hash, then place
-      // randomly on that face.
+      // cube モード: 正多面体表面サンプリング (uPolyhedron で 4|6|8|12 切替)。Issue #40。
+      // sample 関数は外接球半径 1 の単位多面体上の点を返す。
+      // shape.radius は「中心 → 頂点」距離 (外接球半径) として統一 (Issue #40)。
       float faceHash = fract(aSeed * 13.717 + aJointIndex * 0.41);
       vec3 r = hash3unit(aSeed * 7.0 + aJointIndex + 1.0);
-      vec2 uv = (r.xy - 0.5) * 2.0;       // [-1, 1]^2
-      vec3 cubePos;
-      if (faceHash < 0.16667)      cubePos = vec3( 1.0, uv.x, uv.y);
-      else if (faceHash < 0.33333) cubePos = vec3(-1.0, uv.x, uv.y);
-      else if (faceHash < 0.50000) cubePos = vec3(uv.x,  1.0, uv.y);
-      else if (faceHash < 0.66667) cubePos = vec3(uv.x, -1.0, uv.y);
-      else if (faceHash < 0.83333) cubePos = vec3(uv.x, uv.y,  1.0);
-      else                         cubePos = vec3(uv.x, uv.y, -1.0);
+      vec3 unit;
+      if (uPolyhedron < 5.0) {
+        unit = sampleTetrahedron(faceHash, r.xy);
+      } else if (uPolyhedron < 7.0) {
+        unit = sampleCube(faceHash, r.xy);
+      } else if (uPolyhedron < 10.0) {
+        unit = sampleOctahedron(faceHash, r.xy);
+      } else {
+        unit = sampleDodecahedron(faceHash, r);
+      }
       float scale = uShapeRadius * (1.0 + uBass * uShapeBassPulse) * outlier;
-      pos = cubePos * scale + normalize(cubePos + 0.0001) * shimmer;
+      pos = unit * scale + normalize(unit + 0.0001) * shimmer;
       visAlpha = 0.85;
     } else if (uMode < 2.5) {
       // sphere: particles uniformly on the SURFACE of a sphere
@@ -524,6 +625,7 @@ export class PointCloud {
         uBaseSize: { value: 3.0 },
         uVolumeSize: { value: 5.0 },
         uMode: { value: 0.0 },
+        uPolyhedron: { value: 6.0 },
         uLatticeN: { value: 12.0 },
         uLatticeBaseShape: { value: 0.0 },     // cube
         uLatticeNoiseScale: { value: 1.0 },
@@ -606,6 +708,7 @@ export class PointCloud {
     u.uBaseSize!.value = settings.pointCloud.baseSize;
     u.uVolumeSize!.value = settings.pointCloud.volumeSize;
     u.uMode!.value = modeToInt(settings.mode);
+    u.uPolyhedron!.value = settings.shape.polyhedron;
     u.uLatticeN!.value = settings.lattice.resolution;
     u.uLatticeBaseShape!.value = settings.lattice.baseShape === "sphere" ? 1.0 : 0.0;
     u.uLatticeNoiseScale!.value = settings.lattice.noiseScale;

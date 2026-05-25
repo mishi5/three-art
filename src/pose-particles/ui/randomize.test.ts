@@ -142,6 +142,13 @@ describe("descriptorsForMode", () => {
     expect(p).not.toContain("shape.radius");
     expect(p).not.toContain("pointCloud.bassExpansion");
   });
+
+  it("cube mode includes shape.polyhedron (Issue #40), other modes exclude it", () => {
+    expect(paths("cube")).toContain("shape.polyhedron");
+    for (const m of ["bones", "sphere", "lattice", "image", "rain"] as const) {
+      expect(paths(m)).not.toContain("shape.polyhedron");
+    }
+  });
 });
 
 describe("randomizeSettings", () => {
@@ -230,5 +237,24 @@ describe("randomizeSettings", () => {
       const out = randomizeSettings(base, "image", mulberry32(seed + 1));
       expect(out.image.preset).toBe(base.image.preset);
     }
+  });
+
+  it("randomizes shape.polyhedron to one of [4,6,8,12] when mode=cube (Issue #40)", () => {
+    const base = makeDefaultSettings();
+    let rngCalls = 0;
+    const rng = () => {
+      rngCalls++;
+      return ((rngCalls * 0.137) % 1.0);
+    };
+    const out = randomizeSettings(base, "cube", rng);
+    expect([4, 6, 8, 12]).toContain(out.shape.polyhedron);
+    expect(typeof out.shape.polyhedron).toBe("number");
+  });
+
+  it("does not change shape.polyhedron when mode=bones (Issue #40)", () => {
+    const base = makeDefaultSettings();
+    base.shape.polyhedron = 8;
+    const out = randomizeSettings(base, "bones", () => 0.99);
+    expect(out.shape.polyhedron).toBe(8);
   });
 });

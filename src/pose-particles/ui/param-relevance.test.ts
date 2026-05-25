@@ -88,4 +88,11 @@ describe("param-relevance: 代表挙動", () => {
   test("未登録パスは fail-open (true)", () => {
     expect(paramActiveForMode("nonexistent.path", "bones")).toBe(true);
   });
+
+  test("shape.polyhedron は cube モードのみ活性 (Issue #40)", () => {
+    expect(paramActiveForMode("shape.polyhedron", "cube")).toBe(true);
+    for (const m of ["bones", "sphere", "lattice", "image", "rain"] as const) {
+      expect(paramActiveForMode("shape.polyhedron", m)).toBe(false);
+    }
+  });
 });
