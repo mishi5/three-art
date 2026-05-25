@@ -3,6 +3,7 @@ import { NUM_JOINTS, type AudioFeatures, type Joints } from "../types";
 import type { Settings } from "../settings";
 import { applyTwist, effectiveTwistStrength, twistPhase } from "./twist";
 import { noise3D } from "./value-noise";
+import { samplePolyhedronUnit } from "./polyhedron-anchors";
 
 const MAX_ANCHORS = 256;
 const MAX_K = 5;
@@ -69,8 +70,10 @@ export class EdgeOverlay {
   // realloc. The "active count" is read from settings.edges.anchorCount.
   private anchorJoint: Int32Array;
   private anchorBonesOffset: Float32Array;     // 3 floats per anchor
-  private anchorCubeFace: Int8Array;           // 0..5
-  private anchorCubeUV: Float32Array;          // 2 floats per anchor, [-1, 1]^2
+  // cube モードの polyhedron 表面サンプリング seeds (4 floats per anchor:
+  // faceHash, r0, r1, r2)。GLSL の sample 関数と同じロジックで CPU 側でも
+  // 表面位置を再現するための uniform random uniforms。Issue #40。
+  private anchorPolyR: Float32Array;
   private anchorSphereDir: Float32Array;       // 3 floats per anchor (unit)
   private anchorIsOutlier: Uint8Array;
   private anchorSpikeFreq: Float32Array;
@@ -103,8 +106,7 @@ export class EdgeOverlay {
     const N = MAX_ANCHORS;
     this.anchorJoint = new Int32Array(N);
     this.anchorBonesOffset = new Float32Array(N * 3);
-    this.anchorCubeFace = new Int8Array(N);
-    this.anchorCubeUV = new Float32Array(N * 2);
+    this.anchorPolyR = new Float32Array(N * 4);
     this.anchorSphereDir = new Float32Array(N * 3);
     this.anchorIsOutlier = new Uint8Array(N);
     this.anchorSpikeFreq = new Float32Array(N);
@@ -132,9 +134,12 @@ export class EdgeOverlay {
       this.anchorBonesOffset[i * 3 + 1] = gaussian(rng) * 0.08;
       this.anchorBonesOffset[i * 3 + 2] = gaussian(rng) * 0.08;
 
-      this.anchorCubeFace[i] = i % 6;
-      this.anchorCubeUV[i * 2 + 0] = (rng() - 0.5) * 2;
-      this.anchorCubeUV[i * 2 + 1] = (rng() - 0.5) * 2;
+      // 4 uniforms ∈ [0,1) per anchor: faceHash, r0, r1, r2
+      // 実行時に samplePolyhedronUnit に渡し polyhedron 毎の表面位置を計算する。
+      this.anchorPolyR[i * 4 + 0] = rng();
+      this.anchorPolyR[i * 4 + 1] = rng();
+      this.anchorPolyR[i * 4 + 2] = rng();
+      this.anchorPolyR[i * 4 + 3] = rng();
 
       // Fibonacci sphere
       const y = 1 - (i / (N - 1)) * 2;
@@ -228,18 +233,16 @@ export class EdgeOverlay {
         y = jy + (this.anchorBonesOffset[i * 3 + 1] ?? 0) * radius;
         z = jz + (this.anchorBonesOffset[i * 3 + 2] ?? 0) * radius;
       } else if (settings.mode === "cube") {
-        const face = this.anchorCubeFace[i] ?? 0;
-        const u = this.anchorCubeUV[i * 2] ?? 0;
-        const v = this.anchorCubeUV[i * 2 + 1] ?? 0;
-        let bx = 0, by = 0, bz = 0;
-        if (face === 0)      { bx =  1; by = u; bz = v; }
-        else if (face === 1) { bx = -1; by = u; bz = v; }
-        else if (face === 2) { bx = u; by =  1; bz = v; }
-        else if (face === 3) { bx = u; by = -1; bz = v; }
-        else if (face === 4) { bx = u; by = v; bz =  1; }
-        else                 { bx = u; by = v; bz = -1; }
+        // Issue #40: cube モードは shape.polyhedron で 4|6|8|12 を切替。
+        // samplePolyhedronUnit は外接球半径 1 の単位多面体上の点を返し、
+        // shape.radius semantics は「外接球半径 (頂点距離)」で全多面体・sphere と統一。
+        const fh = this.anchorPolyR[i * 4] ?? 0;
+        const r0 = this.anchorPolyR[i * 4 + 1] ?? 0;
+        const r1 = this.anchorPolyR[i * 4 + 2] ?? 0;
+        const r2 = this.anchorPolyR[i * 4 + 3] ?? 0;
+        const [ux, uy, uz] = samplePolyhedronUnit(settings.shape.polyhedron, fh, r0, r1, r2);
         const scale = shapeR * (1 + bass * shapePulse) * outlier;
-        x = bx * scale; y = by * scale; z = bz * scale;
+        x = ux * scale; y = uy * scale; z = uz * scale;
       } else {
         // sphere
         const radius = shapeR * (1 + bass * shapePulse) * outlier;
