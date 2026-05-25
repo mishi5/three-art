@@ -270,8 +270,7 @@ const vertexShader = /* glsl */ `
         float cellSize = uShapeRadius * 2.0 / max(float(N - 1), 1.0);
         vec3 latticePos = (cell - vec3(float(N - 1) * 0.5)) * cellSize;
 
-        // shapePos に対して順に: baseShape mapping → 軸変形 → ノイズ warp → ripple
-        // (Issue #41 で段階的に追加。現在はまだ何もしない。)
+        // shapePos に対して順に: baseShape mapping → 軸変形 → ノイズ warp → ripple → shockwave 重畳
         vec3 shapePos = latticePos;
         if (uLatticeBaseShape > 0.5) {
           // cube-to-sphere mapping (Philip Nowell). [-uShapeRadius, +uShapeRadius]^3
