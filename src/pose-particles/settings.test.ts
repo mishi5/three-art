@@ -50,6 +50,37 @@ describe("LatticeSettings defaults", () => {
   });
 });
 
+describe("LatticeSettings distortion defaults (Issue #41)", () => {
+  test("baseShape はデフォルト 'cube' (現状互換)", () => {
+    const s = makeDefaultSettings();
+    expect(s.lattice.baseShape).toBe("cube");
+  });
+
+  test("歪み系パラメータは全て『歪みなし』のデフォルト値", () => {
+    const s = makeDefaultSettings();
+    expect(s.lattice.noiseAmount).toBe(0);
+    expect(s.lattice.twist).toBe(0);
+    expect(s.lattice.bend).toBe(0);
+    expect(s.lattice.taper).toBe(1);
+    expect(s.lattice.rippleAmp).toBe(0);
+  });
+
+  test("歪み系の周波数/seed はデフォルトでも妥当な正数", () => {
+    const s = makeDefaultSettings();
+    expect(s.lattice.noiseScale).toBeGreaterThan(0);
+    expect(Number.isInteger(s.lattice.noiseSeed)).toBe(true);
+    expect(s.lattice.noiseSeed).toBeGreaterThan(0);
+    expect(s.lattice.rippleFreq).toBeGreaterThan(0);
+  });
+
+  test("MOTION_TARGETS に歪み系の Amount/twist/bend/ripple が含まれる", () => {
+    expect(MOTION_TARGETS).toContain("lattice.noiseAmount");
+    expect(MOTION_TARGETS).toContain("lattice.twist");
+    expect(MOTION_TARGETS).toContain("lattice.bend");
+    expect(MOTION_TARGETS).toContain("lattice.rippleAmp");
+  });
+});
+
 describe("ImageSettings defaults", () => {
   test("makeDefaultSettings に image が含まれ妥当な範囲", () => {
     const s = makeDefaultSettings();

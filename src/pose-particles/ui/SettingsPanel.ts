@@ -151,8 +151,19 @@ export class SettingsPanel {
     wave.add(settings.lattice, "onsetCooldown", 0.05, 0.5, 0.005).name("onset cooldown (sec)");
 
     const lattice = modeZone.addFolder("Lattice");
+    lattice.add(settings.lattice, "baseShape", ["cube", "sphere"]).name("base shape");
     lattice.add(settings.lattice, "resolution", 8, 17, 1).name("resolution NxNxN");
     lattice.add(settings.lattice, "waveAmplitude", 0.0, 0.5, 0.005).name("wave amplitude (m)");
+
+    const distortion = lattice.addFolder("Distortion (shape warp)");
+    distortion.add(settings.lattice, "noiseScale", 0.1, 3.0, 0.01).name("noise scale (1/m)");
+    distortion.add(settings.lattice, "noiseAmount", 0.0, 0.5, 0.005).name("noise amount (m)");
+    distortion.add(settings.lattice, "noiseSeed", 1, 16, 1).name("noise seed");
+    distortion.add(settings.lattice, "twist", -Math.PI, Math.PI, 0.01).name("twist (rad/m)");
+    distortion.add(settings.lattice, "bend", -Math.PI / 4, Math.PI / 4, 0.005).name("bend (rad/m)");
+    distortion.add(settings.lattice, "taper", 0.3, 1.7, 0.01).name("taper");
+    distortion.add(settings.lattice, "rippleFreq", 0.5, 6.0, 0.05).name("ripple freq (1/m)");
+    distortion.add(settings.lattice, "rippleAmp", 0.0, 0.3, 0.002).name("ripple amp (m)");
 
     const imageFolder = modeZone.addFolder("Image");
     const presetOptions: Record<string, string> = {};
