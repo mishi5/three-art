@@ -88,6 +88,23 @@ const RELEVANCE: Record<string, ReadonlySet<RenderMode>> = {
   "blur.iterations": new Set(ALL),
   "blur.bassDrive": new Set(ALL),
 
+  // post effects (Issue #42): blur と同様に全 mode で効く
+  "post.order": new Set(ALL),
+  "post.kaleidoscope.enabled": new Set(ALL),
+  "post.kaleidoscope.segments": new Set(ALL),
+  "post.kaleidoscope.centerX": new Set(ALL),
+  "post.kaleidoscope.centerY": new Set(ALL),
+  "post.kaleidoscope.rotation": new Set(ALL),
+  "post.kaleidoscope.mix": new Set(ALL),
+  "post.fractal.enabled": new Set(ALL),
+  "post.fractal.iterations": new Set(ALL),
+  "post.fractal.scale": new Set(ALL),
+  "post.fractal.centerX": new Set(ALL),
+  "post.fractal.centerY": new Set(ALL),
+  "post.fractal.rotation": new Set(ALL),
+  "post.fractal.fade": new Set(ALL),
+  "post.fractal.mix": new Set(ALL),
+
   // wave 系は image の shockwave で流用。resolution/onset は lattice 専用。
   "lattice.resolution": new Set(["lattice"]),
   "lattice.waveSpeed": new Set(WAVE_SHARED),
