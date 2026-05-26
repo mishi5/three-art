@@ -15,6 +15,8 @@ import { BlurPipeline } from "./visuals/BlurPipeline";
 import { DebugOverlay } from "./ui/DebugOverlay";
 import { SettingsPanel } from "./ui/SettingsPanel";
 import { QuickActionsBar } from "./ui/QuickActionsBar";
+import { SafeRandomizePopover } from "./ui/SafeRandomizePopover";
+import { loadExcludedPaths, saveExcludedPaths } from "./ui/safe-randomize-storage";
 import { PresetStore } from "./presets/PresetStore";
 import { localStorageAdapter } from "./presets/storage";
 import { captureThumbnail } from "./presets/thumbnail-capture";
@@ -56,6 +58,9 @@ export class App {
   private presetStore: PresetStore;
   private presetManager: PresetManagerPanel;
   private quickActions: QuickActionsBar;
+  /** Issue #46: SafeRandomize の除外 path popover とその状態。 */
+  private safePopover: SafeRandomizePopover;
+  private safeExcluded: Set<string>;
   private orbit: OrbitControls;
   private lastMode: RenderMode | null = null;
   private poseInput: PoseInput | null = null;
@@ -151,10 +156,22 @@ export class App {
       captureThumbnail: () => this.captureThumbnailForPreset(),
     });
 
+    // Issue #46: 除外 path 集合を localStorage から復元し、popover を生成。
+    //   popover.onChange で集合を更新 → 永続化、safe-rand クリック時はこの集合を渡す。
+    this.safeExcluded = loadExcludedPaths();
+    this.safePopover = new SafeRandomizePopover(this.safeExcluded, {
+      onChange: (next) => {
+        this.safeExcluded = new Set(next);
+        saveExcludedPaths(this.safeExcluded);
+      },
+    });
+
     // Issue #34: 頻用ボタンをまとめた上部バー。SettingsPanel.randomize/undo は
     //   ここから直接呼び、状態は setOnUndoStateChange 経由で同期する。
     this.quickActions = new QuickActionsBar({
       onRandomize: () => this.settingsPanel.randomize(),
+      onSafeRandomize: () => this.settingsPanel.safeRandomize(this.safeExcluded),
+      onToggleSafeConfig: () => this.safePopover.toggle(this.quickActions.getSafeConfigAnchor()),
       onUndoRandomize: () => this.settingsPanel.undoRandomize(),
       onOpenPresetManager: () => this.presetManager.show(),
       onNextPreset: () => {
@@ -678,6 +695,7 @@ export class App {
     this.presetManager.dispose();
     this.sectionTimeline.dispose();
     this.quickActions.dispose();
+    this.safePopover.dispose();
     window.removeEventListener("resize", this.handleResize);
     window.removeEventListener("keydown", this.onKeyDown);
   }

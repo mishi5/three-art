@@ -5,12 +5,19 @@ import { QuickActionsBar, type QuickActionsCallbacks } from "./QuickActionsBar";
 registerHappyDom();
 
 const PRESET_BUTTON_KEYS = ["open-manager", "next-preset", "random-preset"] as const;
-const RANDOMIZE_BUTTON_KEYS = ["randomize", "undo-randomize"] as const;
+const RANDOMIZE_BUTTON_KEYS = [
+  "randomize",
+  "safe-randomize",
+  "safe-randomize-config",
+  "undo-randomize",
+] as const;
 const AUDIO_SOURCE_KEYS = ["file", "mic", "display"] as const;
 
 function makeCallbacks(): QuickActionsCallbacks {
   return {
     onRandomize: mock(() => {}),
+    onSafeRandomize: mock(() => {}),
+    onToggleSafeConfig: mock(() => {}),
     onUndoRandomize: mock(() => {}),
     onOpenPresetManager: mock(() => {}),
     onNextPreset: mock(() => {}),
@@ -40,7 +47,7 @@ describe("QuickActionsBar", () => {
     expect(root?.style.position).toBe("fixed");
   });
 
-  test("Preset 系 3 ボタン / Randomize 系 2 ボタン / 音声ソース 3 ボタンが存在する", () => {
+  test("Preset 系 3 ボタン / Randomize 系 4 ボタン / 音声ソース 3 ボタンが存在する", () => {
     bar = new QuickActionsBar(makeCallbacks());
     for (const k of PRESET_BUTTON_KEYS) {
       expect(document.querySelector(`[data-action='${k}']`)).not.toBeNull();
@@ -58,7 +65,8 @@ describe("QuickActionsBar", () => {
     const buttons = document.querySelectorAll<HTMLButtonElement>(
       "[data-role='quick-actions'] button",
     );
-    expect(buttons.length).toBeGreaterThanOrEqual(8);
+    // Issue #46 で safe-rand / ⚙ 追加 → 8 → 10 以上
+    expect(buttons.length).toBeGreaterThanOrEqual(10);
     for (const b of buttons) {
       const minHeight = parseInt(b.style.minHeight || "0", 10);
       expect(minHeight).toBeGreaterThanOrEqual(32);
@@ -70,6 +78,27 @@ describe("QuickActionsBar", () => {
     bar = new QuickActionsBar(cbs);
     document.querySelector<HTMLButtonElement>("[data-action='randomize']")?.click();
     expect((cbs.onRandomize as ReturnType<typeof mock>).mock.calls.length).toBe(1);
+  });
+
+  test("safe-randomize ボタンクリックで onSafeRandomize が 1 回呼ばれる (Issue #46)", () => {
+    const cbs = makeCallbacks();
+    bar = new QuickActionsBar(cbs);
+    document.querySelector<HTMLButtonElement>("[data-action='safe-randomize']")?.click();
+    expect((cbs.onSafeRandomize as ReturnType<typeof mock>).mock.calls.length).toBe(1);
+  });
+
+  test("safe-randomize-config (⚙) ボタンクリックで onToggleSafeConfig が呼ばれる (Issue #46)", () => {
+    const cbs = makeCallbacks();
+    bar = new QuickActionsBar(cbs);
+    document.querySelector<HTMLButtonElement>("[data-action='safe-randomize-config']")?.click();
+    expect((cbs.onToggleSafeConfig as ReturnType<typeof mock>).mock.calls.length).toBe(1);
+  });
+
+  test("getSafeConfigAnchor() が safe-randomize-config ボタンを返す (Issue #46)", () => {
+    bar = new QuickActionsBar(makeCallbacks());
+    const anchor = bar.getSafeConfigAnchor();
+    expect(anchor).toBeInstanceOf(HTMLButtonElement);
+    expect(anchor.getAttribute("data-action")).toBe("safe-randomize-config");
   });
 
   test("undo は初期 disabled で click しても callback が呼ばれない / setUndoEnabled(true) 後は呼ばれる", () => {

@@ -204,17 +204,36 @@ function clampImageBudget(image: Settings["image"]): void {
 }
 
 /**
+ * Issue #46: Safe Randomize の初期除外 path 集合。視覚への影響が大きい
+ * `camera.autoRotateSpeed` と `blur.*` の 4 path をデフォルト除外に。
+ * ユーザは popover でこの集合を編集でき、`safe-randomize-storage` 経由で
+ * localStorage に保存される。
+ */
+export const DEFAULT_SAFE_EXCLUDED: ReadonlyArray<string> = [
+  "camera.autoRotateSpeed",
+  "blur.enabled",
+  "blur.strength",
+  "blur.iterations",
+  "blur.bassDrive",
+];
+
+/**
  * `base` を破壊せず、`mode` に関連する記述子だけを一様乱数化した新しい
  * `Settings` を返す。`mode` 自体は変更しない。
+ *
+ * Issue #46: `excludedPaths` に含まれる path はスキップし `base` の値を
+ * 維持する。デフォルト空集合なので既存呼出の挙動は不変。
  */
 export function randomizeSettings(
   base: Settings,
   mode: RenderMode,
   rng: () => number = Math.random,
+  excludedPaths: ReadonlySet<string> = new Set<string>(),
 ): Settings {
   const out: Settings = structuredClone(base);
   const target = out as unknown as Record<string, unknown>;
   for (const { spec } of descriptorsForMode(mode)) {
+    if (excludedPaths.has(spec.path)) continue;
     let value: unknown;
     if (spec.kind === "number") {
       value = steppedNumber(spec, rng);
@@ -232,4 +251,17 @@ export function randomizeSettings(
   }
   if (mode === "image") clampImageBudget(out.image);
   return out;
+}
+
+/**
+ * Issue #46: `randomizeSettings` の意図表明用 wrapper。Safe Randomize
+ * ボタン経由の呼出は除外集合を明示的に渡したいのでこちらを使う。
+ */
+export function safeRandomizeSettings(
+  base: Settings,
+  mode: RenderMode,
+  excludedPaths: ReadonlySet<string>,
+  rng: () => number = Math.random,
+): Settings {
+  return randomizeSettings(base, mode, rng, excludedPaths);
 }
