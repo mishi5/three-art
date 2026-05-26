@@ -3,6 +3,8 @@ import {
   RANDOMIZE_DESCRIPTORS,
   randomizeSettings,
   descriptorsForMode,
+  safeRandomizeSettings,
+  DEFAULT_SAFE_EXCLUDED,
 } from "./randomize";
 import { makeDefaultSettings, RENDER_MODES, type RenderMode } from "../settings";
 import { settingsLeafPaths } from "./param-docs";
@@ -256,5 +258,115 @@ describe("randomizeSettings", () => {
     base.shape.polyhedron = 8;
     const out = randomizeSettings(base, "bones", () => 0.99);
     expect(out.shape.polyhedron).toBe(8);
+  });
+});
+
+describe("DEFAULT_SAFE_EXCLUDED (Issue #46)", () => {
+  it("camera.autoRotateSpeed と blur.* 全 4 path を含む", () => {
+    expect(DEFAULT_SAFE_EXCLUDED).toContain("camera.autoRotateSpeed");
+    expect(DEFAULT_SAFE_EXCLUDED).toContain("blur.enabled");
+    expect(DEFAULT_SAFE_EXCLUDED).toContain("blur.strength");
+    expect(DEFAULT_SAFE_EXCLUDED).toContain("blur.iterations");
+    expect(DEFAULT_SAFE_EXCLUDED).toContain("blur.bassDrive");
+  });
+
+  it("デフォルト除外は全て descriptor として存在する path", () => {
+    const known = new Set(RANDOMIZE_DESCRIPTORS.map((d) => d.spec.path));
+    for (const p of DEFAULT_SAFE_EXCLUDED) {
+      expect(known.has(p)).toBe(true);
+    }
+  });
+});
+
+describe("randomizeSettings: excludedPaths option (Issue #46)", () => {
+  it("空集合 excludedPaths は省略時と等価 (camera/blur 含めて変化しうる)", () => {
+    const base = makeDefaultSettings();
+    base.mode = "bones";
+    const a = randomizeSettings(base, "bones", mulberry32(123));
+    const b = randomizeSettings(base, "bones", mulberry32(123), new Set());
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+  });
+
+  it("excludedPaths に含まれる path は base の値のまま変わらない", () => {
+    const base = makeDefaultSettings();
+    base.mode = "bones";
+    base.camera.autoRotateSpeed = 3.7;
+    base.blur.enabled = true;
+    base.blur.strength = 17.5;
+    base.blur.iterations = 4;
+    base.blur.bassDrive = 1.25;
+    const excluded = new Set([
+      "camera.autoRotateSpeed",
+      "blur.enabled",
+      "blur.strength",
+      "blur.iterations",
+      "blur.bassDrive",
+    ]);
+    // 多 seed で当該 path が一度も書き換えられないこと
+    for (let seed = 0; seed < 30; seed++) {
+      const out = randomizeSettings(base, "bones", mulberry32(seed + 1), excluded);
+      expect(out.camera.autoRotateSpeed).toBe(3.7);
+      expect(out.blur.enabled).toBe(true);
+      expect(out.blur.strength).toBe(17.5);
+      expect(out.blur.iterations).toBe(4);
+      expect(out.blur.bassDrive).toBe(1.25);
+    }
+  });
+
+  it("除外していない path は乱数化される (少なくとも 1 seed で値が変わる)", () => {
+    const base = makeDefaultSettings();
+    base.mode = "bones";
+    const excluded = new Set(["camera.autoRotateSpeed"]);
+    let changed = false;
+    for (let seed = 0; seed < 20; seed++) {
+      const out = randomizeSettings(base, "bones", mulberry32(seed + 1), excluded);
+      if (out.color.hueBase !== base.color.hueBase) changed = true;
+    }
+    expect(changed).toBe(true);
+  });
+
+  it("全 descriptor を除外したら base からの変化はなくなる (mode 非該当 path は元から不変)", () => {
+    const base = makeDefaultSettings();
+    base.mode = "bones";
+    const allPaths = new Set(RANDOMIZE_DESCRIPTORS.map((d) => d.spec.path));
+    const out = randomizeSettings(base, "bones", mulberry32(7), allPaths);
+    expect(JSON.stringify(out)).toBe(JSON.stringify(base));
+  });
+});
+
+describe("safeRandomizeSettings (Issue #46)", () => {
+  it("randomizeSettings に excludedPaths を渡したのと同じ結果になる", () => {
+    const base = makeDefaultSettings();
+    base.mode = "bones";
+    const excluded = new Set(DEFAULT_SAFE_EXCLUDED);
+    const viaSafe = safeRandomizeSettings(base, "bones", excluded, mulberry32(42));
+    const viaRandom = randomizeSettings(base, "bones", mulberry32(42), excluded);
+    expect(JSON.stringify(viaSafe)).toBe(JSON.stringify(viaRandom));
+  });
+
+  it("base を mutate しない", () => {
+    const base = makeDefaultSettings();
+    const snapshot = JSON.stringify(base);
+    safeRandomizeSettings(base, "bones", new Set(DEFAULT_SAFE_EXCLUDED), mulberry32(1));
+    expect(JSON.stringify(base)).toBe(snapshot);
+  });
+
+  it("DEFAULT_SAFE_EXCLUDED を渡すと camera.autoRotateSpeed と blur.* が不変", () => {
+    const base = makeDefaultSettings();
+    base.mode = "bones";
+    base.camera.autoRotateSpeed = 5.5;
+    base.blur.enabled = false;
+    base.blur.strength = 12;
+    base.blur.iterations = 2;
+    base.blur.bassDrive = 0.8;
+    const excluded = new Set(DEFAULT_SAFE_EXCLUDED);
+    for (let seed = 0; seed < 10; seed++) {
+      const out = safeRandomizeSettings(base, "bones", excluded, mulberry32(seed * 7 + 3));
+      expect(out.camera.autoRotateSpeed).toBe(5.5);
+      expect(out.blur.enabled).toBe(false);
+      expect(out.blur.strength).toBe(12);
+      expect(out.blur.iterations).toBe(2);
+      expect(out.blur.bassDrive).toBe(0.8);
+    }
   });
 });

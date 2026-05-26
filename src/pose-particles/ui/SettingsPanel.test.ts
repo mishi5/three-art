@@ -85,6 +85,62 @@ describe("SettingsPanel: public randomize / undoRandomize API", () => {
   });
 });
 
+describe("SettingsPanel: safeRandomize API (Issue #46)", () => {
+  let panel: SettingsPanel | null = null;
+
+  beforeEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  afterEach(() => {
+    panel?.dispose();
+    panel = null;
+    document.body.innerHTML = "";
+  });
+
+  test("safeRandomize() を呼ぶと canUndoRandomize() = true、undoRandomize() で復元", () => {
+    panel = build();
+    panel.safeRandomize(new Set());
+    expect(panel.canUndoRandomize()).toBe(true);
+    panel.undoRandomize();
+    expect(panel.canUndoRandomize()).toBe(false);
+  });
+
+  test("safeRandomize(excluded) で除外 path の値は変わらない (camera.autoRotateSpeed / blur.*)", () => {
+    panel = build();
+    const settings = (panel as unknown as { settings: { mode: string; camera: { autoRotateSpeed: number }; blur: { enabled: boolean; strength: number; iterations: number; bassDrive: number } } }).settings;
+    settings.mode = "bones";
+    settings.camera.autoRotateSpeed = 4.2;
+    settings.blur.enabled = true;
+    settings.blur.strength = 19.3;
+    settings.blur.iterations = 5;
+    settings.blur.bassDrive = 1.75;
+    const excluded = new Set([
+      "camera.autoRotateSpeed",
+      "blur.enabled",
+      "blur.strength",
+      "blur.iterations",
+      "blur.bassDrive",
+    ]);
+    // 多回実行しても除外 path は不変であること
+    for (let i = 0; i < 5; i++) panel.safeRandomize(excluded);
+    expect(settings.camera.autoRotateSpeed).toBe(4.2);
+    expect(settings.blur.enabled).toBe(true);
+    expect(settings.blur.strength).toBe(19.3);
+    expect(settings.blur.iterations).toBe(5);
+    expect(settings.blur.bassDrive).toBe(1.75);
+  });
+
+  test("setOnUndoStateChange(cb): safeRandomize() でも cb(true) が通知される", () => {
+    panel = build();
+    const cb = mock((_: boolean) => {});
+    panel.setOnUndoStateChange(cb);
+    panel.safeRandomize(new Set());
+    expect(cb.mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(cb.mock.calls[cb.mock.calls.length - 1]?.[0]).toBe(true);
+  });
+});
+
 describe("SettingsPanel: タブ化", () => {
   let panel: SettingsPanel | null = null;
 

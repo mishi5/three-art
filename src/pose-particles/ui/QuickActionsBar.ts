@@ -16,6 +16,10 @@ export type AudioSourceKind = "file" | "mic" | "display";
 
 export interface QuickActionsCallbacks {
   onRandomize: () => void;
+  /** Issue #46: 除外 path を適用した randomize。 */
+  onSafeRandomize: () => void;
+  /** Issue #46: ⚙ クリック。SafeRandomizePopover の toggle を期待。 */
+  onToggleSafeConfig: () => void;
   onUndoRandomize: () => void;
   onOpenPresetManager: () => void;
   onNextPreset: () => void;
@@ -40,6 +44,8 @@ const GROUP_STYLE = "display: flex; gap: 8px; align-items: center;";
 export class QuickActionsBar {
   private readonly root: HTMLDivElement;
   private readonly undoButton: HTMLButtonElement;
+  /** Issue #46: SafeRandomizePopover の anchor として外部に公開する。 */
+  private readonly safeConfigButton: HTMLButtonElement;
   private readonly statusEl: HTMLDivElement;
   private readonly fileInput: HTMLInputElement;
 
@@ -82,6 +88,17 @@ export class QuickActionsBar {
     randomizeGroup.appendChild(
       makeButton("🎲 randomize", "randomize", callbacks.onRandomize),
     );
+    // Issue #46: 除外 path を適用するセーフランダマイズ + その設定 ⚙ ポップオーバートグル。
+    randomizeGroup.appendChild(
+      makeButton("🎲 safe-rand", "safe-randomize", callbacks.onSafeRandomize),
+    );
+    this.safeConfigButton = makeButton(
+      "⚙",
+      "safe-randomize-config",
+      callbacks.onToggleSafeConfig,
+    );
+    this.safeConfigButton.title = "Safe Randomize: 除外する path を選ぶ";
+    randomizeGroup.appendChild(this.safeConfigButton);
     this.undoButton = makeButton("↶ undo", "undo-randomize", callbacks.onUndoRandomize);
     // 初期状態は履歴がないので disabled。
     this.undoButton.disabled = true;
@@ -135,6 +152,11 @@ export class QuickActionsBar {
 
   setUndoEnabled(enabled: boolean): void {
     this.undoButton.disabled = !enabled;
+  }
+
+  /** Issue #46: SafeRandomizePopover の位置決め anchor (⚙ ボタン)。 */
+  getSafeConfigAnchor(): HTMLButtonElement {
+    return this.safeConfigButton;
   }
 
   setAudioStatus(text: string, isError = false): void {

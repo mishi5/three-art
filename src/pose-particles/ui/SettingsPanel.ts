@@ -3,7 +3,7 @@ import type { Settings } from "../settings";
 import { RENDER_MODES, MOTION_TARGETS, makeDefaultSettings, saveSettings, clearSettings } from "../settings";
 import { TWIST_AXES } from "../visuals/twist";
 import { parsePresetYaml, serializePresetYaml } from "./preset-yaml";
-import { randomizeSettings } from "./randomize";
+import { randomizeSettings, safeRandomizeSettings } from "./randomize";
 import { attachParamTooltips } from "./param-tooltip";
 import { resolveDocKey } from "./param-docs";
 import { paramActiveForMode } from "./param-relevance";
@@ -359,6 +359,21 @@ export class SettingsPanel {
   randomize(): void {
     const before = structuredClone(this.settings) as Settings;
     const next = randomizeSettings(this.settings, this.settings.mode);
+    this.applyRandomized(before, next);
+  }
+
+  /**
+   * Issue #46: 除外 path 集合を尊重した randomize。`randomize()` と同様に
+   * `prevSnapshot` を更新するので、undo は共通経路で OK。
+   */
+  safeRandomize(excludedPaths: ReadonlySet<string>): void {
+    const before = structuredClone(this.settings) as Settings;
+    const next = safeRandomizeSettings(this.settings, this.settings.mode, excludedPaths);
+    this.applyRandomized(before, next);
+  }
+
+  /** randomize 系 2 経路の共通後処理。 */
+  private applyRandomized(before: Settings, next: Settings): void {
     this.prevSnapshot = before;
     deepAssign(
       this.settings as unknown as Record<string, unknown>,
