@@ -728,6 +728,11 @@ function cloneSettings(s: Settings): Settings {
     edges: { ...s.edges },
     twist: { ...s.twist },
     blur: { ...s.blur },
+    post: {
+      order: [...s.post.order],
+      kaleidoscope: { ...s.post.kaleidoscope },
+      fractal: { ...s.post.fractal },
+    },
     lattice: { ...s.lattice },
     image: { ...s.image },
     rain: { ...s.rain },
