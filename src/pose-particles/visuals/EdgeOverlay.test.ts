@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
-import { EdgeOverlay } from "./EdgeOverlay";
+import { EdgeOverlay, bitReverse8 } from "./EdgeOverlay";
 import { makeDefaultSettings } from "../settings";
 import { applyTwist } from "./twist";
-import { makeEmptyJoints, type AudioFeatures } from "../types";
+import { makeEmptyJoints, NUM_JOINTS, type AudioFeatures } from "../types";
 
 function makeAudio(): AudioFeatures {
   return { volume: 0, bass: 0, mid: 0, treble: 0, fft: new Float32Array(0) };
@@ -446,5 +446,145 @@ describe("EdgeOverlay rewire (Issue #31)", () => {
     for (let i = 0; i < count; i++) {
       expect(colors[i * 3]!).toBeCloseTo(1, 5);
     }
+  });
+});
+
+describe("EdgeOverlay anchor low-discrepancy permutation (Issue #48)", () => {
+  test("bitReverse8: 既知値", () => {
+    expect(bitReverse8(0)).toBe(0);
+    expect(bitReverse8(1)).toBe(128); // 00000001 → 10000000
+    expect(bitReverse8(2)).toBe(64);  // 00000010 → 01000000
+    expect(bitReverse8(3)).toBe(192); // 00000011 → 11000000
+    expect(bitReverse8(128)).toBe(1);
+    expect(bitReverse8(255)).toBe(255);
+  });
+
+  test("bitReverse8: [0,256) の bijection", () => {
+    const seen = new Set<number>();
+    for (let i = 0; i < 256; i++) {
+      const p = bitReverse8(i);
+      expect(p).toBeGreaterThanOrEqual(0);
+      expect(p).toBeLessThan(256);
+      seen.add(p);
+    }
+    expect(seen.size).toBe(256);
+  });
+
+  test("sphere モード: anchorCount=4 で先頭 4 anchor が球面上の y 方向に広く分散する", () => {
+    // 修正前は Fibonacci の i=0..3 が y≈{1, 0.992, 0.984, 0.976} で max-min ≈ 0.024
+    // 修正後は perm 適用で y が両極と赤道付近に散らばり max-min > 1.0 を満たす
+    const overlay = new EdgeOverlay();
+    const settings = makeDefaultSettings();
+    settings.edges.enabled = true;
+    settings.edges.anchorCount = 4;
+    settings.edges.kNeighbors = 1;
+    settings.mode = "sphere";
+    settings.shape.radius = 1.0;
+    settings.shape.bassPulse = 0;
+    settings.outlier.boost = 1.0;
+    settings.twist.enabled = false;
+    settings.twist.phaseSpeed = 0;
+    const joints = makeEmptyJoints();
+    const center = new Float32Array([0, 0, 0]);
+    overlay.update(joints, center, makeAudio(), settings, 0);
+
+    let minY = Infinity, maxY = -Infinity;
+    for (let i = 0; i < 4; i++) {
+      const [, y] = overlay.getAnchorPosition(i);
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    expect(maxY - minY).toBeGreaterThan(1.0);
+  });
+
+  test("bones モード: anchorCount=4 で先頭 4 anchor のジョイント割当が単純な 0..3 ではない", () => {
+    // joint i を y=i に置き、anchor の y を見て使われた joint index を逆引きする
+    // (bones offset の gaussian は ~0.08 で |dy|<0.3、なので round(anchor.y) が joint index)
+    // 修正前: joints {0,1,2,3} → max(joint) = 3
+    // 修正後: perm 適用で下半身 joint (>= 8) も含まれる → max(joint) >= 8
+    const overlay = new EdgeOverlay();
+    const settings = makeDefaultSettings();
+    settings.edges.enabled = true;
+    settings.edges.anchorCount = 4;
+    settings.edges.kNeighbors = 1;
+    settings.mode = "bones";
+    settings.pointCloud.bassExpansion = 0;
+    settings.outlier.boost = 1.0;
+    settings.twist.enabled = false;
+    settings.twist.phaseSpeed = 0;
+    const joints = makeEmptyJoints();
+    for (let j = 0; j < NUM_JOINTS; j++) {
+      joints[j * 3] = 0;
+      joints[j * 3 + 1] = j; // distinct y per joint
+      joints[j * 3 + 2] = 0;
+    }
+    const center = new Float32Array([0, 0, 0]);
+    overlay.update(joints, center, makeAudio(), settings, 0);
+
+    const jointsUsed = new Set<number>();
+    let maxJ = -1;
+    for (let i = 0; i < 4; i++) {
+      const [, y] = overlay.getAnchorPosition(i);
+      const j = Math.round(y);
+      jointsUsed.add(j);
+      if (j > maxJ) maxJ = j;
+    }
+    expect(jointsUsed.size).toBe(4); // 4 anchor が異なる joint を指す (重複なし)
+    expect(maxJ).toBeGreaterThanOrEqual(8); // 下半身 joint が含まれる
+  });
+
+  test("sphere モード: anchorCount=MAX(256) で全 anchor の y 集合が Fibonacci 球と同じ multiset", () => {
+    // permutation は bijection なので全 anchor を使う場合は順序のみ違って点群は同じ
+    const overlay = new EdgeOverlay();
+    const settings = makeDefaultSettings();
+    settings.edges.enabled = true;
+    settings.edges.anchorCount = 256;
+    settings.edges.kNeighbors = 1;
+    settings.mode = "sphere";
+    settings.shape.radius = 1.0;
+    settings.shape.bassPulse = 0;
+    settings.outlier.boost = 1.0;
+    settings.twist.enabled = false;
+    settings.twist.phaseSpeed = 0;
+    const joints = makeEmptyJoints();
+    const center = new Float32Array([0, 0, 0]);
+    overlay.update(joints, center, makeAudio(), settings, 0);
+
+    const actual: number[] = [];
+    for (let i = 0; i < 256; i++) actual.push(overlay.getAnchorPosition(i)[1]);
+    actual.sort((a, b) => a - b);
+    const expected: number[] = [];
+    for (let k = 0; k < 256; k++) expected.push(1 - (k / 255) * 2);
+    expected.sort((a, b) => a - b);
+    for (let k = 0; k < 256; k++) expect(actual[k]!).toBeCloseTo(expected[k]!, 5);
+  });
+
+  test("cube モード: anchorCount=4 でも anchor 位置が一様乱数のまま (regression)", () => {
+    // cube/polyhedron は anchorPolyR の独立乱数で問題なし → 触らないことの確認
+    const overlay = new EdgeOverlay();
+    const settings = makeDefaultSettings();
+    settings.edges.enabled = true;
+    settings.edges.anchorCount = 4;
+    settings.edges.kNeighbors = 1;
+    settings.mode = "cube";
+    settings.shape.radius = 1.0;
+    settings.shape.bassPulse = 0;
+    settings.outlier.boost = 1.0;
+    settings.twist.enabled = false;
+    settings.twist.phaseSpeed = 0;
+    const joints = makeEmptyJoints();
+    const center = new Float32Array([0, 0, 0]);
+    overlay.update(joints, center, makeAudio(), settings, 0);
+
+    const positions: Array<[number, number, number]> = [];
+    for (let i = 0; i < 4; i++) positions.push(overlay.getAnchorPosition(i));
+    // 4 点が同一面に集まると Var が低い。少なくとも 1 軸で広がりがあること
+    const ys = positions.map((p) => p[1]);
+    const maxY = Math.max(...ys), minY = Math.min(...ys);
+    const xs = positions.map((p) => p[0]);
+    const maxX = Math.max(...xs), minX = Math.min(...xs);
+    const zs = positions.map((p) => p[2]);
+    const maxZ = Math.max(...zs), minZ = Math.min(...zs);
+    expect(Math.max(maxX - minX, maxY - minY, maxZ - minZ)).toBeGreaterThan(0.5);
   });
 });
