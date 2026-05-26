@@ -15,7 +15,7 @@ function makePipeline() {
 }
 
 describe("PostPipeline", () => {
-  it.skip("constructs with all 3 effects registered", () => {
+  it("constructs with all 3 effects registered", () => {
     const pp = makePipeline();
     expect(pp.hasEffect("blur")).toBe(true);
     expect(pp.hasEffect("kaleidoscope")).toBe(true);
@@ -27,19 +27,19 @@ describe("PostPipeline", () => {
     expect(pp.currentOrder()).toEqual(["blur", "kaleidoscope", "fractal"]);
   });
 
-  it.skip("syncOrder rebuilds composer when order changes", () => {
+  it("syncOrder rebuilds composer when order changes", () => {
     const pp = makePipeline();
     pp.syncOrder(["fractal", "kaleidoscope", "blur"]);
     expect(pp.currentOrder()).toEqual(["fractal", "kaleidoscope", "blur"]);
   });
 
-  it.skip("syncOrder ignores unknown effect ids", () => {
+  it("syncOrder ignores unknown effect ids", () => {
     const pp = makePipeline();
     pp.syncOrder(["nonexistent", "blur", "kaleidoscope", "fractal"]);
     expect(pp.currentOrder()).toEqual(["blur", "kaleidoscope", "fractal"]);
   });
 
-  it.skip("syncOrder is idempotent (same order does not change anything)", () => {
+  it("syncOrder is idempotent (same order does not change anything)", () => {
     const pp = makePipeline();
     const before = pp.currentOrder().slice();
     pp.syncOrder(before);
@@ -47,7 +47,7 @@ describe("PostPipeline", () => {
   });
 
   describe("update propagates settings.post.order to syncOrder", () => {
-    it.skip("changing settings.post.order updates currentOrder after update()", () => {
+    it("changing settings.post.order updates currentOrder after update()", () => {
       const pp = makePipeline();
       const s = makeDefaultSettings();
       s.post.order = ["fractal", "blur", "kaleidoscope"];

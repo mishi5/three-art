@@ -7,6 +7,7 @@ import type { PostEffect, SmoothedAudio } from "./PostEffect";
 import type { Settings } from "../../settings";
 import { BlurEffect } from "./BlurEffect";
 import { KaleidoscopeEffect } from "./KaleidoscopeEffect";
+import { FractalEffect } from "./FractalEffect";
 
 /**
  * 部品化された post effect を順序付きで直列接続するパイプライン。
@@ -33,6 +34,7 @@ export class PostPipeline {
     this.effects = new Map<string, PostEffect>();
     this.effects.set("blur", new BlurEffect());
     this.effects.set("kaleidoscope", new KaleidoscopeEffect());
+    this.effects.set("fractal", new FractalEffect());
     this.order = ["blur", "kaleidoscope", "fractal"];
     this.rebuild();
   }
