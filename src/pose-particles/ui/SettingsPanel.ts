@@ -1,6 +1,6 @@
 import GUI, { Controller } from "lil-gui";
 import type { Settings } from "../settings";
-import { RENDER_MODES, MOTION_TARGETS, makeDefaultSettings, saveSettings, clearSettings } from "../settings";
+import { RENDER_MODES, MOTION_TARGETS, makeDefaultSettings, saveSettings, clearSettings, deepMerge } from "../settings";
 import { TWIST_AXES } from "../visuals/twist";
 import { parsePresetYaml, serializePresetYaml } from "./preset-yaml";
 import { randomizeSettings, safeRandomizeSettings } from "./randomize";
@@ -392,10 +392,19 @@ export class SettingsPanel {
     }
   }
 
-  /** Replaces the live settings object's contents with another set, then refreshes the GUI. */
+  /**
+   * Replaces the live settings object's contents with another set, then refreshes the GUI.
+   *
+   * Issue #51: 旧形式 preset (新規追加エフェクトのキーが欠落) を読み込んでも
+   * "現在値が残る" のではなく "defaults に戻る" ようにするため、
+   * `makeDefaultSettings()` を baseline にしてから preset をマージする。
+   * これにより preset 側で未指定のエフェクト (例: post.kaleidoscope) は
+   * 自動的に defaults の enabled:false 状態に戻る。
+   */
   applyPreset(next: Settings, opts: { clearStorage?: boolean } = {}): void {
     const before = structuredClone(this.settings) as Settings;
-    deepAssign(this.settings as unknown as Record<string, unknown>, next as unknown as Record<string, unknown>);
+    const merged = deepMerge(makeDefaultSettings(), next as Partial<Settings>);
+    deepAssign(this.settings as unknown as Record<string, unknown>, merged as unknown as Record<string, unknown>);
     this.gui.controllersRecursive().forEach((c) => c.updateDisplay());
     this.applyActivation();
     if (opts.clearStorage) clearSettings();

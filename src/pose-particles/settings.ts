@@ -382,8 +382,11 @@ export function clearSettings(): void {
   }
 }
 
-/** Deep-merge `over` into a fresh copy of `base`, preserving base structure. */
-function deepMerge<T>(base: T, over: Partial<T>): T {
+/**
+ * Deep-merge `over` into a fresh copy of `base`, preserving base structure.
+ * Issue #51: applyPreset 経路でも利用するため export 化。
+ */
+export function deepMerge<T>(base: T, over: Partial<T>): T {
   if (typeof base !== "object" || base === null) return base;
   const out: Record<string, unknown> = { ...(base as Record<string, unknown>) };
   for (const key of Object.keys(over as object)) {
