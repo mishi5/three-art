@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { registerHappyDom } from "../../test-setup/dom";
 import { SettingsPanel } from "./SettingsPanel";
-import { makeDefaultSettings } from "../settings";
+import { makeDefaultSettings, type Settings } from "../settings";
 
 registerHappyDom();
 
@@ -138,6 +138,103 @@ describe("SettingsPanel: safeRandomize API (Issue #46)", () => {
     panel.safeRandomize(new Set());
     expect(cb.mock.calls.length).toBeGreaterThanOrEqual(1);
     expect(cb.mock.calls[cb.mock.calls.length - 1]?.[0]).toBe(true);
+  });
+});
+
+describe("SettingsPanel: applyPreset の defaults baseline (Issue #51)", () => {
+  let panel: SettingsPanel | null = null;
+
+  beforeEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  afterEach(() => {
+    panel?.dispose();
+    panel = null;
+    document.body.innerHTML = "";
+  });
+
+  function getSettings(p: SettingsPanel): Settings {
+    return (p as unknown as { settings: Settings }).settings;
+  }
+
+  test("旧形式 preset (post キー欠如) を適用すると post.* が defaults 値 = enabled:false に戻る", () => {
+    panel = build();
+    const live = getSettings(panel);
+    live.post.kaleidoscope.enabled = true;
+    live.post.kaleidoscope.segments = 12;
+    live.post.fractal.enabled = true;
+    live.post.fractal.iterations = 6;
+
+    // 旧形式 = post キーがそもそも無い preset
+    const oldPreset = makeDefaultSettings() as Settings & { post?: unknown };
+    delete (oldPreset as { post?: unknown }).post;
+
+    panel.applyPreset(oldPreset as Settings);
+
+    expect(live.post.kaleidoscope.enabled).toBe(false);
+    expect(live.post.kaleidoscope.segments).toBe(6);
+    expect(live.post.fractal.enabled).toBe(false);
+    expect(live.post.fractal.iterations).toBe(3);
+  });
+
+  test("旧形式 preset (edges.wave / edges.rewire キー欠如) で enabled:false に戻る", () => {
+    panel = build();
+    const live = getSettings(panel);
+    live.edges.wave.enabled = true;
+    live.edges.wave.amplitude = 0.3;
+    live.edges.rewire.enabled = true;
+    live.edges.rewire.interval = 0.8;
+
+    const oldPreset = makeDefaultSettings();
+    delete (oldPreset.edges as { wave?: unknown }).wave;
+    delete (oldPreset.edges as { rewire?: unknown }).rewire;
+
+    panel.applyPreset(oldPreset);
+
+    expect(live.edges.wave.enabled).toBe(false);
+    expect(live.edges.wave.amplitude).toBe(0.05);
+    expect(live.edges.rewire.enabled).toBe(false);
+    expect(live.edges.rewire.interval).toBe(1.5);
+  });
+
+  test("新エフェクトキーを含む preset を適用すれば指定値で上書きされる (回帰防止)", () => {
+    panel = build();
+    const live = getSettings(panel);
+
+    const newPreset = makeDefaultSettings();
+    newPreset.post.kaleidoscope.enabled = true;
+    newPreset.post.kaleidoscope.segments = 10;
+    newPreset.post.fractal.enabled = true;
+    newPreset.post.fractal.iterations = 5;
+
+    panel.applyPreset(newPreset);
+
+    expect(live.post.kaleidoscope.enabled).toBe(true);
+    expect(live.post.kaleidoscope.segments).toBe(10);
+    expect(live.post.fractal.enabled).toBe(true);
+    expect(live.post.fractal.iterations).toBe(5);
+  });
+
+  test("preset 側に未指定でも、live で変更された任意フィールドが defaults に戻る (camera.autoRotateSpeed)", () => {
+    panel = build();
+    const live = getSettings(panel);
+    live.camera.autoRotateSpeed = 4.0;
+
+    const partialPreset = makeDefaultSettings();
+    delete (partialPreset as { camera?: unknown }).camera;
+
+    panel.applyPreset(partialPreset);
+
+    expect(live.camera.autoRotateSpeed).toBe(0.0);
+  });
+
+  test("applyPreset 後も settings オブジェクトの identity は保持される (lil-gui 参照のため)", () => {
+    panel = build();
+    const liveBefore = getSettings(panel);
+    panel.applyPreset(makeDefaultSettings());
+    const liveAfter = getSettings(panel);
+    expect(liveAfter).toBe(liveBefore);
   });
 });
 
