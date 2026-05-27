@@ -18,6 +18,23 @@ const STATE_IN = 0 as const;
 const STATE_STABLE = 1 as const;
 const STATE_OUT = 2 as const;
 
+/**
+ * 8-bit bit-reversal による低分散順列 (Issue #48)。
+ *
+ * MAX_ANCHORS=256 個の anchor slot を index `i` で構築すると、Fibonacci 球
+ * (sphere) や `i % NUM_JOINTS` (bones) のように index と空間位置が単調に相関し、
+ * 先頭 N 個 (N < 256) を使うと図形上部に偏る。`bitReverse8(i)` は [0,256) の
+ * bijection で、連続する i に対して空間的に散らばった index を返すため、
+ * 先頭 N 個でも全体に均等に分布する (= 基数 2 の Van der Corput 列)。
+ */
+export function bitReverse8(i: number): number {
+  let x = i & 0xff;
+  x = ((x & 0xf0) >> 4) | ((x & 0x0f) << 4);
+  x = ((x & 0xcc) >> 2) | ((x & 0x33) << 2);
+  x = ((x & 0xaa) >> 1) | ((x & 0x55) << 1);
+  return x;
+}
+
 /** Lightweight RNG so the anchor set is reproducible. */
 function mulberry32(seed: number): () => number {
   let s = seed >>> 0;
@@ -126,9 +143,13 @@ export class EdgeOverlay {
 
     // Distribute joint assignments roughly evenly across NUM_JOINTS.
     // Cube faces likewise. Sphere uses Fibonacci sequence.
+    // Issue #48: index i と空間位置が単調相関する bones/sphere は perm(i) 経由で
+    // index を低分散順列化し、anchorCount を小さくしても先頭 N 個が図形全体を覆うようにする。
+    // cube (anchorPolyR) は anchor 毎に独立な uniform 乱数なので順列化不要。
     const PHI = Math.PI * (3 - Math.sqrt(5));
     for (let i = 0; i < N; i++) {
-      this.anchorJoint[i] = i % NUM_JOINTS;
+      const p = bitReverse8(i);
+      this.anchorJoint[i] = p % NUM_JOINTS;
 
       this.anchorBonesOffset[i * 3 + 0] = gaussian(rng) * 0.08;
       this.anchorBonesOffset[i * 3 + 1] = gaussian(rng) * 0.08;
@@ -141,10 +162,10 @@ export class EdgeOverlay {
       this.anchorPolyR[i * 4 + 2] = rng();
       this.anchorPolyR[i * 4 + 3] = rng();
 
-      // Fibonacci sphere
-      const y = 1 - (i / (N - 1)) * 2;
+      // Fibonacci sphere (Issue #48: perm 経由で先頭 N 個も球面全体を覆う)
+      const y = 1 - (p / (N - 1)) * 2;
       const radius = Math.sqrt(Math.max(0, 1 - y * y));
-      const theta = PHI * i;
+      const theta = PHI * p;
       this.anchorSphereDir[i * 3 + 0] = Math.cos(theta) * radius;
       this.anchorSphereDir[i * 3 + 1] = y;
       this.anchorSphereDir[i * 3 + 2] = Math.sin(theta) * radius;
