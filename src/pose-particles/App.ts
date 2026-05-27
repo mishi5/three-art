@@ -11,7 +11,7 @@ import { FragmentField } from "./visuals/FragmentField";
 import { SkeletonGuide } from "./visuals/SkeletonGuide";
 import { EdgeOverlay } from "./visuals/EdgeOverlay";
 import { RainField } from "./visuals/rain";
-import { BlurPipeline } from "./visuals/BlurPipeline";
+import { PostPipeline } from "./visuals/post/PostPipeline";
 import { DebugOverlay } from "./ui/DebugOverlay";
 import { SettingsPanel } from "./ui/SettingsPanel";
 import { QuickActionsBar } from "./ui/QuickActionsBar";
@@ -45,7 +45,7 @@ export class App {
   readonly skeletonGuide: SkeletonGuide;
   readonly edgeOverlay: EdgeOverlay;
   readonly rainField: RainField;
-  readonly blurPipeline: BlurPipeline;
+  readonly postPipeline: PostPipeline;
   readonly originMarker: THREE.Mesh;
   readonly centroidMarker: THREE.Mesh;
   private diagHud: HTMLDivElement;
@@ -86,7 +86,7 @@ export class App {
     this.camera.position.set(0, 0, 1.0);
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.blurPipeline = new BlurPipeline(this.renderer, this.scene, this.camera);
+    this.postPipeline = new PostPipeline(this.renderer, this.scene, this.camera);
     this.handleResize();
     this.pointCloud = new PointCloud(this.renderer.getPixelRatio());
     this.pointCloud.setProjection(this.renderer.domElement.height, this.camera.fov);
@@ -227,7 +227,7 @@ export class App {
     this.renderer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
-    this.blurPipeline.setSize(w, h);
+    this.postPipeline.setSize(w, h);
     // image モード: drawing-buffer 高さと FOV から world→pixel 係数を再計算
     // (constructor からも呼ばれるが、pointCloud がまだ生成されていない初回呼び出しでは skip)
     this.pointCloud?.setProjection(this.renderer.domElement.height, this.camera.fov);
@@ -484,7 +484,7 @@ export class App {
       this.jointAnchors.tick();
       const audio: AudioFeatures = this.audioInput?.read() ?? DEFAULT_AUDIO_FEATURES;
       this.update(audio);
-      this.blurPipeline.render();
+      this.postPipeline.render();
     };
     tick();
   }
@@ -594,7 +594,7 @@ export class App {
       this.sectionTimeline.hide();
     }
     this.orbit.update();
-    this.blurPipeline.update(live.blur, this.smoothedAudio.bass);
+    this.postPipeline.update(live, this.smoothedAudio);
     // diagnostic: origin stays at world (0,0,0); centroid sits at where the
     // visibility-weighted centroid actually is. If centering is being applied
     // to PointCloud uniformly, the cluster should sit on top of the red origin.
@@ -721,10 +721,10 @@ export class App {
         captureThumbnail(this.renderer, this.scene, this.camera, {
           width: thumbW,
           height: thumbH,
-          // 実画面で適用されている blur をサムネにも再現する。radius/iterations は
-          // 現在の BlurPipeline 状態を見て、サムネ RT サイズ向けにスケーリングされる。
+          // 実画面で適用されている post effects をサムネにも再現する。各 effect が
+          // サムネ RT サイズ向けの独立 pass を生成し、PostPipeline は現順序で連結する。
           extraPasses: () =>
-            this.blurPipeline.createBlurPassesForTarget(thumbW, thumbH, fullDrawingW),
+            this.postPipeline.createPassesForTarget(thumbW, thumbH, fullDrawingW),
         }),
       ),
     );
@@ -746,6 +746,11 @@ function cloneSettings(s: Settings): Settings {
     edges: { ...s.edges },
     twist: { ...s.twist },
     blur: { ...s.blur },
+    post: {
+      order: [...s.post.order],
+      kaleidoscope: { ...s.post.kaleidoscope },
+      fractal: { ...s.post.fractal },
+    },
     lattice: { ...s.lattice },
     image: { ...s.image },
     rain: { ...s.rain },

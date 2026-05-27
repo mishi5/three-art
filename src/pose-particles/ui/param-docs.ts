@@ -294,6 +294,69 @@ export const PARAM_DOCS: Record<string, ParamDoc> = {
     effect: "上げるほど低音で画面が大きく滲み脈動する。0 で低音による滲み変化なし。",
   },
 
+  "post.order": {
+    summary: "post effect の適用順 (先頭から順に適用)。",
+    effect: "順を入れ替えると同じ on/off 構成でも見栄えが変わる。SettingsPanel の ↑↓ で編集する。",
+  },
+
+  "post.kaleidoscope.enabled": {
+    summary: "万華鏡 (kaleidoscope) post エフェクトの ON/OFF。",
+    effect: "ON で画面が中心から N 個の扇形に折り畳まれ円周状に対称化される。",
+  },
+  "post.kaleidoscope.segments": {
+    summary: "万華鏡の扇形セグメント数 (2..16、整数)。",
+    effect: "上げるほど細かく刻まれた多角的な対称模様になる。下げると太い分割で粗い対称になる。",
+  },
+  "post.kaleidoscope.centerX": {
+    summary: "万華鏡の中心 X オフセット (-0.5..0.5、画面中央=0)。",
+    effect: "+で右寄り、−で左寄りの中心となり、対称軸位置が変わる。",
+  },
+  "post.kaleidoscope.centerY": {
+    summary: "万華鏡の中心 Y オフセット (-0.5..0.5)。",
+    effect: "+で上寄り、−で下寄り (UV 座標基準)。",
+  },
+  "post.kaleidoscope.rotation": {
+    summary: "万華鏡パターン全体の回転 (rad)。",
+    effect: "値を変えると対称模様が時計回り/反時計回りに回る。",
+  },
+  "post.kaleidoscope.mix": {
+    summary: "元映像と万華鏡映像のブレンド率 (0..1)。",
+    effect: "1 で完全に万華鏡、0 で元映像のみ (実質 OFF)。中間で薄く重なる。",
+  },
+
+  "post.fractal.enabled": {
+    summary: "フラクタル増殖 (Droste 風再帰縮小) post エフェクトの ON/OFF。",
+    effect: "ON で縮小コピーが自己相似で重なり、画面に無限増殖感が出る。",
+  },
+  "post.fractal.iterations": {
+    summary: "フラクタルの再帰回数 (1..6、整数)。",
+    effect: "上げるほど深い増殖で複雑になる。描画負荷も増える。",
+  },
+  "post.fractal.scale": {
+    summary: "各反復の縮小率 (0.5..0.95)。",
+    effect: "1 に近いほどコピーが大きく、自己相似がゆったり。0.5 に近いほど急激に縮む。",
+  },
+  "post.fractal.centerX": {
+    summary: "フラクタルの収束中心 X (-0.5..0.5)。",
+    effect: "+で右寄り、−で左寄りに収束する。",
+  },
+  "post.fractal.centerY": {
+    summary: "フラクタルの収束中心 Y (-0.5..0.5)。",
+    effect: "+で上寄り、−で下寄りに収束する。",
+  },
+  "post.fractal.rotation": {
+    summary: "反復ごとの回転 (rad)。",
+    effect: "0 以外で螺旋的に巻きながら縮む。",
+  },
+  "post.fractal.fade": {
+    summary: "深い反復ほど暗くするフェード (0..1)。",
+    effect: "1 で最深層が黒に、0 で全反復が等しい明度。",
+  },
+  "post.fractal.mix": {
+    summary: "元映像とフラクタル映像のブレンド率 (0..1)。",
+    effect: "1 で完全にフラクタル、0 で元映像のみ。",
+  },
+
   "lattice.resolution": {
     summary: "格子の解像度 NxNxN (8..17)。lattice モード。",
     effect: "上げるほど格子点が細かく密に。下げると粗い格子になる。",

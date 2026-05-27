@@ -62,11 +62,12 @@ describe("RANDOMIZE_DESCRIPTORS", () => {
    * - `mode`: render mode 自体 (ランダム化対象外)
    * - `auto.*`: 制御系 (演出ではない)
    * - `image.preset`: ファイル欠落でロードエラーになるため (Issue #37)
+   * - `post.order`: 適用順は ↑↓ ボタンで明示編集する性質のため (Issue #42)
    */
   it("covers every Settings leaf except explicit exclusions", () => {
     const allLeaves = settingsLeafPaths(makeDefaultSettings());
     const isExcluded = (p: string): boolean =>
-      p === "mode" || p.startsWith("auto.") || p === "image.preset";
+      p === "mode" || p.startsWith("auto.") || p === "image.preset" || p === "post.order";
     const covered = new Set(RANDOMIZE_DESCRIPTORS.map((d) => d.spec.path));
     const missing = allLeaves.filter((p) => !isExcluded(p) && !covered.has(p));
     expect(missing).toEqual([]);

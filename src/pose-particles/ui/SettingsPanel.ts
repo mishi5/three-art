@@ -210,11 +210,64 @@ export class SettingsPanel {
     twist.add(settings.twist, "strength", 0, 10, 0.05).name("strength (rad/m)");
     twist.add(settings.twist, "bassDrive", 0, 3, 0.05).name("bass drive");
     twist.add(settings.twist, "phaseSpeed", -3, 3, 0.05).name("phase speed (rad/s)");
-    const blur = post.addFolder("Blur (post-process)");
+    // ---- Post effects (Issue #42) ----
+    // 順序入れ替え可能な部品化 post パイプライン。Blur / Kaleidoscope / Fractal
+    // の 3 effect が直列接続される。順序は ↑↓ ボタンで編集し、settings.post.order
+    // に反映 → 次フレームの PostPipeline.update が syncOrder で composer を再構築する。
+    const postFx = post.addFolder("Post effects");
+
+    const orderFolder = postFx.addFolder("Order (top → applied first)");
+    const orderUpdaters: Array<() => void> = [];
+    const moveEffect = (id: string, direction: -1 | 1): void => {
+      const order = settings.post.order;
+      const idx = order.indexOf(id);
+      if (idx < 0) return;
+      const target = idx + direction;
+      if (target < 0 || target >= order.length) return;
+      const tmp = order[idx]!;
+      order[idx] = order[target]!;
+      order[target] = tmp;
+      saveSettings(settings);
+      refreshOrderLabels();
+    };
+    const refreshOrderLabels = (): void => {
+      orderUpdaters.forEach((fn) => fn());
+    };
+    for (const id of ["blur", "kaleidoscope", "fractal"]) {
+      const upCtrl = orderFolder.add({ up: () => moveEffect(id, -1) }, "up");
+      const downCtrl = orderFolder.add({ down: () => moveEffect(id, +1) }, "down");
+      orderUpdaters.push(() => {
+        const i = settings.post.order.indexOf(id);
+        const pos = i < 0 ? "?" : String(i + 1);
+        upCtrl.name(`↑ ${pos}. ${id}`);
+        downCtrl.name(`↓ ${pos}. ${id}`);
+      });
+    }
+    refreshOrderLabels();
+
+    const blur = postFx.addFolder("Blur");
     blur.add(settings.blur, "enabled").name("enabled").onChange(() => this.applyActivation());
     blur.add(settings.blur, "strength", 0, 30, 0.1).name("strength (px)");
     blur.add(settings.blur, "iterations", 1, 6, 1).name("iterations");
     blur.add(settings.blur, "bassDrive", 0, 3, 0.05).name("bass drive");
+
+    const kal = postFx.addFolder("Kaleidoscope");
+    kal.add(settings.post.kaleidoscope, "enabled").name("enabled");
+    kal.add(settings.post.kaleidoscope, "segments", 2, 16, 1).name("segments");
+    kal.add(settings.post.kaleidoscope, "centerX", -0.5, 0.5, 0.01).name("center X");
+    kal.add(settings.post.kaleidoscope, "centerY", -0.5, 0.5, 0.01).name("center Y");
+    kal.add(settings.post.kaleidoscope, "rotation", -Math.PI, Math.PI, 0.01).name("rotation (rad)");
+    kal.add(settings.post.kaleidoscope, "mix", 0, 1, 0.01).name("mix");
+
+    const frac = postFx.addFolder("Fractal (Droste)");
+    frac.add(settings.post.fractal, "enabled").name("enabled");
+    frac.add(settings.post.fractal, "iterations", 1, 6, 1).name("iterations");
+    frac.add(settings.post.fractal, "scale", 0.5, 0.95, 0.01).name("scale");
+    frac.add(settings.post.fractal, "centerX", -0.5, 0.5, 0.01).name("center X");
+    frac.add(settings.post.fractal, "centerY", -0.5, 0.5, 0.01).name("center Y");
+    frac.add(settings.post.fractal, "rotation", -Math.PI, Math.PI, 0.01).name("rotation (rad)");
+    frac.add(settings.post.fractal, "fade", 0, 1, 0.01).name("fade");
+    frac.add(settings.post.fractal, "mix", 0, 1, 0.01).name("mix");
 
     // ---- System ----
     const system = this.gui.addFolder("System");

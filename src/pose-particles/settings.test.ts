@@ -152,3 +152,32 @@ describe("ShapeSettings polyhedron (Issue #40)", () => {
     expect(POLYHEDRON_FACES).toEqual([4, 6, 8, 12]);
   });
 });
+
+describe("PostEffect settings (Issue #42)", () => {
+  test("post.order is [blur, kaleidoscope, fractal] by default", () => {
+    const s = makeDefaultSettings();
+    expect(s.post.order).toEqual(["blur", "kaleidoscope", "fractal"]);
+  });
+
+  test("post.kaleidoscope defaults are sensible and disabled", () => {
+    const s = makeDefaultSettings();
+    expect(s.post.kaleidoscope.enabled).toBe(false);
+    expect(s.post.kaleidoscope.segments).toBe(6);
+    expect(s.post.kaleidoscope.centerX).toBe(0);
+    expect(s.post.kaleidoscope.centerY).toBe(0);
+    expect(s.post.kaleidoscope.rotation).toBe(0);
+    expect(s.post.kaleidoscope.mix).toBe(1);
+  });
+
+  test("post.fractal defaults are sensible and disabled", () => {
+    const s = makeDefaultSettings();
+    expect(s.post.fractal.enabled).toBe(false);
+    expect(s.post.fractal.iterations).toBe(3);
+    expect(s.post.fractal.scale).toBe(0.7);
+    expect(s.post.fractal.centerX).toBe(0);
+    expect(s.post.fractal.centerY).toBe(0);
+    expect(s.post.fractal.rotation).toBe(0);
+    expect(s.post.fractal.fade).toBe(0.3);
+    expect(s.post.fractal.mix).toBe(1);
+  });
+});

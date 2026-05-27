@@ -124,6 +124,46 @@ export interface LatticeSettings {
   rippleAmp: number;
 }
 
+export interface KaleidoscopeSettings {
+  enabled: boolean;
+  /** 扇形セグメント数 (2..16, 整数)。 */
+  segments: number;
+  /** 中心 X (-0.5..0.5、画面中央=0)。 */
+  centerX: number;
+  /** 中心 Y (-0.5..0.5)。 */
+  centerY: number;
+  /** 全体回転 (rad)。 */
+  rotation: number;
+  /** 元映像とのブレンド率 (0..1)、1=完全に万華鏡。 */
+  mix: number;
+}
+
+export interface FractalSettings {
+  enabled: boolean;
+  /** 再帰回数 (1..6、整数)。 */
+  iterations: number;
+  /** 各反復の縮小率 (0.5..0.95)。 */
+  scale: number;
+  centerX: number;
+  centerY: number;
+  /** 反復ごとの回転 (rad)。 */
+  rotation: number;
+  /** 深いコピーほど暗くするフェード (0..1)。 */
+  fade: number;
+  /** 元映像とのブレンド率 (0..1)。 */
+  mix: number;
+}
+
+export interface PostSettings {
+  /**
+   * post effect の適用順。effect ID の配列。SettingsPanel の ↑↓ ボタンで
+   * 入れ替え可能。先頭ほど先に適用される。
+   */
+  order: string[];
+  kaleidoscope: KaleidoscopeSettings;
+  fractal: FractalSettings;
+}
+
 export type RainBinMapping = "linear" | "log";
 
 export interface RainSettings {
@@ -280,6 +320,8 @@ export interface Settings {
   twist: TwistSettings;
   /** Post-process Gaussian blur applied to the final rendered image. */
   blur: BlurSettings;
+  /** 部品化された post effects (Issue #42)。順序付き直列適用。 */
+  post: PostSettings;
   /** lattice モード専用パラメータ (Issue #14)。 */
   lattice: LatticeSettings;
   /** image モード専用パラメータ (Issue #18)。 */
@@ -429,6 +471,27 @@ export function makeDefaultSettings(): Settings {
     },
     twist: makeDefaultTwist(),
     blur: makeDefaultBlur(),
+    post: {
+      order: ["blur", "kaleidoscope", "fractal"],
+      kaleidoscope: {
+        enabled: false,
+        segments: 6,
+        centerX: 0,
+        centerY: 0,
+        rotation: 0,
+        mix: 1,
+      },
+      fractal: {
+        enabled: false,
+        iterations: 3,
+        scale: 0.7,
+        centerX: 0,
+        centerY: 0,
+        rotation: 0,
+        fade: 0.3,
+        mix: 1,
+      },
+    },
     lattice: {
       resolution: 12,
       waveSpeed: 1.2,

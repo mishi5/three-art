@@ -1,9 +1,8 @@
 import * as THREE from "three";
-import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
-import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
-import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
-import { type BlurSettings, MAX_BLUR_ITERATIONS, effectiveBlurStrength } from "./blur";
+import type { PostEffect, SmoothedAudio } from "./PostEffect";
+import type { Settings } from "../../settings";
+import { MAX_BLUR_ITERATIONS, effectiveBlurStrength } from "../blur";
 
 const blurFragment = /* glsl */ `
   uniform sampler2D tDiffuse;
@@ -40,49 +39,27 @@ interface BlurPair {
   vertical: ShaderPass;
 }
 
-export class BlurPipeline {
-  private composer: EffectComposer;
+export class BlurEffect implements PostEffect {
+  readonly id = "blur";
+  readonly passes: ShaderPass[];
   private blurPairs: BlurPair[] = [];
   private texelW = 1;
   private texelH = 1;
 
-  constructor(
-    private renderer: THREE.WebGLRenderer,
-    scene: THREE.Scene,
-    camera: THREE.Camera,
-  ) {
-    this.composer = new EffectComposer(renderer);
-    this.composer.addPass(new RenderPass(scene, camera));
-
+  constructor() {
+    const passes: ShaderPass[] = [];
     for (let i = 0; i < MAX_BLUR_ITERATIONS; i++) {
-      const horizontal = this.makeBlurPass(1, 0);
-      const vertical = this.makeBlurPass(0, 1);
+      const horizontal = makeBlurPass(1, 0);
+      const vertical = makeBlurPass(0, 1);
       horizontal.enabled = false;
       vertical.enabled = false;
-      this.composer.addPass(horizontal);
-      this.composer.addPass(vertical);
+      passes.push(horizontal, vertical);
       this.blurPairs.push({ horizontal, vertical });
     }
-
-    this.composer.addPass(new OutputPass());
+    this.passes = passes;
   }
 
-  private makeBlurPass(dx: number, dy: number): ShaderPass {
-    return new ShaderPass({
-      uniforms: {
-        tDiffuse: { value: null },
-        uTexel: { value: new THREE.Vector2(1, 1) },
-        uDirection: { value: new THREE.Vector2(dx, dy) },
-        uRadius: { value: 1.0 },
-      },
-      vertexShader: blurVertex,
-      fragmentShader: blurFragment,
-    });
-  }
-
-  setSize(w: number, h: number): void {
-    this.composer.setSize(w, h);
-    const dpr = this.renderer.getPixelRatio();
+  setSize(w: number, h: number, dpr: number): void {
     this.texelW = 1.0 / Math.max(1, Math.floor(w * dpr));
     this.texelH = 1.0 / Math.max(1, Math.floor(h * dpr));
     for (const pair of this.blurPairs) {
@@ -91,8 +68,9 @@ export class BlurPipeline {
     }
   }
 
-  update(b: BlurSettings, bass: number): void {
-    const radius = effectiveBlurStrength(b, bass);
+  update(settings: Settings, audio: SmoothedAudio): void {
+    const b = settings.blur;
+    const radius = effectiveBlurStrength(b, audio.bass);
     const active = radius > 0;
     const iterations = Math.max(1, Math.min(MAX_BLUR_ITERATIONS, Math.round(b.iterations)));
     for (let i = 0; i < this.blurPairs.length; i++) {
@@ -105,37 +83,22 @@ export class BlurPipeline {
     }
   }
 
-  render(): void {
-    this.composer.render();
-  }
-
-  /**
-   * Issue #36: サムネ生成用に、現在 enabled な blur 設定をサムネ RT サイズに
-   * スケーリングした新しい ShaderPass 列を返す。RenderPass の後、OutputPass の
-   * 前に挿入する想定。返したパスの dispose は呼び出し側が担当する。
-   *
-   *   - `uTexel` は サムネ RT 上の 1 pixel (= `1/targetW`, `1/targetH`)
-   *   - `uRadius` は `targetW / fullSourceDrawingBufferW` で縮小し、実画面の blur と
-   *     「相対 UV 範囲」が一致するようにする
-   *
-   * blur が無効 (radius=0 / 全 pair disabled) なら空配列を返す。
-   */
-  createBlurPassesForTarget(
+  createPassesForTarget(
     targetW: number,
     targetH: number,
-    fullSourceDrawingBufferW: number,
+    fullSourceW: number,
   ): ShaderPass[] {
     const passes: ShaderPass[] = [];
     const texelW = 1 / Math.max(1, targetW);
     const texelH = 1 / Math.max(1, targetH);
-    const scale = Math.max(1, targetW) / Math.max(1, fullSourceDrawingBufferW);
+    const scale = Math.max(1, targetW) / Math.max(1, fullSourceW);
     for (const pair of this.blurPairs) {
       if (!pair.horizontal.enabled) continue;
       const baseRadius = pair.horizontal.uniforms.uRadius!.value as number;
       if (baseRadius <= 0) continue;
       const radius = baseRadius * scale;
-      const h = this.makeBlurPass(1, 0);
-      const v = this.makeBlurPass(0, 1);
+      const h = makeBlurPass(1, 0);
+      const v = makeBlurPass(0, 1);
       (h.uniforms.uTexel!.value as THREE.Vector2).set(texelW, texelH);
       (v.uniforms.uTexel!.value as THREE.Vector2).set(texelW, texelH);
       h.uniforms.uRadius!.value = radius;
@@ -144,4 +107,24 @@ export class BlurPipeline {
     }
     return passes;
   }
+
+  dispose(): void {
+    for (const pair of this.blurPairs) {
+      pair.horizontal.dispose?.();
+      pair.vertical.dispose?.();
+    }
+  }
+}
+
+function makeBlurPass(dx: number, dy: number): ShaderPass {
+  return new ShaderPass({
+    uniforms: {
+      tDiffuse: { value: null },
+      uTexel: { value: new THREE.Vector2(1, 1) },
+      uDirection: { value: new THREE.Vector2(dx, dy) },
+      uRadius: { value: 1.0 },
+    },
+    vertexShader: blurVertex,
+    fragmentShader: blurFragment,
+  });
 }

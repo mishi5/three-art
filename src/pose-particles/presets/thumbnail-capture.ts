@@ -47,9 +47,9 @@ export interface ThumbnailCaptureOptions {
  * composer / RT は呼び出しごとに作って即時 dispose するので GPU メモリも
  * 常時占有しない。
  *
- * 注意: 本実装は `BlurPipeline` の blur パスは通っていない。blur 半径が
- * texel 単位で表現されており、サムネサイズに合わせると過剰/過小になるため、
- * 「OutputPass による色変換のみ」を最優先で揃えている。
+ * post エフェクトの再現は `extraPasses` 経由で呼び出し側が提供する
+ * (`PostPipeline.createPassesForTarget` が現順序の全 effect 分の独立 pass を
+ * サムネ RT サイズに合わせて生成して渡す)。
  */
 export function captureThumbnail(
   renderer: THREE.WebGLRenderer,
