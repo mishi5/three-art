@@ -64,7 +64,7 @@ export function modeToInt(mode: RenderMode): number {
 
 /** image モード専用パラメータ (Issue #18)。 */
 export interface ImageSettings {
-  /** プリセットファイル名 (public/images/presets/ 配下)、"(uploaded)" = アップロード済み画像 */
+  /** プリセット識別子 (ui/image-presets.ts の IMAGE_PRESETS)、"(uploaded)" = アップロード済み画像 */
   preset: string;
   /** グリッド W (8..120)。gridW * gridH <= 5200 (粒子総数) */
   gridW: number;

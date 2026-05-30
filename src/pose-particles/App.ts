@@ -7,6 +7,7 @@ import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "./types";
 import { PointCloud, TOTAL_PARTICLES } from "./visuals/PointCloud";
 import { sampleImageToGrid } from "./visuals/ImageSampler";
 import type { ImageSource } from "./ui/SettingsPanel";
+import { resolveImagePresetUrl } from "./ui/image-presets";
 import { FragmentField } from "./visuals/FragmentField";
 import { SkeletonGuide } from "./visuals/SkeletonGuide";
 import { EdgeOverlay } from "./visuals/EdgeOverlay";
@@ -644,8 +645,11 @@ export class App {
     let url: string;
     let revoke = false;
     if (src.kind === "preset") {
-      // public/ 配下は dev サーバのルートに直接マップされる
-      url = `/images/presets/${src.path}`;
+      // Issue #53: public/ は Bun の HTML dev サーバではルート配信されないため、
+      // asset import で解決済みの URL をレジストリから引く。
+      const presetUrl = resolveImagePresetUrl(src.path);
+      if (!presetUrl) throw new Error(`unknown image preset: ${src.path}`);
+      url = presetUrl;
     } else {
       url = URL.createObjectURL(src.file);
       revoke = true;
