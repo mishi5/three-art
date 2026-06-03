@@ -7,6 +7,7 @@ import { randomizeSettings, safeRandomizeSettings } from "./randomize";
 import { attachParamTooltips } from "./param-tooltip";
 import { resolveDocKey } from "./param-docs";
 import { paramActiveForMode } from "./param-relevance";
+import { IMAGE_PRESETS } from "./image-presets";
 
 /** enabled チェックボックスで配下を従属させるグループ (Issue #23 改訂)。 */
 const GATED_GROUPS = ["twist", "blur", "edges", "auto"] as const;
@@ -24,8 +25,6 @@ export interface SettingsPanelCallbacks {
   onImageRegridRequest?: () => void;
 }
 
-/** 利用可能なプリセット画像 (public/images/presets/ 配下) */
-const IMAGE_PRESETS = ["sample-01.svg", "sample-02.svg"] as const;
 const UPLOADED_TAG = "(uploaded)";
 
 /** Issue #34: タブ化のためのトップレベルフォルダ名 (表示順)。 */
