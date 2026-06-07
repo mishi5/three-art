@@ -1,4 +1,4 @@
-import type { BandFrame, BandTimeSeries, Section, SectionBoundary } from "../automation/AnalysisCache";
+import type { BandFrame, BandTimeSeries, Section, SectionBoundary } from "./analysis-types";
 export type { BandFrame, BandTimeSeries, Section, SectionBoundary };
 
 export interface DetectorOptions {

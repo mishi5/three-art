@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { BandTimeSeries } from "../automation/AnalysisCache";
+import type { BandTimeSeries } from "./analysis-types";
 import { detect, recomputeSections, type DetectorOptions } from "./SectionDetector";
 
 const HOP_MS = 50;

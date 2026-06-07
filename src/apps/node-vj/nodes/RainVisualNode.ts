@@ -1,5 +1,6 @@
 import { RainField } from "../../../core/visuals/rain";
 import type { RainFieldUpdateParams } from "../../../core/visuals/params";
+import type { AudioFeatures } from "../../../core/types";
 import type { NodeEnv, NodeState, NodeTypeDef } from "../graph/node-type";
 
 interface RainState {
@@ -16,6 +17,7 @@ export const RainVisualNode: NodeTypeDef = {
   category: "visual",
   isSink: true,
   inputs: [
+    { id: "audio", label: "audio", type: "audio" },
     { id: "baseSpeed", label: "baseSpeed", type: "number" },
     { id: "count", label: "count", type: "number" },
   ],
@@ -53,7 +55,9 @@ export const RainVisualNode: NodeTypeDef = {
         binMapping: "log",
       },
     };
-    state.rain.update(env.audio, params, ctx.timeSec);
+    // audio 入力ポートが接続されていればそれを、なければ env.audio をフォールバック。
+    const audio = (ctx.input("audio") as AudioFeatures | undefined) ?? env.audio;
+    state.rain.update(audio, params, ctx.timeSec);
     return {};
   },
 };

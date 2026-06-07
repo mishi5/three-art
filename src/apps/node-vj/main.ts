@@ -38,8 +38,45 @@ const audio: AudioFeatures = { ...DEFAULT_AUDIO_FEATURES, fft };
 runtime.setAudio(audio);
 runtime.start();
 
-// ノードエディタ（全画面）
-const editor = new NodeEditor(editorCanvas, graph, registry);
+// ノードエディタ（全画面）。出力ポートのライブ値は runtime の直近評価結果から引く。
+const editor = new NodeEditor(editorCanvas, graph, registry, (id) => runtime.getOutputs(id));
+
+// 入力起動コントロール（mic/camera は user gesture 必須のためボタンから start）。
+type Startable = { start?: () => Promise<void> };
+type FileLoadable = { loadFile?: (f: File) => Promise<void> };
+
+const bar = document.createElement("div");
+bar.style.cssText =
+  "position:fixed;left:8px;bottom:8px;display:flex;gap:6px;align-items:center;z-index:150;font:12px system-ui;";
+
+const startBtn = document.createElement("button");
+startBtn.textContent = "▶ 入力開始 (mic/camera)";
+startBtn.style.cssText = "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;";
+startBtn.addEventListener("click", () => {
+  for (const n of graph.nodes) {
+    const s = runtime.getState(n.id) as Startable | undefined;
+    s?.start?.().catch((e) => console.warn(`[node-vj] start failed for ${n.id}:`, e));
+  }
+});
+bar.appendChild(startBtn);
+
+const fileLabel = document.createElement("label");
+fileLabel.textContent = "音声ファイル: ";
+fileLabel.style.color = "#aaa";
+const fileInput = document.createElement("input");
+fileInput.type = "file";
+fileInput.accept = "audio/*";
+fileInput.addEventListener("change", () => {
+  const file = fileInput.files?.[0];
+  if (!file) return;
+  const audioNode = graph.nodes.find((n) => n.type === "AudioInput");
+  if (!audioNode) { console.warn("[node-vj] AudioInput ノードを追加してください"); return; }
+  const s = runtime.getState(audioNode.id) as FileLoadable | undefined;
+  s?.loadFile?.(file).catch((e) => console.warn("[node-vj] loadFile failed:", e));
+});
+fileLabel.appendChild(fileInput);
+bar.appendChild(fileLabel);
+document.body.appendChild(bar);
 
 (window as unknown as { nodeVj: unknown }).nodeVj = { graph, registry, runtime, editor };
 console.log("[node-vj] editor + preview started");

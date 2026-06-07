@@ -1,8 +1,8 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { AudioInput } from "./audio/AudioInput";
-import { JointAnchors } from "./pose/JointAnchors";
-import { PoseInput } from "./pose/PoseInput";
+import type { AudioInput } from "../../core/audio/AudioInput";
+import { JointAnchors } from "../../core/pose/JointAnchors";
+import { PoseInput } from "../../core/pose/PoseInput";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "./types";
 import { PointCloud, TOTAL_PARTICLES } from "../../core/visuals/PointCloud";
 import { sampleImageToGrid } from "../../core/visuals/ImageSampler";
@@ -22,19 +22,19 @@ import { PresetStore } from "./presets/PresetStore";
 import { localStorageAdapter } from "./presets/storage";
 import { captureThumbnail } from "./presets/thumbnail-capture";
 import { PresetManagerPanel } from "./ui/PresetManagerPanel";
-import { MicAudioSource } from "./audio/MicAudioSource";
-import { DisplayAudioSource } from "./audio/DisplayAudioSource";
+import { MicAudioSource } from "../../core/audio/MicAudioSource";
+import { DisplayAudioSource } from "../../core/audio/DisplayAudioSource";
 import { loadSettings, type Settings, type RenderMode, type MotionTarget } from "./settings";
 import { fileHash } from "./automation/fileHash";
 import { AnalysisCache, type CachePayload, type BandTimeSeries, type SectionBoundary } from "./automation/AnalysisCache";
-import * as SongAnalyzer from "./audio/SongAnalyzer";
-import { detect, recomputeSections } from "./audio/SectionDetector";
+import * as SongAnalyzer from "../../core/audio/SongAnalyzer";
+import { detect, recomputeSections } from "../../core/audio/SectionDetector";
 import { ParameterAutomation } from "./automation/ParameterAutomation";
 import { DEFAULT_AUTOMATION_MAP, DEFAULT_STYLE_PRESETS, type StylePreset } from "./automation/AutomationMap";
 import { loadStylePresets } from "./automation/style-loader";
 import { SectionTimeline } from "./ui/SectionTimeline";
-import { FileAudioSource } from "./audio/FileAudioSource";
-import { OnsetDetector } from "./audio/OnsetDetector";
+import { FileAudioSource } from "../../core/audio/FileAudioSource";
+import { OnsetDetector } from "../../core/audio/OnsetDetector";
 
 export class App {
   readonly scene = new THREE.Scene();

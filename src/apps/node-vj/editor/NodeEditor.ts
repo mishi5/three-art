@@ -11,6 +11,7 @@ import {
   inputPortPos, outputPortPos, paramRowY, portRows, dist2,
 } from "./layout";
 import { openParamInput } from "./param-overlay";
+import { formatPortValue } from "./port-format";
 
 const PORT_COLORS: Record<PortType, string> = {
   number: "#7fd1ff", vec2: "#9aff9a", vec3: "#9aff9a", color: "#ffd27f",
@@ -42,6 +43,8 @@ export class NodeEditor {
     private canvas: HTMLCanvasElement,
     private graph: GraphDoc,
     private registry: NodeRegistry,
+    /** 出力ポートのライブ値を引く（GraphRuntime の直近評価結果）。任意。 */
+    private getOutputs?: (nodeId: string) => Record<string, unknown> | undefined,
   ) {
     const c = canvas.getContext("2d");
     if (!c) throw new Error("2d context unavailable");
@@ -316,12 +319,20 @@ export class NodeEditor {
       ctx.fillStyle = "#bbb"; ctx.textAlign = "left";
       ctx.fillText(p.label, pos.x + 10, pos.y);
     });
-    // output ports
+    // output ports（ライブ値があればポート右に表示）
+    const outputs = this.getOutputs?.(node.id);
     def.outputs.forEach((p, i) => {
       const pos = outputPortPos(node, i);
       this.drawPort(pos.x, pos.y, p.type);
       ctx.fillStyle = "#bbb"; ctx.textAlign = "right";
       ctx.fillText(p.label, pos.x - 10, pos.y);
+      if (outputs) {
+        const txt = formatPortValue(outputs[p.id], p.type);
+        if (txt) {
+          ctx.fillStyle = "#6c9"; ctx.textAlign = "left";
+          ctx.fillText(txt, pos.x + 10, pos.y);
+        }
+      }
     });
     ctx.textAlign = "left";
     // params

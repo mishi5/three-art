@@ -14,6 +14,7 @@ export class GraphRuntime {
   private audio: AudioFeatures = DEFAULT_AUDIO_FEATURES;
   private rafId: number | null = null;
   private startMs: number | null = null;
+  private lastOutputs = new Map<string, Record<string, unknown>>();
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -29,6 +30,16 @@ export class GraphRuntime {
 
   setGraph(graph: GraphDoc): void {
     this.graph = graph;
+  }
+
+  /** ノードの永続状態を取得する（入力ノードの start() を user gesture から呼ぶ用）。 */
+  getState(nodeId: string): NodeState | undefined {
+    return this.states.get(nodeId);
+  }
+
+  /** 直近フレームの評価結果（ノードの出力ポート値）。エディタのライブ表示用。 */
+  getOutputs(nodeId: string): Record<string, unknown> | undefined {
+    return this.lastOutputs.get(nodeId);
   }
 
   setAudio(audio: AudioFeatures): void {
@@ -72,7 +83,7 @@ export class GraphRuntime {
     if (this.startMs === null) this.startMs = nowMs;
     const timeSec = (nowMs - this.startMs) / 1000;
     this.syncStates();
-    evaluate(this.graph, this.registry, {
+    this.lastOutputs = evaluate(this.graph, this.registry, {
       timeSec,
       env: this.env(),
       state: (id) => this.states.get(id),
