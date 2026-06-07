@@ -38,8 +38,8 @@ const audio: AudioFeatures = { ...DEFAULT_AUDIO_FEATURES, fft };
 runtime.setAudio(audio);
 runtime.start();
 
-// ノードエディタ（全画面）
-const editor = new NodeEditor(editorCanvas, graph, registry);
+// ノードエディタ（全画面）。出力ポートのライブ値は runtime の直近評価結果から引く。
+const editor = new NodeEditor(editorCanvas, graph, registry, (id) => runtime.getOutputs(id));
 
 // 入力起動コントロール（mic/camera は user gesture 必須のためボタンから start）。
 type Startable = { start?: () => Promise<void> };
