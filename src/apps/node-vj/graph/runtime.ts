@@ -31,6 +31,11 @@ export class GraphRuntime {
     this.graph = graph;
   }
 
+  /** ノードの永続状態を取得する（入力ノードの start() を user gesture から呼ぶ用）。 */
+  getState(nodeId: string): NodeState | undefined {
+    return this.states.get(nodeId);
+  }
+
   setAudio(audio: AudioFeatures): void {
     this.audio = audio;
   }

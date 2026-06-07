@@ -44,3 +44,15 @@ export type Joints = Float32Array; // length = NUM_JOINTS * 3
 export function makeEmptyJoints(): Joints {
   return new Float32Array(NUM_JOINTS * 3);
 }
+
+/**
+ * pose 入力 1 フレーム分のバンドル。グラフの `pose` ポートで流す値。
+ * - joints: 平滑化済み 13 関節の 3D 位置（length = NUM_JOINTS*3）
+ * - visibility: 各関節の可視度 0..1（length = NUM_JOINTS）
+ * - center: 可視度重み付き重心 [x,y,z]
+ */
+export interface PoseFrame {
+  joints: Joints;
+  visibility: Float32Array;
+  center: Float32Array;
+}
