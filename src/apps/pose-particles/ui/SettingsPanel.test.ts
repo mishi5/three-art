@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { registerHappyDom } from "../../test-setup/dom";
+import { registerHappyDom } from "../../../test-setup/dom";
 import { SettingsPanel } from "./SettingsPanel";
 import { makeDefaultSettings, type Settings } from "../settings";
 
