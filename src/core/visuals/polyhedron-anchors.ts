@@ -7,7 +7,7 @@
  *
  * 戻り値の各成分はすべて [-1, 1] 範囲内。|pos| <= 1 (外接球半径)。
  */
-import type { PolyhedronFaces } from "../settings";
+import type { PolyhedronFaces } from "./render-mode";
 
 const INV_SQRT3 = 1 / Math.sqrt(3);
 const TWO_PI = 2 * Math.PI;

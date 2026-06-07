@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { NUM_JOINTS, type AudioFeatures, type Joints } from "../types";
-import { modeToInt, type Settings } from "../settings";
+import { modeToInt } from "./render-mode";
+import type { PointCloudUpdateParams } from "./params";
 import { axisToInt, effectiveTwistStrength, twistPhase } from "./twist";
 import type { ImageGrid } from "./ImageSampler";
 
@@ -684,7 +685,7 @@ export class PointCloud {
     visibility: Float32Array,
     center: Float32Array,
     audio: AudioFeatures,
-    settings: Settings,
+    settings: PointCloudUpdateParams,
     timeSec: number,
   ): void {
     const u = this.material.uniforms;

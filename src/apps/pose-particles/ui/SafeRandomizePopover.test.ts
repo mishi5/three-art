@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { registerHappyDom } from "../../test-setup/dom";
+import { registerHappyDom } from "../../../test-setup/dom";
 import { SafeRandomizePopover } from "./SafeRandomizePopover";
 import { RANDOMIZE_DESCRIPTORS, DEFAULT_SAFE_EXCLUDED } from "./randomize";
 

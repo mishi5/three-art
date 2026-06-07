@@ -1,7 +1,7 @@
 import GUI, { Controller } from "lil-gui";
 import type { Settings } from "../settings";
 import { RENDER_MODES, MOTION_TARGETS, makeDefaultSettings, saveSettings, clearSettings, deepMerge } from "../settings";
-import { TWIST_AXES } from "../visuals/twist";
+import { TWIST_AXES } from "../../../core/visuals/twist";
 import { parsePresetYaml, serializePresetYaml } from "./preset-yaml";
 import { randomizeSettings, safeRandomizeSettings } from "./randomize";
 import { attachParamTooltips } from "./param-tooltip";

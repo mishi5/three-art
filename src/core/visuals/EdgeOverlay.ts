@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { NUM_JOINTS, type AudioFeatures, type Joints } from "../types";
-import type { Settings } from "../settings";
+import type { EdgeOverlayUpdateParams } from "./params";
 import { applyTwist, effectiveTwistStrength, twistPhase } from "./twist";
 import { noise3D } from "./value-noise";
 import { samplePolyhedronUnit } from "./polyhedron-anchors";
@@ -205,7 +205,7 @@ export class EdgeOverlay {
     this.object3D.visible = false;
   }
 
-  update(joints: Joints, center: Float32Array, audio: AudioFeatures, settings: Settings, t: number): void {
+  update(joints: Joints, center: Float32Array, audio: AudioFeatures, settings: EdgeOverlayUpdateParams, t: number): void {
     if (settings.mode === "lattice" || settings.mode === "image" || settings.mode === "rain") {
       this.object3D.visible = false;
       return;

@@ -10,7 +10,7 @@
  * `auto.*` は演出ではなく制御系のため対象外。`mode` 自体も対象外。
  */
 import { MOTION_TARGETS, type RenderMode, type Settings } from "../settings";
-import { TWIST_AXES } from "../visuals/twist";
+import { TWIST_AXES } from "../../../core/visuals/twist";
 import { setByPath } from "../automation/setByPath";
 
 export type RandSpec =

@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "bun --hot ./pose-particles.html",
-    "build": "bun build ./pose-particles.html --outdir dist --minify",
+    "dev:vj": "bun --hot ./node-vj.html",
+    "build": "bun build ./pose-particles.html ./node-vj.html --outdir dist --minify",
     "test": "bun test --isolate"
   },
   "dependencies": {

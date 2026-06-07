@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { NUM_JOINTS, type AudioFeatures, type Joints } from "../types";
-import type { Settings } from "../settings";
+import type { FragmentFieldUpdateParams } from "./params";
 import { axisToInt, effectiveTwistStrength, twistPhase } from "./twist";
 
 const FRAGMENT_COUNT = 10000;
@@ -189,7 +189,7 @@ export class FragmentField {
     visibility: Float32Array,
     center: Float32Array,
     audio: AudioFeatures,
-    settings: Settings,
+    settings: FragmentFieldUpdateParams,
     timeSec: number,
   ): void {
     const u = this.material.uniforms;

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { registerHappyDom } from "../../test-setup/dom";
+import { registerHappyDom } from "../../../test-setup/dom";
 import { QuickActionsBar, type QuickActionsCallbacks } from "./QuickActionsBar";
 
 registerHappyDom();

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { FractalEffect } from "./FractalEffect";
-import { makeDefaultSettings } from "../../settings";
+import { makeDefaultSettings } from "../../apps/pose-particles/settings";
 
 const ZERO_AUDIO = { volume: 0, bass: 0, mid: 0, treble: 0 };
 
