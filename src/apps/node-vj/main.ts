@@ -1,70 +1,45 @@
-// node-vj アプリのエントリポイント（WIP）。
-// Epic #56: ノードベース VJ アプリ。グラフ基盤・ノードエディタ UI は #59 以降で実装する。
-//
-// #58 時点では「描画・エフェクトの共有コンポーネント(core)が node-vj からも
-// Settings 非依存で利用できる」ことの最小実証として、core の RainField を
-// core param 型だけで駆動して描画する。pose/audio など入力ノード化は #61。
-import * as THREE from "three";
-import { RainField } from "../../core/visuals/rain";
-import type { RainFieldUpdateParams } from "../../core/visuals/params";
+// node-vj アプリのエントリポイント（#60 ノードエディタ最小実装）。
+// 全画面の Canvas2D ノードエディタ + 隅の 3D プレビュー(PiP) + グラフランタイム。
+// 既定グラフ: Number→Multiply←Number → RainVisual.baseSpeed（Number 編集で雨速度が変化）。
+import { createDefaultRegistry } from "./nodes/registry";
+import { addConnection, addNode, createGraph } from "./graph/graph-doc";
+import { GraphRuntime } from "./graph/runtime";
+import { NodeEditor } from "./editor/NodeEditor";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "../../core/types";
 
-const canvas = document.getElementById("canvas");
-if (!(canvas instanceof HTMLCanvasElement)) throw new Error("canvas not found");
+const editorCanvas = document.getElementById("editor");
+const previewCanvas = document.getElementById("preview");
+if (!(editorCanvas instanceof HTMLCanvasElement)) throw new Error("editor canvas not found");
+if (!(previewCanvas instanceof HTMLCanvasElement)) throw new Error("preview canvas not found");
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000000);
-const camera = new THREE.PerspectiveCamera(50, 1, 0.01, 100);
-camera.position.set(0, 0, 2.4);
+const registry = createDefaultRegistry();
+const graph = createGraph();
 
-function resize(): void {
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  renderer.setSize(w, h);
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
+function defaults(type: string): Record<string, unknown> {
+  const def = registry.require(type);
+  return Object.fromEntries(def.params.map((p) => [p.id, p.default]));
 }
-resize();
-window.addEventListener("resize", resize);
 
-const rain = new RainField();
-scene.add(rain.object3D);
+// 既定グラフを構築
+addNode(graph, { id: "speed", type: "Number", params: { value: 0.4 }, position: { x: 40, y: 90 } });
+addNode(graph, { id: "scale", type: "Number", params: { value: 1.0 }, position: { x: 40, y: 240 } });
+addNode(graph, { id: "mul", type: "Multiply", params: defaults("Multiply"), position: { x: 280, y: 150 } });
+addNode(graph, { id: "rain", type: "RainVisual", params: defaults("RainVisual"), position: { x: 520, y: 110 } });
+addConnection(graph, registry, { id: "c1", from: { node: "speed", port: "out" }, to: { node: "mul", port: "a" } });
+addConnection(graph, registry, { id: "c2", from: { node: "scale", port: "out" }, to: { node: "mul", port: "b" } });
+addConnection(graph, registry, { id: "c3", from: { node: "mul", port: "out" }, to: { node: "rain", port: "baseSpeed" } });
 
-// core 共有コンポーネントを Settings ではなく core param 型だけで駆動する。
-const params: RainFieldUpdateParams = {
-  mode: "rain",
-  rain: {
-    baseSpeed: 0.3,
-    ampGain: 1.0,
-    count: 2000,
-    length: 0.06,
-    areaWidth: 2.0,
-    areaHeight: 2.4,
-    binMapping: "log",
-  },
-};
-
-// 合成 FFT（入力ノード未実装のため擬似的に帯域エネルギーを与える）。
+// プレビュー（PiP）ランタイム
+const runtime = new GraphRuntime(previewCanvas, registry, graph);
+runtime.setSize(320, 180);
+// 入力ノード未実装のため合成 FFT で雨を落とす（audio 入力ノードは #61）。
 const fft = new Float32Array(64).map((_, i) => 0.3 + 0.2 * Math.sin(i * 0.5));
 const audio: AudioFeatures = { ...DEFAULT_AUDIO_FEATURES, fft };
+runtime.setAudio(audio);
+runtime.start();
 
-const start = performance.now();
-function tick(): void {
-  requestAnimationFrame(tick);
-  const t = (performance.now() - start) / 1000;
-  rain.update(audio, params, t);
-  renderer.render(scene, camera);
-}
-tick();
+// ノードエディタ（全画面）
+const editor = new NodeEditor(editorCanvas, graph, registry);
 
-const root = document.getElementById("ui-root");
-if (root) {
-  root.style.cssText =
-    "position:fixed;left:12px;top:12px;color:#8af;font:12px/1.4 system-ui;" +
-    "background:rgba(0,0,0,0.5);padding:6px 10px;border:1px solid rgba(255,255,255,0.15);";
-  root.textContent = "node-vj (WIP) — core/visuals/RainField を共有コンポーネントとして描画中 (#58)";
-}
-
-console.log("[node-vj] rendering shared core RainField");
+(window as unknown as { nodeVj: unknown }).nodeVj = { graph, registry, runtime, editor };
+console.log("[node-vj] editor + preview started");

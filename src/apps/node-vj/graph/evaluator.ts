@@ -1,10 +1,14 @@
 // pull 評価エンジン（ADR #59）。
 // 毎フレーム sink から逆引きでトポロジカル評価し、フレーム内メモ化で各ノードを 1 回だけ評価。
 import { findNode, type GraphDoc, type NodeInstance } from "./graph-doc";
-import type { EvalContext, NodeRegistry, NodeTypeDef } from "./node-type";
+import type { EvalContext, NodeEnv, NodeRegistry, NodeState, NodeTypeDef } from "./node-type";
 
 export interface EvaluateOptions {
   timeSec: number;
+  /** visual/sink ノードへ渡すランタイム環境（scene/audio）。 */
+  env?: NodeEnv;
+  /** ノードの永続状態を引く（GraphRuntime が管理）。 */
+  state?: (nodeId: string) => NodeState | undefined;
 }
 
 /**
@@ -53,6 +57,8 @@ export function evaluate(
       input: (id) => inputValues.get(id),
       param: (id) => resolveParam(node, def, id),
       node,
+      state: opts.state?.(nodeId),
+      env: opts.env,
     };
     const outputs = def.evaluate(ctx);
 

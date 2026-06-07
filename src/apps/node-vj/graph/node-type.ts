@@ -1,7 +1,19 @@
 // ノード種別（NodeTypeDef）とレジストリ（ADR #59）。
 // NodeTypeDef は振る舞い（evaluate）を持ち、保存対象には含めない。
+// THREE / AudioFeatures は型のみ import（評価ロジック層は実行時 THREE 非依存を維持）。
+import type * as THREE from "three";
+import type { AudioFeatures } from "../../../core/types";
 import type { PortType } from "./port-types";
 import type { NodeInstance } from "./graph-doc";
+
+/** visual/sink ノードがランタイムから受け取る環境（scene と毎フレーム audio）。 */
+export interface NodeEnv {
+  scene: THREE.Scene;
+  audio: AudioFeatures;
+}
+
+/** ノードのフレーム間永続状態（visual モジュールのインスタンス等）。 */
+export type NodeState = unknown;
 
 export interface PortDef {
   id: string;
@@ -32,6 +44,10 @@ export interface EvalContext {
   param(id: string): unknown;
   /** 評価中のノード実体。 */
   node: NodeInstance;
+  /** このノードの永続状態（createState の戻り値）。visual/sink のみ利用。 */
+  state?: NodeState;
+  /** ランタイム環境（scene/audio）。visual/sink のみ利用。 */
+  env?: NodeEnv;
 }
 
 export interface NodeTypeDef {
@@ -42,6 +58,10 @@ export interface NodeTypeDef {
   params: ParamDef[];
   /** visual/output 系など副作用を持つ終端ノードは true。 */
   isSink?: boolean;
+  /** visual/sink ノードの初期化（THREE オブジェクト生成・scene 追加等）。1 度だけ呼ばれる。 */
+  createState?(env: NodeEnv): NodeState;
+  /** createState で確保した資源の解放。 */
+  disposeState?(state: NodeState, env: NodeEnv): void;
   /** 出力ポート id → 値。sink は空オブジェクトでよい。 */
   evaluate(ctx: EvalContext): Record<string, unknown>;
 }
