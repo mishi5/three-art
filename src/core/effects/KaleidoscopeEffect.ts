@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import type { PostEffect, SmoothedAudio } from "./PostEffect";
-import type { Settings } from "../../settings";
+import type { PostUpdateParams } from "./params";
 
 const VERTEX = /* glsl */ `
   varying vec2 vUv;
@@ -52,7 +52,7 @@ export class KaleidoscopeEffect implements PostEffect {
     this.passes[0]!.uniforms.uAspect!.value = w / Math.max(1, h);
   }
 
-  update(settings: Settings, _audio: SmoothedAudio): void {
+  update(settings: PostUpdateParams, _audio: SmoothedAudio): void {
     const k = settings.post.kaleidoscope;
     const pass = this.passes[0]!;
     const active = k.enabled && k.mix > 0;

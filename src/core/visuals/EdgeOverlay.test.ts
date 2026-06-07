@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import * as THREE from "three";
 import { EdgeOverlay, bitReverse8 } from "./EdgeOverlay";
-import { makeDefaultSettings } from "../settings";
+import { makeDefaultSettings } from "../../apps/pose-particles/settings";
 import { applyTwist } from "./twist";
 import { makeEmptyJoints, NUM_JOINTS, type AudioFeatures } from "../types";
 

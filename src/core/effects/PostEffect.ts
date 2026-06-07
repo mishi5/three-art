@@ -1,5 +1,5 @@
 import type { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
-import type { Settings } from "../../settings";
+import type { PostUpdateParams } from "./params";
 
 /** SmoothedAudio: 全 effect 共通の音声特徴量 (App.ts の private 型と一致)。 */
 export interface SmoothedAudio {
@@ -25,7 +25,7 @@ export interface PostEffect {
   readonly passes: ShaderPass[];
 
   /** 毎フレーム呼ばれる。enabled / パラメータ → uniform 反映。 */
-  update(settings: Settings, audio: SmoothedAudio): void;
+  update(settings: PostUpdateParams, audio: SmoothedAudio): void;
 
   /** リサイズ通知。texel 依存 effect (blur) と aspect 依存 effect (kaleidoscope) が利用。 */
   setSize(w: number, h: number, dpr: number): void;

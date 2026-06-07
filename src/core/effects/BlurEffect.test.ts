@@ -1,8 +1,8 @@
 import { describe, it, expect } from "bun:test";
 import * as THREE from "three";
 import { BlurEffect } from "./BlurEffect";
-import { makeDefaultSettings } from "../../settings";
-import { MAX_BLUR_ITERATIONS } from "../blur";
+import { makeDefaultSettings } from "../../apps/pose-particles/settings";
+import { MAX_BLUR_ITERATIONS } from "../visuals/blur";
 
 function makeAudio(bass = 0) {
   return { volume: 0, bass, mid: 0, treble: 0 };

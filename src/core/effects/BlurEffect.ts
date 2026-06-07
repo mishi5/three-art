@@ -1,8 +1,8 @@
 import * as THREE from "three";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import type { PostEffect, SmoothedAudio } from "./PostEffect";
-import type { Settings } from "../../settings";
-import { MAX_BLUR_ITERATIONS, effectiveBlurStrength } from "../blur";
+import type { PostUpdateParams } from "./params";
+import { MAX_BLUR_ITERATIONS, effectiveBlurStrength } from "../visuals/blur";
 
 const blurFragment = /* glsl */ `
   uniform sampler2D tDiffuse;
@@ -68,7 +68,7 @@ export class BlurEffect implements PostEffect {
     }
   }
 
-  update(settings: Settings, audio: SmoothedAudio): void {
+  update(settings: PostUpdateParams, audio: SmoothedAudio): void {
     const b = settings.blur;
     const radius = effectiveBlurStrength(b, audio.bass);
     const active = radius > 0;

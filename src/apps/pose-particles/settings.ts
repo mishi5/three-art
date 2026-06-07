@@ -4,15 +4,14 @@
  * Defaults are chosen to feel a bit more reactive than the spec's hard-coded
  * values; everything can be cranked up further from the GUI.
  */
-import { makeDefaultTwist, type TwistSettings } from "./visuals/twist";
-import { makeDefaultBlur, type BlurSettings } from "./visuals/blur";
+import { makeDefaultTwist, type TwistSettings } from "../../core/visuals/twist";
+import { makeDefaultBlur, type BlurSettings } from "../../core/visuals/blur";
+import type { RenderMode, PolyhedronFaces } from "../../core/visuals/render-mode";
 
-export type RenderMode = "bones" | "cube" | "sphere" | "lattice" | "image" | "rain";
-
-export const RENDER_MODES: ReadonlyArray<RenderMode> = ["bones", "cube", "sphere", "lattice", "image", "rain"];
-
-export type PolyhedronFaces = 4 | 6 | 8 | 12;
-export const POLYHEDRON_FACES: ReadonlyArray<PolyhedronFaces> = [4, 6, 8, 12];
+// レンダリングモード関連の共有定義は core/visuals/render-mode に集約。
+// 既存の `./settings` 経由 import を壊さないよう re-export する。
+export { modeToInt, RENDER_MODES, POLYHEDRON_FACES } from "../../core/visuals/render-mode";
+export type { RenderMode, PolyhedronFaces } from "../../core/visuals/render-mode";
 
 /** Parameters that body motion can be routed into as a multiplicative boost. */
 export const MOTION_TARGETS = [
@@ -49,18 +48,6 @@ export const MOTION_TARGETS = [
   "image.waveStrength",
 ] as const;
 export type MotionTarget = typeof MOTION_TARGETS[number];
-
-/** Numeric mode passed to shaders (must match shader switch). */
-export function modeToInt(mode: RenderMode): number {
-  switch (mode) {
-    case "bones": return 0;
-    case "cube": return 1;
-    case "sphere": return 2;
-    case "lattice": return 3;
-    case "image": return 4;
-    case "rain": return 5;
-  }
-}
 
 /** image モード専用パラメータ (Issue #18)。 */
 export interface ImageSettings {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { samplePolyhedronUnit } from "./polyhedron-anchors";
-import type { PolyhedronFaces } from "../settings";
+import type { PolyhedronFaces } from "./render-mode";
 
 function norm(v: readonly [number, number, number]): number {
   return Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);

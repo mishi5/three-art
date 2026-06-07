@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { AudioFeatures } from "../types";
-import type { RainBinMapping, Settings } from "../settings";
+import type { RainBinMapping, RainFieldUpdateParams } from "./params";
 
 export function expectedRainSpeed(baseSpeed: number, ampGain: number, amp: number): number {
   return baseSpeed + ampGain * amp;
@@ -199,7 +199,7 @@ export class RainField {
     this.currentAreaHeight = areaHeight;
   }
 
-  update(audio: AudioFeatures, settings: Settings, t: number): void {
+  update(audio: AudioFeatures, settings: RainFieldUpdateParams, t: number): void {
     if (settings.mode !== "rain") {
       this.object3D.visible = false;
       this.lastT = null; // re-seed dt when we return to rain

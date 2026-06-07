@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import * as THREE from "three";
 import { PostPipeline } from "./PostPipeline";
-import { makeDefaultSettings } from "../../settings";
+import { makeDefaultSettings } from "../../apps/pose-particles/settings";
 
 function makePipeline() {
   // EffectComposer ctor は renderer.getSize / getPixelRatio を呼ぶため両方 stub する。

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import type { PostEffect, SmoothedAudio } from "./PostEffect";
-import type { Settings } from "../../settings";
+import type { PostUpdateParams } from "./params";
 
 const VERTEX = /* glsl */ `
   varying vec2 vUv;
@@ -61,7 +61,7 @@ export class FractalEffect implements PostEffect {
     // UV ベース処理のためサイズ依存無し
   }
 
-  update(settings: Settings, _audio: SmoothedAudio): void {
+  update(settings: PostUpdateParams, _audio: SmoothedAudio): void {
     const f = settings.post.fractal;
     const pass = this.passes[0]!;
     const active = f.enabled && f.mix > 0;

@@ -4,7 +4,7 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import type { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
 import type { PostEffect, SmoothedAudio } from "./PostEffect";
-import type { Settings } from "../../settings";
+import type { PostUpdateParams } from "./params";
 import { BlurEffect } from "./BlurEffect";
 import { KaleidoscopeEffect } from "./KaleidoscopeEffect";
 import { FractalEffect } from "./FractalEffect";
@@ -82,7 +82,7 @@ export class PostPipeline {
     for (const e of this.effects.values()) e.setSize(w, h, dpr);
   }
 
-  update(settings: Settings, audio: SmoothedAudio): void {
+  update(settings: PostUpdateParams, audio: SmoothedAudio): void {
     this.syncOrder(settings.post.order);
     for (const e of this.effects.values()) e.update(settings, audio);
   }
