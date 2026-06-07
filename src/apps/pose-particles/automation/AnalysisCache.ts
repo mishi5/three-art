@@ -1,19 +1,15 @@
+// 解析結果のドメイン型は core/audio/analysis-types に集約。既存 import を壊さないよう
+// ここから re-export する（このモジュールは localStorage キャッシュ機構を担う）。
+import type {
+  BandFrame, BandTimeSeries, SectionBoundary, Section,
+} from "../../../core/audio/analysis-types";
+export type {
+  BandFrame, BandTimeSeries, SectionBoundary, Section,
+} from "../../../core/audio/analysis-types";
+
 export const CACHE_VERSION = 1;
 
 const KEY_PREFIX = "pose-particles.analysis.v1.";
-
-// 中身の型は段階的に厳密化される。AnalysisCache 自体は "不透明な payload" として扱う。
-export interface BandFrame {
-  t: number; volume: number; bass: number; mid: number; treble: number;
-}
-export interface BandTimeSeries {
-  duration: number; frames: BandFrame[]; sampleRate: number;
-}
-export interface SectionBoundary { t: number; source: "auto" | "user-add"; }
-export interface Section {
-  start: number; end: number;
-  energyNorm: number; bassAbs: number; midAbs: number; trebleAbs: number;
-}
 
 export interface CachePayload {
   version: number;

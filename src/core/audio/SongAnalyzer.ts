@@ -1,4 +1,4 @@
-import type { BandFrame, BandTimeSeries } from "../automation/AnalysisCache";
+import type { BandFrame, BandTimeSeries } from "./analysis-types";
 import { computeBands } from "./AudioAnalyzer";
 
 export interface BinSample {
