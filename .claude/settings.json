@@ -1,19 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(git show:*)",
-      "Bash(gh issue view:*)",
-      "Bash(gh issue comment:*)",
-      "Bash(gh issue create:*)",
-      "Bash(gh issue close:*)",
-      "Bash(sed -n:*)",
-      "mcp__plugin_serena_serena__activate_project",
-      "mcp__plugin_serena_serena__create_text_file",
-      "mcp__plugin_serena_serena__initial_instructions",
-      "mcp__plugin_serena_serena__read_file",
-      "mcp__plugin_serena_serena__replace_content"
+      "Bash(git *)",
+      "Bash(gh issue *)",
+      "Bash(gh pr *)",
+      "Bash(bun *)",
+      "Bash(bunx tsc *)",
+      "Bash(sed -n:*)"
     ]
   }
 }
