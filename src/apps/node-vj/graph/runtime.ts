@@ -4,8 +4,8 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "../../../core/types";
 import { evaluate } from "./evaluator";
-import { findNode, type GraphDoc } from "./graph-doc";
-import type { NodeEnv, NodeRegistry, NodeState } from "./node-type";
+import type { GraphDoc } from "./graph-doc";
+import type { NodeEnv, NodeRegistry, NodeState, NodeTypeDef } from "./node-type";
 
 export class GraphRuntime {
   readonly scene = new THREE.Scene();
@@ -13,6 +13,8 @@ export class GraphRuntime {
   readonly renderer: THREE.WebGLRenderer;
   private readonly controls: OrbitControls;
   private states = new Map<string, NodeState>();
+  /** state を生成した NodeTypeDef を控える（ノード削除後も disposeState を確実に呼ぶため）。 */
+  private stateDefs = new Map<string, NodeTypeDef>();
   private audio: AudioFeatures = DEFAULT_AUDIO_FEATURES;
   private rafId: number | null = null;
   private startMs: number | null = null;
@@ -71,13 +73,13 @@ export class GraphRuntime {
   private syncStates(): void {
     const env = this.env();
     const alive = new Set(this.graph.nodes.map((n) => n.id));
-    // 削除されたノードの state を破棄
+    // 削除されたノードの state を破棄。ノードは既にグラフから消えているため、
+    // 生成時に控えた def を使って disposeState を確実に呼ぶ。
     for (const [id, state] of [...this.states.entries()]) {
       if (!alive.has(id)) {
-        const node = findNode(this.graph, id);
-        const def = node ? this.registry.get(node.type) : undefined;
-        def?.disposeState?.(state, env);
+        this.stateDefs.get(id)?.disposeState?.(state, env);
         this.states.delete(id);
+        this.stateDefs.delete(id);
       }
     }
     // createState を持つノードで未生成のものを生成
@@ -85,6 +87,7 @@ export class GraphRuntime {
       const def = this.registry.get(node.type);
       if (def?.createState && !this.states.has(node.id)) {
         this.states.set(node.id, def.createState(env));
+        this.stateDefs.set(node.id, def);
       }
     }
   }
