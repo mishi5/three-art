@@ -6,9 +6,10 @@ import {
 } from "../graph/graph-doc";
 import type { NodeRegistry } from "../graph/node-type";
 import { isCompatible, type PortType } from "../graph/port-types";
+import { signalInputs, isParamInput } from "../graph/node-ports";
 import {
-  NODE_WIDTH, TITLE_H, ROW_H, PORT_R, PADDING, nodeHeight, nodeRect,
-  inputPortPos, outputPortPos, paramRowY, portRows, dist2,
+  NODE_WIDTH, TITLE_H, ROW_H, PORT_R, nodeRect,
+  inputPortPos, outputPortPos, paramRowY, paramPortPos, resolveInputPortPos, dist2,
 } from "./layout";
 import { openParamInput } from "./param-overlay";
 import { formatPortValue } from "./port-format";
@@ -114,15 +115,25 @@ export class NodeEditor {
     for (const node of this.graph.nodes) {
       const def = this.registry.get(node.type);
       if (!def) continue;
-      for (let i = 0; i < def.inputs.length; i++) {
+      // signal 入力（上部行）
+      const sig = signalInputs(def);
+      for (let i = 0; i < sig.length; i++) {
         const pos = inputPortPos(node, i);
         if (dist2(wx, wy, pos.x, pos.y) <= r2)
-          return { node: node.id, port: def.inputs[i]!.id, kind: "input", type: def.inputs[i]!.type };
+          return { node: node.id, port: sig[i]!.id, kind: "input", type: sig[i]!.type };
       }
+      // 出力
       for (let i = 0; i < def.outputs.length; i++) {
         const pos = outputPortPos(node, i);
         if (dist2(wx, wy, pos.x, pos.y) <= r2)
           return { node: node.id, port: def.outputs[i]!.id, kind: "output", type: def.outputs[i]!.type };
+      }
+      // 数値 param の行ドット（入力）
+      for (let i = 0; i < def.params.length; i++) {
+        if (!isParamInput(def, def.params[i]!.id)) continue;
+        const pos = paramPortPos(node, def, i);
+        if (dist2(wx, wy, pos.x, pos.y) <= r2)
+          return { node: node.id, port: def.params[i]!.id, kind: "input", type: "number" };
       }
     }
     return null;
@@ -272,10 +283,9 @@ export class NodeEditor {
     const toDef = toNode && this.registry.get(toNode.type);
     if (!fromNode || !toNode || !fromDef || !toDef) return;
     const oi = fromDef.outputs.findIndex((p) => p.id === c.from.port);
-    const ii = toDef.inputs.findIndex((p) => p.id === c.to.port);
-    if (oi < 0 || ii < 0) return;
+    const b = resolveInputPortPos(toNode, toDef, c.to.port);
+    if (oi < 0 || !b) return;
     const a = outputPortPos(fromNode, oi);
-    const b = inputPortPos(toNode, ii);
     this.bezier(a.x, a.y, b.x, b.y, PORT_COLORS[fromDef.outputs[oi]!.type]);
   }
 
@@ -312,8 +322,8 @@ export class NodeEditor {
     ctx.fillText(def.type, r.x + 8, r.y + TITLE_H / 2);
 
     ctx.font = "11px system-ui";
-    // input ports
-    def.inputs.forEach((p, i) => {
+    // signal 入力ポート（上部）
+    signalInputs(def).forEach((p, i) => {
       const pos = inputPortPos(node, i);
       this.drawPort(pos.x, pos.y, p.type);
       ctx.fillStyle = "#bbb"; ctx.textAlign = "left";
@@ -335,16 +345,21 @@ export class NodeEditor {
       }
     });
     ctx.textAlign = "left";
-    // params
+    // params（数値 param は左辺に接続ドット）
     def.params.forEach((p, i) => {
       const y = paramRowY(node, def, i);
       const val = node.params[p.id] ?? p.default;
       ctx.fillStyle = "#222";
       ctx.fillRect(r.x + 6, y - ROW_H / 2 + 2, r.w - 12, ROW_H - 4);
-      ctx.fillStyle = "#9ab"; ctx.fillText(p.label, r.x + 10, y);
+      ctx.fillStyle = "#9ab"; ctx.textAlign = "left";
+      ctx.fillText(p.label, r.x + 12, y);
       ctx.fillStyle = "#fff"; ctx.textAlign = "right";
       ctx.fillText(String(val), r.x + r.w - 10, y);
       ctx.textAlign = "left";
+      if (isParamInput(def, p.id)) {
+        const pos = paramPortPos(node, def, i);
+        this.drawPort(pos.x, pos.y, "number");
+      }
     });
   }
 
