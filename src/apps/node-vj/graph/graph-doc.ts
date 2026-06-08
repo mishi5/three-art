@@ -2,6 +2,7 @@
 // NodeInstance / Connection / GraphDoc は純データ（関数を持たない）→ JSON 化可能。
 import type { NodeRegistry } from "./node-type";
 import { isCompatible } from "./port-types";
+import { effectiveInputPorts } from "./node-ports";
 
 export interface NodeInstance {
   id: string;
@@ -75,7 +76,8 @@ export function addConnection(
   if (!fromDef || !toDef) return { ok: false, reason: "node type not found" };
 
   const outPort = fromDef.outputs.find((p) => p.id === conn.from.port);
-  const inPort = toDef.inputs.find((p) => p.id === conn.to.port);
+  // 数値 param も実効入力ポートとして接続を受け付ける（#74）。
+  const inPort = effectiveInputPorts(toDef).find((p) => p.id === conn.to.port);
   if (!outPort || !inPort) return { ok: false, reason: "port not found" };
 
   if (!isCompatible(outPort.type, inPort.type)) {

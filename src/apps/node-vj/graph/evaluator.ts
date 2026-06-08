@@ -2,6 +2,7 @@
 // 毎フレーム sink から逆引きでトポロジカル評価し、フレーム内メモ化で各ノードを 1 回だけ評価。
 import { findNode, type GraphDoc, type NodeInstance } from "./graph-doc";
 import type { EvalContext, NodeEnv, NodeRegistry, NodeState, NodeTypeDef } from "./node-type";
+import { effectiveInputPorts, isParamInput } from "./node-ports";
 
 export interface EvaluateOptions {
   timeSec: number;
@@ -41,8 +42,9 @@ export function evaluate(
     if (!node) throw new Error(`node not found: ${nodeId}`);
     const def = registry.require(node.type);
 
+    // 実効入力（signal ∪ 数値 param）を解決。接続あり→上流値、なし→手動 param（あれば）。
     const inputValues = new Map<string, unknown>();
-    for (const port of def.inputs) {
+    for (const port of effectiveInputPorts(def)) {
       const c = g.connections.find((c) => c.to.node === nodeId && c.to.port === port.id);
       if (c) {
         const upstream = evalNode(c.from.node);
@@ -55,7 +57,8 @@ export function evaluate(
     const ctx: EvalContext = {
       timeSec: opts.timeSec,
       input: (id) => inputValues.get(id),
-      param: (id) => resolveParam(node, def, id),
+      // 数値 param は接続時に上流値で上書き（#74）。enum/boolean 等は手動値のまま。
+      param: (id) => (isParamInput(def, id) ? inputValues.get(id) : resolveParam(node, def, id)),
       node,
       state: opts.state?.(nodeId),
       env: opts.env,
