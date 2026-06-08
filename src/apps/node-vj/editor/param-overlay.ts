@@ -50,12 +50,18 @@ export function openParamInput(opts: ParamInputOptions): void {
     else if (e.key === "Escape") { e.preventDefault(); cleanup(); }
   };
   el.addEventListener("keydown", onKey as EventListener);
-  el.addEventListener("blur", commit);
   if (el instanceof HTMLSelectElement) el.addEventListener("change", commit);
 
   document.body.appendChild(el);
-  el.focus();
-  if (el instanceof HTMLInputElement) el.select();
+  // フォーカス付与は次タスクに遅延する。pointerdown 内で同期 focus すると、
+  // その後の mousedown 既定処理がフォーカスを canvas/body へ移し、input が即 blur →
+  // commit で消えてしまう（編集できない）。遅延すると既定処理の後にフォーカスが乗る。
+  setTimeout(() => {
+    el.focus();
+    if (el instanceof HTMLInputElement) el.select();
+    // blur での commit はフォーカス確定後に張る（遅延前の偽 blur を拾わない）。
+    el.addEventListener("blur", commit);
+  }, 0);
 }
 
 function parseValue(raw: string, kind: ParamKind): unknown {
