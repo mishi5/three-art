@@ -31,7 +31,30 @@ addConnection(graph, registry, { id: "c3", from: { node: "mul", port: "out" }, t
 
 // プレビュー（PiP）ランタイム
 const runtime = new GraphRuntime(previewCanvas, registry, graph);
-runtime.setSize(320, 180);
+
+// プレビュー拡大トグル: 小 PiP(320×180) ⇄ 大(ビューポート ~85%)。
+// クリック（移動量小）で切替、ドラッグは OrbitControls の回転に使う。
+const preview = previewCanvas;
+let previewLarge = false;
+function applyPreviewSize(): void {
+  const w = previewLarge ? Math.round(window.innerWidth * 0.85) : 320;
+  const h = previewLarge ? Math.round(window.innerHeight * 0.85) : 180;
+  preview.style.width = w + "px";
+  preview.style.height = h + "px";
+  runtime.setSize(w, h);
+}
+applyPreviewSize();
+{
+  let downX = 0, downY = 0;
+  preview.addEventListener("pointerdown", (e) => { downX = e.clientX; downY = e.clientY; });
+  preview.addEventListener("pointerup", (e) => {
+    if (Math.hypot(e.clientX - downX, e.clientY - downY) < 5) {
+      previewLarge = !previewLarge;
+      applyPreviewSize();
+    }
+  });
+}
+window.addEventListener("resize", applyPreviewSize);
 // 入力ノード未実装のため合成 FFT で雨を落とす（audio 入力ノードは #61）。
 const fft = new Float32Array(64).map((_, i) => 0.3 + 0.2 * Math.sin(i * 0.5));
 const audio: AudioFeatures = { ...DEFAULT_AUDIO_FEATURES, fft };
