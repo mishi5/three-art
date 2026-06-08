@@ -1,6 +1,7 @@
 // グラフランタイム（ADR #59）。renderer/scene/camera を持ち、毎フレーム
 // グラフを評価して描画する。visual/sink ノードの永続状態の生成・破棄も管理する。
 import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "../../../core/types";
 import { evaluate } from "./evaluator";
 import { findNode, type GraphDoc } from "./graph-doc";
@@ -10,6 +11,7 @@ export class GraphRuntime {
   readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
   readonly renderer: THREE.WebGLRenderer;
+  private readonly controls: OrbitControls;
   private states = new Map<string, NodeState>();
   private audio: AudioFeatures = DEFAULT_AUDIO_FEATURES;
   private rafId: number | null = null;
@@ -23,9 +25,15 @@ export class GraphRuntime {
   ) {
     this.scene.background = new THREE.Color(0x000000);
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.01, 100);
-    this.camera.position.set(0, 0, 2.4);
+    this.camera.position.set(0, 0, 1.8);
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // プレビューを回転・ズームしてビジュアルをフレーミングできるようにする。
+    this.controls = new OrbitControls(this.camera, canvas);
+    this.controls.enableDamping = true;
+    this.controls.dampingFactor = 0.08;
+    this.controls.minDistance = 0.3;
+    this.controls.maxDistance = 30;
   }
 
   setGraph(graph: GraphDoc): void {
@@ -53,7 +61,10 @@ export class GraphRuntime {
   }
 
   private env(): NodeEnv {
-    return { scene: this.scene, audio: this.audio };
+    return {
+      scene: this.scene, audio: this.audio,
+      renderer: this.renderer, camera: this.camera,
+    };
   }
 
   /** グラフに合わせて visual/sink ノードの永続状態を生成・破棄する。 */
@@ -88,6 +99,7 @@ export class GraphRuntime {
       env: this.env(),
       state: (id) => this.states.get(id),
     });
+    this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }
 

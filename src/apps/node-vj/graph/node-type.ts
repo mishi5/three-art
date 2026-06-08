@@ -6,10 +6,13 @@ import type { AudioFeatures } from "../../../core/types";
 import type { PortType } from "./port-types";
 import type { NodeInstance } from "./graph-doc";
 
-/** visual/sink ノードがランタイムから受け取る環境（scene と毎フレーム audio）。 */
+/** visual/sink ノードがランタイムから受け取る環境（scene/renderer/camera と毎フレーム audio）。 */
 export interface NodeEnv {
   scene: THREE.Scene;
   audio: AudioFeatures;
+  /** PointCloud の pixelRatio / projection 算出に使う。 */
+  renderer: THREE.WebGLRenderer;
+  camera: THREE.PerspectiveCamera;
 }
 
 /** ノードのフレーム間永続状態（visual モジュールのインスタンス等）。 */

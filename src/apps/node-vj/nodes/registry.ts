@@ -10,6 +10,7 @@ import { SmoothNode } from "./SmoothNode";
 import { PoseInputNode } from "./PoseInputNode";
 import { AudioInputNode } from "./AudioInputNode";
 import { RainVisualNode } from "./RainVisualNode";
+import { PointCloudVisualNode } from "./PointCloudVisualNode";
 
 /** 既定ノードを登録したレジストリを返す。 */
 export function createDefaultRegistry(): NodeRegistry {
@@ -27,6 +28,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(RemapNode);
   r.register(SmoothNode);
   // visual
+  r.register(PointCloudVisualNode);
   r.register(RainVisualNode);
   return r;
 }
