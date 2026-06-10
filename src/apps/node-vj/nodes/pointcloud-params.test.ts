@@ -23,6 +23,12 @@ describe("buildPointCloudParams", () => {
     expect(p.pointCloud.bassExpansion).toBe(7);
   });
 
+  test("polyhedron は enum(select) 由来の文字列を数値へ正規化", () => {
+    const p = buildPointCloudParams({ polyhedron: "8" as unknown as 8 });
+    expect(p.shape.polyhedron).toBe(8);
+    expect(buildPointCloudParams({}).shape.polyhedron).toBe(6);
+  });
+
   test("twist は strength>0 で enabled", () => {
     expect(buildPointCloudParams({ twistStrength: 0 }).twist.enabled).toBe(false);
     const t = buildPointCloudParams({ twistStrength: 2, twistAxis: "x" }).twist;

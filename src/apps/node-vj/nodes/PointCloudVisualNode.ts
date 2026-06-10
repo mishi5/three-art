@@ -46,7 +46,7 @@ export const PointCloudVisualNode: NodeTypeDef = {
     { id: "mode", label: "mode", kind: "enum", default: "cube", options: ["bones", "cube", "sphere", "lattice", "image"] },
     { id: "radius", label: "radius", kind: "number", default: 0.4, min: 0.05, max: 3, step: 0.01 },
     { id: "bassPulse", label: "bassPulse", kind: "number", default: 0.5, min: 0, max: 2, step: 0.05 },
-    { id: "polyhedron", label: "polyhedron(4/6/8/12)", kind: "int", default: 6, min: 4, max: 12, step: 2 },
+    { id: "polyhedron", label: "polyhedron", kind: "enum", default: "6", options: ["4", "6", "8", "12"] },
     { id: "hueBase", label: "hueBase", kind: "number", default: 0.6, min: 0, max: 1, step: 0.01 },
     { id: "hueSpread", label: "hueSpread", kind: "number", default: 0.4, min: 0, max: 1, step: 0.01 },
     { id: "saturation", label: "saturation", kind: "number", default: 0.6, min: 0, max: 1, step: 0.01 },

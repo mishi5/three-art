@@ -42,6 +42,8 @@ function pick<K extends keyof PointCloudCurated>(c: Partial<PointCloudCurated>, 
 /** curated（部分指定可）からフルの PointCloudUpdateParams を構築する。 */
 export function buildPointCloudParams(c: Partial<PointCloudCurated>): PointCloudUpdateParams {
   const twistStrength = pick(c, "twistStrength");
+  // polyhedron は enum param（select）由来で文字列 "6" 等が来るため数値へ正規化する。
+  const polyhedron = Number(pick(c, "polyhedron")) as PolyhedronFaces;
   return {
     mode: pick(c, "mode"),
     pointCloud: {
@@ -54,7 +56,7 @@ export function buildPointCloudParams(c: Partial<PointCloudCurated>): PointCloud
     shape: {
       radius: pick(c, "radius"),
       bassPulse: pick(c, "bassPulse"),
-      polyhedron: pick(c, "polyhedron"),
+      polyhedron,
     },
     color: {
       hueBase: pick(c, "hueBase"),
