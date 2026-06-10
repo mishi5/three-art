@@ -7,10 +7,15 @@ export function isNumericParam(p: ParamDef): boolean {
   return p.kind === "number" || p.kind === "int";
 }
 
-/** 数値 param に対応する入力ポート（id=param id, type=number）。 */
+/** その param が入力ポートを持つか（数値かつ noInput でない）。 */
+export function isConnectableParam(p: ParamDef): boolean {
+  return isNumericParam(p) && !p.noInput;
+}
+
+/** 数値 param に対応する入力ポート（id=param id, type=number）。noInput は除外。 */
 export function paramInputs(def: NodeTypeDef): PortDef[] {
   return def.params
-    .filter(isNumericParam)
+    .filter(isConnectableParam)
     .map((p) => ({ id: p.id, label: p.label, type: "number" as const }));
 }
 
@@ -27,5 +32,5 @@ export function effectiveInputPorts(def: NodeTypeDef): PortDef[] {
 
 /** その入力ポート id が数値 param 由来か（= 接続時に手動値を上書きする対象か）。 */
 export function isParamInput(def: NodeTypeDef, portId: string): boolean {
-  return def.params.some((p) => p.id === portId && isNumericParam(p));
+  return def.params.some((p) => p.id === portId && isConnectableParam(p));
 }

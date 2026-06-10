@@ -39,6 +39,8 @@ export class NodeEditor {
   private selected: string | null = null;
   private rafId: number | null = null;
   private toolbar: HTMLDivElement;
+  /** 出力ポート横のライブ値表示（デバッグ用）。既定 OFF、ツールバーで切替。 */
+  private showOutputValues = false;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -82,6 +84,17 @@ export class NodeEditor {
       btn.addEventListener("click", () => this.addNodeOfType(def.type));
       bar.appendChild(btn);
     }
+    // デバッグ: 出力ポート横のライブ値表示トグル（既定 OFF）。
+    const dbg = document.createElement("button");
+    const syncDbg = (): void => {
+      dbg.textContent = `出力値: ${this.showOutputValues ? "ON" : "OFF"}`;
+      dbg.style.cssText =
+        "background:#1c1c22;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;" +
+        `color:${this.showOutputValues ? "#6c9" : "#888"};`;
+    };
+    syncDbg();
+    dbg.addEventListener("click", () => { this.showOutputValues = !this.showOutputValues; syncDbg(); });
+    bar.appendChild(dbg);
     const hint = document.createElement("span");
     hint.textContent = "  ドラッグ=移動 / 出力●→入力●=接続 / 入力●クリック=切断 / param クリック=編集 / Del=削除";
     hint.style.cssText = "color:#888;align-self:center;";
@@ -231,6 +244,18 @@ export class NodeEditor {
     }
   };
 
+  /**
+   * param 入力ポートが接続されていれば、上流ノードの直近ライブ出力値を返す。
+   * 未接続（または値未評価）は undefined。
+   */
+  private resolveConnectedValue(node: NodeInstance, paramId: string): unknown {
+    const c = this.graph.connections.find(
+      (cc) => cc.to.node === node.id && cc.to.port === paramId,
+    );
+    if (!c) return undefined;
+    return this.getOutputs?.(c.from.node)?.[c.from.port];
+  }
+
   private editParam(e: PointerEvent, node: NodeInstance, paramIndex: number): void {
     const def = this.registry.require(node.type);
     const pd = def.params[paramIndex]!;
@@ -329,8 +354,8 @@ export class NodeEditor {
       ctx.fillStyle = "#bbb"; ctx.textAlign = "left";
       ctx.fillText(p.label, pos.x + 10, pos.y);
     });
-    // output ports（ライブ値があればポート右に表示）
-    const outputs = this.getOutputs?.(node.id);
+    // output ports（ライブ値はデバッグトグル ON のときのみ表示）
+    const outputs = this.showOutputValues ? this.getOutputs?.(node.id) : undefined;
     def.outputs.forEach((p, i) => {
       const pos = outputPortPos(node, i);
       this.drawPort(pos.x, pos.y, p.type);
@@ -348,13 +373,19 @@ export class NodeEditor {
     // params（数値 param は左辺に接続ドット）
     def.params.forEach((p, i) => {
       const y = paramRowY(node, def, i);
-      const val = node.params[p.id] ?? p.default;
       ctx.fillStyle = "#222";
       ctx.fillRect(r.x + 6, y - ROW_H / 2 + 2, r.w - 12, ROW_H - 4);
       ctx.fillStyle = "#9ab"; ctx.textAlign = "left";
       ctx.fillText(p.label, r.x + 12, y);
-      ctx.fillStyle = "#fff"; ctx.textAlign = "right";
-      ctx.fillText(String(val), r.x + r.w - 10, y);
+      // 接続中は上流のライブ値を表示（手動値は無視されるため）。未接続は手動値。
+      const live = this.resolveConnectedValue(node, p.id);
+      if (live !== undefined) {
+        ctx.fillStyle = "#6c9"; ctx.textAlign = "right";
+        ctx.fillText(formatPortValue(live, "number") || String(live), r.x + r.w - 10, y);
+      } else {
+        ctx.fillStyle = "#fff"; ctx.textAlign = "right";
+        ctx.fillText(String(node.params[p.id] ?? p.default), r.x + r.w - 10, y);
+      }
       ctx.textAlign = "left";
       if (isParamInput(def, p.id)) {
         const pos = paramPortPos(node, def, i);

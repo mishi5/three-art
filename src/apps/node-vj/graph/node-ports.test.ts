@@ -58,4 +58,17 @@ describe("node-ports 分類", () => {
     expect(isNumericParam({ id: "x", label: "", kind: "int", default: 0 })).toBe(true);
     expect(isNumericParam({ id: "x", label: "", kind: "enum", default: "" })).toBe(false);
   });
+
+  test("noInput な数値 param は入力ポートを持たない（Number.value 等）", () => {
+    const fixed: NodeTypeDef = {
+      type: "Fixed",
+      inputs: [],
+      outputs: [{ id: "out", label: "n", type: "number" }],
+      params: [{ id: "value", label: "Value", kind: "number", default: 1, noInput: true }],
+      evaluate: () => ({}),
+    };
+    expect(paramInputs(fixed)).toEqual([]);
+    expect(effectiveInputPorts(fixed)).toEqual([]);
+    expect(isParamInput(fixed, "value")).toBe(false);
+  });
 });

@@ -35,6 +35,8 @@ export interface ParamDef {
   max?: number;
   step?: number;
   options?: string[];
+  /** true なら数値 param でも入力ポートを作らない（Number.value のような固定値ソース用）。 */
+  noInput?: boolean;
 }
 
 /** evaluate に渡される文脈。入力値は接続解決済み（未接続は param フォールバック）。 */
