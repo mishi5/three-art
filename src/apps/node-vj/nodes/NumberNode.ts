@@ -6,6 +6,7 @@ export const NumberNode: NodeTypeDef = {
   category: "input",
   inputs: [],
   outputs: [{ id: "out", label: "n", type: "number" }],
-  params: [{ id: "value", label: "Value", kind: "number", default: 1, step: 0.1 }],
+  // 固定値を出力するためだけのノードなので value は入力ポートを持たない。
+  params: [{ id: "value", label: "Value", kind: "number", default: 1, step: 0.1, noInput: true }],
   evaluate: (ctx) => ({ out: ctx.param("value") as number }),
 };
