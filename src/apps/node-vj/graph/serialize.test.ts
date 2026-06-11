@@ -82,6 +82,13 @@ describe("serializeGraph / deserializeGraph", () => {
     expect(warnings.length).toBe(2);
   });
 
+  test("preview フラグはラウンドトリップで保持される", () => {
+    const g = createGraph();
+    addNode(g, { id: "v", type: "RainVisual", params: {}, preview: true });
+    const { graph } = deserializeGraph(serializeGraph(g), r);
+    expect(graph.nodes[0]!.preview).toBe(true);
+  });
+
   test("version 不一致は throw", () => {
     expect(() => deserializeGraph("version: 99\nnodes: []\nconnections: []", r)).toThrow();
   });

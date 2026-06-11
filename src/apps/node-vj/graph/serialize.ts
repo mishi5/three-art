@@ -59,6 +59,7 @@ export function deserializeGraph(text: string, registry: NodeRegistry): Deserial
     if (n.position && typeof n.position.x === "number" && typeof n.position.y === "number") {
       node.position = { x: n.position.x, y: n.position.y };
     }
+    if (typeof n.preview === "boolean") node.preview = n.preview;
     graph.nodes.push(node);
   }
 

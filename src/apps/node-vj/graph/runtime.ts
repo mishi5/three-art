@@ -9,6 +9,10 @@ import type { GraphDoc } from "./graph-doc";
 import type { NodeEnv, NodeRegistry, NodeState, NodeTypeDef } from "./node-type";
 import { pickScreenTextures } from "./texture-screen";
 import { TextureBlitter } from "./blit";
+import { PREVIEW_W, PREVIEW_H } from "./preview";
+
+/** プレビュー読み戻しの間引き（N フレームに 1 回。readback ストール軽減）。 */
+const PREVIEW_INTERVAL = 3;
 
 export class GraphRuntime {
   readonly camera: THREE.PerspectiveCamera;
@@ -22,6 +26,11 @@ export class GraphRuntime {
   private rafId: number | null = null;
   private startMs: number | null = null;
   private lastOutputs = new Map<string, Record<string, unknown>>();
+  // #77: ノードプレビュー小窓。texture を小 RT へ縮小転写し読み戻して 2D canvas 化する。
+  private previewRT = new THREE.WebGLRenderTarget(PREVIEW_W, PREVIEW_H);
+  private previewPixels = new Uint8Array(PREVIEW_W * PREVIEW_H * 4);
+  private previewCanvases = new Map<string, HTMLCanvasElement>();
+  private frameCount = 0;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -111,6 +120,54 @@ export class GraphRuntime {
     textures.forEach((tex, i) => {
       this.blitter.blit(this.renderer, tex as THREE.Texture, i > 0);
     });
+    // #77: ノードプレビュー小窓の更新（間引きあり）。
+    if (this.frameCount++ % PREVIEW_INTERVAL === 0) this.updatePreviews();
+  }
+
+  /** preview ON のノードの texture を小 RT へ縮小転写→読み戻し→2D canvas 化する。 */
+  private updatePreviews(): void {
+    const alive = new Set<string>();
+    for (const node of this.graph.nodes) {
+      if (!node.preview) continue;
+      const def = this.registry.get(node.type);
+      const texPort = def?.outputs.find((p) => p.type === "texture");
+      if (!texPort) continue;
+      const tex = this.lastOutputs.get(node.id)?.[texPort.id] as THREE.Texture | undefined;
+      if (!tex) continue;
+      alive.add(node.id);
+      // 縮小転写 → CPU へ読み戻し
+      this.renderer.setRenderTarget(this.previewRT);
+      this.renderer.clear();
+      this.blitter.blit(this.renderer, tex, false);
+      this.renderer.readRenderTargetPixels(this.previewRT, 0, 0, PREVIEW_W, PREVIEW_H, this.previewPixels);
+      this.renderer.setRenderTarget(null);
+      // WebGL の読み出しは上下逆のため、行を反転しながら ImageData へ詰める
+      let canvas = this.previewCanvases.get(node.id);
+      if (!canvas) {
+        canvas = document.createElement("canvas");
+        canvas.width = PREVIEW_W;
+        canvas.height = PREVIEW_H;
+        this.previewCanvases.set(node.id, canvas);
+      }
+      const ctx2d = canvas.getContext("2d");
+      if (!ctx2d) continue;
+      const image = ctx2d.createImageData(PREVIEW_W, PREVIEW_H);
+      const rowBytes = PREVIEW_W * 4;
+      for (let y = 0; y < PREVIEW_H; y++) {
+        const src = (PREVIEW_H - 1 - y) * rowBytes;
+        image.data.set(this.previewPixels.subarray(src, src + rowBytes), y * rowBytes);
+      }
+      ctx2d.putImageData(image, 0, 0);
+    }
+    // OFF/削除されたノードの canvas を破棄
+    for (const id of [...this.previewCanvases.keys()]) {
+      if (!alive.has(id)) this.previewCanvases.delete(id);
+    }
+  }
+
+  /** プレビュー小窓用の 2D canvas（preview ON かつ texture が得られたノードのみ）。 */
+  getPreviewCanvas(nodeId: string): HTMLCanvasElement | undefined {
+    return this.previewCanvases.get(nodeId);
   }
 
   start(): void {

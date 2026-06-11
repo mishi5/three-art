@@ -64,7 +64,11 @@ runtime.setAudio(audio);
 runtime.start();
 
 // ノードエディタ（全画面）。出力ポートのライブ値は runtime の直近評価結果から引く。
-const editor = new NodeEditor(editorCanvas, graph, registry, (id) => runtime.getOutputs(id));
+const editor = new NodeEditor(
+  editorCanvas, graph, registry,
+  (id) => runtime.getOutputs(id),
+  (id) => runtime.getPreviewCanvas(id),
+);
 
 // グラフ保存/読込バー（#65）。読込は replaceGraph で同一参照のまま反映される。
 buildGraphIoBar(graph, registry, new GraphStore(localStorageAdapter()));

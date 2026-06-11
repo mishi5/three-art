@@ -10,6 +10,7 @@ import { signalInputs, isParamInput } from "../graph/node-ports";
 import {
   NODE_WIDTH, TITLE_H, ROW_H, PORT_R, nodeRect,
   inputPortPos, outputPortPos, paramRowY, paramPortPos, resolveInputPortPos,
+  previewButtonRect, previewWindowRect,
 } from "./layout";
 import { hitTest } from "./hit-test";
 import { openParamInput } from "./param-overlay";
@@ -61,6 +62,8 @@ export class NodeEditor {
     private registry: NodeRegistry,
     /** 出力ポートのライブ値を引く（GraphRuntime の直近評価結果）。任意。 */
     private getOutputs?: (nodeId: string) => Record<string, unknown> | undefined,
+    /** プレビュー小窓用 canvas を引く（#77、GraphRuntime の読み戻し結果）。任意。 */
+    private getPreviewCanvas?: (nodeId: string) => HTMLCanvasElement | undefined,
   ) {
     const c = canvas.getContext("2d");
     if (!c) throw new Error("2d context unavailable");
@@ -162,6 +165,15 @@ export class NodeEditor {
       return;
     }
     if (hit?.kind === "node") {
+      // #77: texture 出力を持つノードのタイトル右端 👁 はプレビュー小窓のトグル。
+      const def = this.registry.get(hit.node.type);
+      if (def?.outputs.some((p) => p.type === "texture")) {
+        const b = previewButtonRect(hit.node);
+        if (w.x >= b.x && w.x <= b.x + b.w && w.y >= b.y && w.y <= b.y + b.h) {
+          hit.node.preview = !hit.node.preview;
+          return;
+        }
+      }
       this.selected = hit.node.id;
       const p = hit.node.position ?? { x: 0, y: 0 };
       this.drag = { kind: "node", id: hit.node.id, dx: w.x - p.x, dy: w.y - p.y };
@@ -338,6 +350,27 @@ export class NodeEditor {
     ctx.font = "13px system-ui";
     ctx.textBaseline = "middle";
     ctx.fillText(def.type, r.x + 8, r.y + TITLE_H / 2);
+
+    // #77: texture 出力を持つノードはタイトル右端に 👁（プレビュー小窓トグル）
+    if (def.outputs.some((p) => p.type === "texture")) {
+      const b = previewButtonRect(node);
+      ctx.fillStyle = node.preview ? "#6c9" : "rgba(255,255,255,0.35)";
+      ctx.font = "12px system-ui";
+      ctx.textAlign = "center";
+      ctx.fillText("\u{1F441}", b.x + b.w / 2, b.y + b.h / 2 + 1);
+      ctx.textAlign = "left";
+      ctx.font = "13px system-ui";
+      if (node.preview) {
+        const w = previewWindowRect(node);
+        ctx.fillStyle = "#000";
+        ctx.fillRect(w.x, w.y, w.w, w.h);
+        const pc = this.getPreviewCanvas?.(node.id);
+        if (pc) ctx.drawImage(pc, w.x, w.y, w.w, w.h);
+        ctx.strokeStyle = "#6c9";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(w.x, w.y, w.w, w.h);
+      }
+    }
 
     ctx.font = "11px system-ui";
     // signal 入力ポート（上部）
