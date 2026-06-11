@@ -9,8 +9,9 @@ import { isCompatible, type PortType } from "../graph/port-types";
 import { signalInputs, isParamInput } from "../graph/node-ports";
 import {
   NODE_WIDTH, TITLE_H, ROW_H, PORT_R, nodeRect,
-  inputPortPos, outputPortPos, paramRowY, paramPortPos, resolveInputPortPos, dist2,
+  inputPortPos, outputPortPos, paramRowY, paramPortPos, resolveInputPortPos,
 } from "./layout";
+import { hitTest } from "./hit-test";
 import { openParamInput } from "./param-overlay";
 import { formatPortValue } from "./port-format";
 import { absoluteSliderValue, scrubValue, fillRatio, isAbsoluteSlider } from "./slider-logic";
@@ -135,91 +136,35 @@ export class NodeEditor {
     return { x: e.clientX - this.offset.x, y: e.clientY - this.offset.y };
   }
 
-  private hitPort(wx: number, wy: number): { node: string; port: string; kind: "input" | "output"; type: PortType } | null {
-    const r2 = (PORT_R + 4) * (PORT_R + 4);
-    for (const node of this.graph.nodes) {
-      const def = this.registry.get(node.type);
-      if (!def) continue;
-      // signal 入力（上部行）
-      const sig = signalInputs(def);
-      for (let i = 0; i < sig.length; i++) {
-        const pos = inputPortPos(node, i);
-        if (dist2(wx, wy, pos.x, pos.y) <= r2)
-          return { node: node.id, port: sig[i]!.id, kind: "input", type: sig[i]!.type };
-      }
-      // 出力
-      for (let i = 0; i < def.outputs.length; i++) {
-        const pos = outputPortPos(node, i);
-        if (dist2(wx, wy, pos.x, pos.y) <= r2)
-          return { node: node.id, port: def.outputs[i]!.id, kind: "output", type: def.outputs[i]!.type };
-      }
-      // 数値 param の行ドット（入力）
-      for (let i = 0; i < def.params.length; i++) {
-        if (!isParamInput(def, def.params[i]!.id)) continue;
-        const pos = paramPortPos(node, def, i);
-        if (dist2(wx, wy, pos.x, pos.y) <= r2)
-          return { node: node.id, port: def.params[i]!.id, kind: "input", type: "number" };
-      }
-    }
-    return null;
-  }
-
-  private hitParam(wx: number, wy: number): { node: NodeInstance; paramIndex: number } | null {
-    for (const node of this.graph.nodes) {
-      const def = this.registry.get(node.type);
-      if (!def) continue;
-      const r = nodeRect(node, def);
-      if (wx < r.x || wx > r.x + r.w) continue;
-      for (let i = 0; i < def.params.length; i++) {
-        const y = paramRowY(node, def, i);
-        if (Math.abs(wy - y) <= ROW_H / 2) return { node, paramIndex: i };
-      }
-    }
-    return null;
-  }
-
-  private hitNode(wx: number, wy: number): NodeInstance | null {
-    // 後ろ（描画順で上）のノードを優先するため逆順
-    for (let i = this.graph.nodes.length - 1; i >= 0; i--) {
-      const node = this.graph.nodes[i]!;
-      const def = this.registry.get(node.type);
-      if (!def) continue;
-      const r = nodeRect(node, def);
-      if (wx >= r.x && wx <= r.x + r.w && wy >= r.y && wy <= r.y + r.h) return node;
-    }
-    return null;
-  }
-
   private onDown = (e: PointerEvent): void => {
     const w = this.toWorld(e);
-    const port = this.hitPort(w.x, w.y);
-    if (port) {
-      if (port.kind === "output") {
-        this.drag = { kind: "wire", fromNode: port.node, fromPort: port.port, type: port.type };
+    // #80: 遮蔽つき統一ヒットテスト。最前面ノードがイベントを所有する。
+    const hit = hitTest(this.graph.nodes, this.registry, w.x, w.y);
+    if (hit?.kind === "port") {
+      if (hit.portKind === "output") {
+        this.drag = { kind: "wire", fromNode: hit.node.id, fromPort: hit.port, type: hit.type };
       } else {
         // 入力ポート: 接続済みなら切断
         const existing = this.graph.connections.find(
-          (c) => c.to.node === port.node && c.to.port === port.port,
+          (c) => c.to.node === hit.node.id && c.to.port === hit.port,
         );
         if (existing) removeConnection(this.graph, existing.id);
       }
       return;
     }
-    const param = this.hitParam(w.x, w.y);
-    if (param) {
+    if (hit?.kind === "param") {
       // すぐには編集を開かず、ドラッグ（スライダ）かクリック（数値入力）かを up で判定する。
+      this.selected = hit.node.id;
       this.drag = {
-        kind: "param", nodeId: param.node.id, paramIndex: param.paramIndex,
+        kind: "param", nodeId: hit.node.id, paramIndex: hit.paramIndex,
         moved: false, startX: w.x, lastX: w.x,
       };
       return;
     }
-
-    const node = this.hitNode(w.x, w.y);
-    if (node) {
-      this.selected = node.id;
-      const p = node.position ?? { x: 0, y: 0 };
-      this.drag = { kind: "node", id: node.id, dx: w.x - p.x, dy: w.y - p.y };
+    if (hit?.kind === "node") {
+      this.selected = hit.node.id;
+      const p = hit.node.position ?? { x: 0, y: 0 };
+      this.drag = { kind: "node", id: hit.node.id, dx: w.x - p.x, dy: w.y - p.y };
       return;
     }
     this.selected = null;
@@ -269,12 +214,13 @@ export class NodeEditor {
     }
     if (this.drag?.kind === "wire") {
       const w = this.toWorld(e);
-      const target = this.hitPort(w.x, w.y);
-      if (target && target.kind === "input" && isCompatible(this.drag.type, target.type)) {
+      // 遮蔽つき判定: 手前ノードの本体に隠れた入力ポートへは接続しない。
+      const target = hitTest(this.graph.nodes, this.registry, w.x, w.y);
+      if (target?.kind === "port" && target.portKind === "input" && isCompatible(this.drag.type, target.type)) {
         const conn: Connection = {
           id: genId("c"),
           from: { node: this.drag.fromNode, port: this.drag.fromPort },
-          to: { node: target.node, port: target.port },
+          to: { node: target.node.id, port: target.port },
         };
         addConnection(this.graph, this.registry, conn);
       }
