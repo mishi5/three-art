@@ -5,6 +5,8 @@ import { createDefaultRegistry } from "./nodes/registry";
 import { addConnection, addNode, createGraph } from "./graph/graph-doc";
 import { GraphRuntime } from "./graph/runtime";
 import { NodeEditor } from "./editor/NodeEditor";
+import { buildGraphIoBar } from "./editor/graph-io-bar";
+import { GraphStore, localStorageAdapter } from "./graph/graph-store";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "../../core/types";
 
 const editorCanvas = document.getElementById("editor");
@@ -63,6 +65,9 @@ runtime.start();
 
 // ノードエディタ（全画面）。出力ポートのライブ値は runtime の直近評価結果から引く。
 const editor = new NodeEditor(editorCanvas, graph, registry, (id) => runtime.getOutputs(id));
+
+// グラフ保存/読込バー（#65）。読込は replaceGraph で同一参照のまま反映される。
+buildGraphIoBar(graph, registry, new GraphStore(localStorageAdapter()));
 
 // 入力起動コントロール（mic/camera は user gesture 必須のためボタンから start）。
 type Startable = { start?: () => Promise<void> };

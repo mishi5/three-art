@@ -120,3 +120,13 @@ export function wouldCreateCycle(g: GraphDoc, from: string, to: string): boolean
   }
   return false;
 }
+
+/**
+ * 既存 GraphDoc の中身を loaded で置き換える（参照を維持したまま読込を反映する）。
+ * editor / runtime は同じ GraphDoc を参照し続けるため、再配線が不要になる。
+ */
+export function replaceGraph(target: GraphDoc, loaded: GraphDoc): void {
+  target.version = loaded.version;
+  target.nodes = loaded.nodes;
+  target.connections = loaded.connections;
+}
