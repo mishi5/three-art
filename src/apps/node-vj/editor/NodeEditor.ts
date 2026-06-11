@@ -13,6 +13,13 @@ import {
 } from "./layout";
 import { openParamInput } from "./param-overlay";
 import { formatPortValue } from "./port-format";
+import { absoluteSliderValue, scrubValue, fillRatio, isAbsoluteSlider } from "./slider-logic";
+import type { ParamDef } from "../graph/node-type";
+
+/** スライダドラッグで編集できる param（数値のみ。enum/boolean/string はクリック編集）。 */
+function isParamEditableBySlider(pd: ParamDef): boolean {
+  return pd.kind === "number" || pd.kind === "int";
+}
 
 const PORT_COLORS: Record<PortType, string> = {
   number: "#7fd1ff", vec2: "#9aff9a", vec3: "#9aff9a", color: "#ffd27f",
@@ -26,7 +33,12 @@ type Drag =
   | { kind: "node"; id: string; dx: number; dy: number }
   | { kind: "wire"; fromNode: string; fromPort: string; type: PortType }
   | { kind: "pan"; startX: number; startY: number; ox: number; oy: number }
+  // param 行のスライダドラッグ候補。moved=false のまま up したらクリック（数値入力）扱い。
+  | { kind: "param"; nodeId: string; paramIndex: number; moved: boolean; startX: number; lastX: number }
   | null;
+
+/** クリックとドラッグを分ける移動量しきい値 (px)。 */
+const DRAG_THRESHOLD = 3;
 
 let idCounter = 0;
 function genId(prefix: string): string { return `${prefix}${Date.now().toString(36)}_${++idCounter}`; }
@@ -194,7 +206,14 @@ export class NodeEditor {
       return;
     }
     const param = this.hitParam(w.x, w.y);
-    if (param) { this.editParam(e, param.node, param.paramIndex); return; }
+    if (param) {
+      // すぐには編集を開かず、ドラッグ（スライダ）かクリック（数値入力）かを up で判定する。
+      this.drag = {
+        kind: "param", nodeId: param.node.id, paramIndex: param.paramIndex,
+        moved: false, startX: w.x, lastX: w.x,
+      };
+      return;
+    }
 
     const node = this.hitNode(w.x, w.y);
     if (node) {
@@ -216,10 +235,38 @@ export class NodeEditor {
     } else if (this.drag.kind === "pan") {
       this.offset.x = this.drag.ox + (e.clientX - this.drag.startX);
       this.offset.y = this.drag.oy + (e.clientY - this.drag.startY);
+    } else if (this.drag.kind === "param") {
+      this.dragParam(this.drag);
     }
   };
 
+  /** param 行のスライダドラッグ。しきい値を超えたら値を更新する。 */
+  private dragParam(drag: Extract<NonNullable<Drag>, { kind: "param" }>): void {
+    if (!drag.moved && Math.abs(this.cursor.x - drag.startX) < DRAG_THRESHOLD) return;
+    drag.moved = true;
+    const node = findNode(this.graph, drag.nodeId);
+    if (!node) return;
+    const def = this.registry.get(node.type);
+    const pd = def?.params[drag.paramIndex];
+    if (!def || !pd || !isParamEditableBySlider(pd)) return;
+    // 接続中はドラッグで変更しない（上流値が支配）。
+    if (this.resolveConnectedValue(node, pd.id) !== undefined) return;
+    if (isAbsoluteSlider(pd)) {
+      const r = nodeRect(node, def);
+      node.params[pd.id] = absoluteSliderValue(this.cursor.x, r.x + 6, r.w - 12, pd);
+    } else {
+      const current = Number(node.params[pd.id] ?? pd.default) || 0;
+      node.params[pd.id] = scrubValue(current, this.cursor.x - drag.lastX, pd);
+    }
+    drag.lastX = this.cursor.x;
+  }
+
   private onUp = (e: PointerEvent): void => {
+    if (this.drag?.kind === "param" && !this.drag.moved) {
+      // ドラッグなし＝クリック → 従来の数値入力/選択オーバーレイを開く。
+      const node = findNode(this.graph, this.drag.nodeId);
+      if (node) this.editParam(e, node, this.drag.paramIndex);
+    }
     if (this.drag?.kind === "wire") {
       const w = this.toWorld(e);
       const target = this.hitPort(w.x, w.y);
@@ -375,10 +422,19 @@ export class NodeEditor {
       const y = paramRowY(node, def, i);
       ctx.fillStyle = "#222";
       ctx.fillRect(r.x + 6, y - ROW_H / 2 + 2, r.w - 12, ROW_H - 4);
-      ctx.fillStyle = "#9ab"; ctx.textAlign = "left";
-      ctx.fillText(p.label, r.x + 12, y);
       // 接続中は上流のライブ値を表示（手動値は無視されるため）。未接続は手動値。
       const live = this.resolveConnectedValue(node, p.id);
+      // min/max を持つ数値 param はスライダのフィルバーを敷く（接続中はライブ値で）。
+      if (isParamEditableBySlider(p)) {
+        const fillVal = typeof live === "number" ? live : Number(node.params[p.id] ?? p.default);
+        const ratio = Number.isFinite(fillVal) ? fillRatio(fillVal, p) : null;
+        if (ratio !== null) {
+          ctx.fillStyle = typeof live === "number" ? "#1d3a30" : "#2a3a4a";
+          ctx.fillRect(r.x + 6, y - ROW_H / 2 + 2, (r.w - 12) * ratio, ROW_H - 4);
+        }
+      }
+      ctx.fillStyle = "#9ab"; ctx.textAlign = "left";
+      ctx.fillText(p.label, r.x + 12, y);
       if (live !== undefined) {
         ctx.fillStyle = "#6c9"; ctx.textAlign = "right";
         ctx.fillText(formatPortValue(live, "number") || String(live), r.x + r.w - 10, y);
