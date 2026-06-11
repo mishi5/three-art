@@ -1,16 +1,18 @@
 import { RainField } from "../../../core/visuals/rain";
 import type { RainFieldUpdateParams } from "../../../core/visuals/params";
 import type { AudioFeatures } from "../../../core/types";
-import type { NodeEnv, NodeState, NodeTypeDef } from "../graph/node-type";
+import type { NodeState, NodeTypeDef } from "../graph/node-type";
+import { VisualSurface } from "../graph/visual-surface";
 
 interface RainState {
   rain: RainField;
+  surface: VisualSurface;
 }
 
 /**
- * core の RainField を駆動する visual sink ノード。
+ * core の RainField を駆動する visual ノード。
+ * #76: 専用シーン(VisualSurface)を自分の RT に描画し、結果を texture 出力で渡す。
  * number 入力 baseSpeed / count は未接続時 param 値にフォールバックする。
- * 残りの rain パラメータは param として持つ（Settings 非依存）。
  */
 export const RainVisualNode: NodeTypeDef = {
   type: "RainVisual",
@@ -21,7 +23,7 @@ export const RainVisualNode: NodeTypeDef = {
     { id: "baseSpeed", label: "baseSpeed", type: "number" },
     { id: "count", label: "count", type: "number" },
   ],
-  outputs: [],
+  outputs: [{ id: "texture", label: "tex", type: "texture" }],
   params: [
     { id: "baseSpeed", label: "baseSpeed", kind: "number", default: 0.3, min: 0, max: 3, step: 0.01 },
     { id: "count", label: "count", kind: "int", default: 2000, min: 16, max: 8000, step: 1 },
@@ -30,14 +32,14 @@ export const RainVisualNode: NodeTypeDef = {
     { id: "areaWidth", label: "areaWidth", kind: "number", default: 2.0, min: 0.5, max: 6, step: 0.1 },
     { id: "areaHeight", label: "areaHeight", kind: "number", default: 2.4, min: 0.5, max: 6, step: 0.1 },
   ],
-  createState(env: NodeEnv): RainState {
+  createState(): RainState {
     const rain = new RainField();
-    env.scene.add(rain.object3D);
-    return { rain };
+    const surface = new VisualSurface();
+    surface.scene.add(rain.object3D);
+    return { rain, surface };
   },
-  disposeState(state: NodeState, env: NodeEnv): void {
-    const s = state as RainState;
-    env.scene.remove(s.rain.object3D);
+  disposeState(state: NodeState): void {
+    (state as RainState).surface.dispose();
   },
   evaluate(ctx) {
     const state = ctx.state as RainState | undefined;
@@ -58,6 +60,7 @@ export const RainVisualNode: NodeTypeDef = {
     // audio 入力ポートが接続されていればそれを、なければ env.audio をフォールバック。
     const audio = (ctx.input("audio") as AudioFeatures | undefined) ?? env.audio;
     state.rain.update(audio, params, ctx.timeSec);
-    return {};
+    const texture = state.surface.render(env.renderer, env.camera);
+    return { texture };
   },
 };

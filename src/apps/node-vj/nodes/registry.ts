@@ -11,6 +11,7 @@ import { PoseInputNode } from "./PoseInputNode";
 import { AudioInputNode } from "./AudioInputNode";
 import { RainVisualNode } from "./RainVisualNode";
 import { PointCloudVisualNode } from "./PointCloudVisualNode";
+import { ScreenNode } from "./ScreenNode";
 
 /** 既定ノードを登録したレジストリを返す。 */
 export function createDefaultRegistry(): NodeRegistry {
@@ -30,5 +31,7 @@ export function createDefaultRegistry(): NodeRegistry {
   // visual
   r.register(PointCloudVisualNode);
   r.register(RainVisualNode);
+  // output
+  r.register(ScreenNode);
   return r;
 }

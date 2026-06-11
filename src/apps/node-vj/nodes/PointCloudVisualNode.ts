@@ -3,12 +3,14 @@ import { sampleImageToGrid } from "../../../core/visuals/ImageSampler";
 import type { PoseFrame, AudioFeatures } from "../../../core/types";
 import { makeEmptyJoints, NUM_JOINTS } from "../../../core/types";
 import type { NodeEnv, NodeState, NodeTypeDef } from "../graph/node-type";
+import { VisualSurface } from "../graph/visual-surface";
 import { buildPointCloudParams, type PointCloudCurated } from "./pointcloud-params";
 // バンドル済みデフォルト画像（image モード用）。Bun の file loader が URL に解決する。
 import sampleImageUrl from "../../pose-particles/ui/assets/sample-01.svg";
 
 interface PointCloudState {
   pc: PointCloud;
+  surface: VisualSurface;
 }
 
 const DEFAULT_GRID_W = 80;
@@ -41,7 +43,7 @@ export const PointCloudVisualNode: NodeTypeDef = {
     { id: "pose", label: "pose", type: "pose" },
     { id: "audio", label: "audio", type: "audio" },
   ],
-  outputs: [],
+  outputs: [{ id: "texture", label: "tex", type: "texture" }],
   params: [
     { id: "mode", label: "mode", kind: "enum", default: "cube", options: ["bones", "cube", "sphere", "lattice", "image"] },
     { id: "radius", label: "radius", kind: "number", default: 0.4, min: 0.05, max: 3, step: 0.01 },
@@ -63,12 +65,13 @@ export const PointCloudVisualNode: NodeTypeDef = {
   createState(env: NodeEnv): PointCloudState {
     const pc = new PointCloud(env.renderer.getPixelRatio());
     pc.setProjection(env.renderer.domElement.height, env.camera.fov);
-    env.scene.add(pc.object3D);
+    const surface = new VisualSurface();
+    surface.scene.add(pc.object3D);
     loadDefaultImage(pc);
-    return { pc };
+    return { pc, surface };
   },
-  disposeState(state: NodeState, env: NodeEnv): void {
-    env.scene.remove((state as PointCloudState).pc.object3D);
+  disposeState(state: NodeState): void {
+    (state as PointCloudState).surface.dispose();
   },
   evaluate(ctx) {
     const s = ctx.state as PointCloudState | undefined;
@@ -96,6 +99,7 @@ export const PointCloudVisualNode: NodeTypeDef = {
     const audio = (ctx.input("audio") as AudioFeatures | undefined) ?? env.audio;
 
     s.pc.update(joints, visibility, center, audio, params, ctx.timeSec);
-    return {};
+    const texture = s.surface.render(env.renderer, env.camera);
+    return { texture };
   },
 };

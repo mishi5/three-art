@@ -1,17 +1,20 @@
-// グラフランタイム（ADR #59）。renderer/scene/camera を持ち、毎フレーム
-// グラフを評価して描画する。visual/sink ノードの永続状態の生成・破棄も管理する。
+// グラフランタイム（ADR #59 / #76）。renderer/camera を持ち、毎フレーム
+// グラフを評価して描画する。visual は専用シーン→RT に描いて texture を返すため、
+// canvas への書き込み（転写）はここに一元化する（クリア順序のバグ防止）。
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "../../../core/types";
 import { evaluate } from "./evaluator";
 import type { GraphDoc } from "./graph-doc";
 import type { NodeEnv, NodeRegistry, NodeState, NodeTypeDef } from "./node-type";
+import { pickScreenTextures } from "./texture-screen";
+import { TextureBlitter } from "./blit";
 
 export class GraphRuntime {
-  readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
   readonly renderer: THREE.WebGLRenderer;
   private readonly controls: OrbitControls;
+  private readonly blitter = new TextureBlitter();
   private states = new Map<string, NodeState>();
   /** state を生成した NodeTypeDef を控える（ノード削除後も disposeState を確実に呼ぶため）。 */
   private stateDefs = new Map<string, NodeTypeDef>();
@@ -25,7 +28,6 @@ export class GraphRuntime {
     private readonly registry: NodeRegistry,
     private graph: GraphDoc,
   ) {
-    this.scene.background = new THREE.Color(0x000000);
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.01, 100);
     this.camera.position.set(0, 0, 1.8);
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -63,10 +65,7 @@ export class GraphRuntime {
   }
 
   private env(): NodeEnv {
-    return {
-      scene: this.scene, audio: this.audio,
-      renderer: this.renderer, camera: this.camera,
-    };
+    return { audio: this.audio, renderer: this.renderer, camera: this.camera };
   }
 
   /** グラフに合わせて visual/sink ノードの永続状態を生成・破棄する。 */
@@ -97,13 +96,21 @@ export class GraphRuntime {
     if (this.startMs === null) this.startMs = nowMs;
     const timeSec = (nowMs - this.startMs) / 1000;
     this.syncStates();
+    this.controls.update();
+    // 評価: visual は各自の RT へ描画して texture を返す（canvas は触らない）。
     this.lastOutputs = evaluate(this.graph, this.registry, {
       timeSec,
       env: this.env(),
       state: (id) => this.states.get(id),
     });
-    this.controls.update();
-    this.renderer.render(this.scene, this.camera);
+    // 画面出力: Screen ノードの texture（なければ終端 visual）を canvas へ転写。
+    // 1 枚目は通常合成、2 枚目以降は加算（旧・共有シーンでの加算合成相当）。
+    const textures = pickScreenTextures(this.graph, this.registry, this.lastOutputs);
+    this.renderer.setRenderTarget(null);
+    this.renderer.clear();
+    textures.forEach((tex, i) => {
+      this.blitter.blit(this.renderer, tex as THREE.Texture, i > 0);
+    });
   }
 
   start(): void {
