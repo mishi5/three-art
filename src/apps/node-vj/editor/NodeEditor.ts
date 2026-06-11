@@ -354,12 +354,7 @@ export class NodeEditor {
     // #77: texture 出力を持つノードはタイトル右端に 👁（プレビュー小窓トグル）
     if (def.outputs.some((p) => p.type === "texture")) {
       const b = previewButtonRect(node);
-      ctx.fillStyle = node.preview ? "#6c9" : "rgba(255,255,255,0.35)";
-      ctx.font = "12px system-ui";
-      ctx.textAlign = "center";
-      ctx.fillText("\u{1F441}", b.x + b.w / 2, b.y + b.h / 2 + 1);
-      ctx.textAlign = "left";
-      ctx.font = "13px system-ui";
+      drawEyeIcon(ctx, b.x + b.w / 2, b.y + b.h / 2, Boolean(node.preview));
       if (node.preview) {
         const w = previewWindowRect(node);
         ctx.fillStyle = "#000";
@@ -447,6 +442,26 @@ export class NodeEditor {
     window.removeEventListener("keydown", this.onKey);
     this.toolbar.remove();
   }
+}
+
+/** プレビュートグルの目アイコン（#77）。絵文字は色制御不可で見栄えが悪いためベクタ描画。 */
+function drawEyeIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number, on: boolean): void {
+  const color = on ? "#6c9" : "rgba(255,255,255,0.45)";
+  const w = 7;
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 1.3;
+  // まぶた（上下の弧）
+  ctx.beginPath();
+  ctx.moveTo(cx - w, cy);
+  ctx.quadraticCurveTo(cx, cy - 9, cx + w, cy);
+  ctx.quadraticCurveTo(cx, cy + 9, cx - w, cy);
+  ctx.closePath();
+  ctx.stroke();
+  // 瞳（ON は大きく塗る）
+  ctx.beginPath();
+  ctx.arc(cx, cy, on ? 2.4 : 1.6, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
