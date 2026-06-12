@@ -69,7 +69,7 @@ const history = new History();
 const editor = new NodeEditor(
   editorCanvas, graph, registry, history,
   (id) => runtime.getOutputs(id),
-  (id) => runtime.getPreviewCanvas(id),
+  (id) => runtime.getPreviewSource(id),
 );
 
 // グラフ保存/読込バー（#65）。読込は replaceGraph で同一参照のまま反映される。

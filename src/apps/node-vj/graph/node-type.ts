@@ -65,6 +65,12 @@ export interface NodeTypeDef {
   isSink?: boolean;
   /** visual/sink ノードの初期化（THREE オブジェクト生成・scene 追加等）。1 度だけ呼ばれる。 */
   createState?(env: NodeEnv): NodeState;
+  /**
+   * #79: ノード隣接プレビューの描画ソース（video や合成済み canvas）。
+   * texture 出力を持たないノード（PoseInput 等）が小窓を出すために使う。
+   * 未開始・権限拒否などで表示できないときは null。
+   */
+  previewSource?(state: NodeState, node: NodeInstance): CanvasImageSource | null;
   /** createState で確保した資源の解放。 */
   disposeState?(state: NodeState, env: NodeEnv): void;
   /** 出力ポート id → 値。sink は空オブジェクトでよい。 */

@@ -56,3 +56,20 @@ describe("RainVisualNode", () => {
     expect(RainVisualNode.evaluate(ctxNoState())).toEqual({});
   });
 });
+
+import { nodeHasPreview } from "../editor/NodeEditor";
+
+describe("PoseInput プレビュー (#79)", () => {
+  test("previewSource と skeleton param を持つ", () => {
+    expect(typeof PoseInputNode.previewSource).toBe("function");
+    const sk = PoseInputNode.params.find((p) => p.id === "skeleton");
+    expect(sk?.kind).toBe("boolean");
+    expect(sk?.default).toBe(false);
+  });
+
+  test("nodeHasPreview: texture 出力 or previewSource", () => {
+    expect(nodeHasPreview(PoseInputNode)).toBe(true);   // previewSource
+    expect(nodeHasPreview(RainVisualNode)).toBe(true);  // texture 出力
+    expect(nodeHasPreview(AudioInputNode)).toBe(false); // どちらもなし
+  });
+});
