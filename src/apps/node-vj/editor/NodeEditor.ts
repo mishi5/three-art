@@ -13,6 +13,8 @@ import {
   previewButtonRect, previewWindowRect,
 } from "./layout";
 import { hitTest } from "./hit-test";
+import { duplicateNodes } from "../graph/duplicate";
+import { nodesInRect, normRect } from "./selection";
 import { openParamInput } from "./param-overlay";
 import { formatPortValue } from "./port-format";
 import { absoluteSliderValue, scrubValue, fillRatio, isAbsoluteSlider } from "./slider-logic";
@@ -32,9 +34,12 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 type Drag =
-  | { kind: "node"; id: string; dx: number; dy: number }
+  // 選択グループの一括移動。anchors は各ノードの「カーソル→ノード位置」オフセット。
+  | { kind: "group"; anchors: Map<string, { dx: number; dy: number }> }
   | { kind: "wire"; fromNode: string; fromPort: string; type: PortType }
   | { kind: "pan"; startX: number; startY: number; ox: number; oy: number }
+  // 空白ドラッグの矩形選択（#83）。start は world 座標。
+  | { kind: "rect"; startX: number; startY: number }
   // param 行のスライダドラッグ候補。moved=false のまま up したらクリック（数値入力）扱い。
   | { kind: "param"; nodeId: string; paramIndex: number; moved: boolean; startX: number; lastX: number }
   | null;
@@ -50,7 +55,9 @@ export class NodeEditor {
   private offset = { x: 60, y: 60 };
   private drag: Drag = null;
   private cursor = { x: 0, y: 0 };
-  private selected: string | null = null;
+  private selectedIds = new Set<string>();
+  /** Space 押下中は空白ドラッグをパンにする（#83 で空白ドラッグは矩形選択に変更）。 */
+  private spaceDown = false;
   private rafId: number | null = null;
   private toolbar: HTMLDivElement;
   /** 出力ポート横のライブ値表示（デバッグ用）。既定 OFF、ツールバーで切替。 */
@@ -74,6 +81,9 @@ export class NodeEditor {
     window.addEventListener("pointermove", this.onMove);
     window.addEventListener("pointerup", this.onUp);
     window.addEventListener("keydown", this.onKey);
+    window.addEventListener("keyup", this.onKeyUp);
+    // 右ドラッグパンのためコンテキストメニューを抑止
+    canvas.addEventListener("contextmenu", this.onContextMenu);
     this.toolbar = this.buildToolbar();
     this.loop();
   }
@@ -112,7 +122,7 @@ export class NodeEditor {
     dbg.addEventListener("click", () => { this.showOutputValues = !this.showOutputValues; syncDbg(); });
     bar.appendChild(dbg);
     const hint = document.createElement("span");
-    hint.textContent = "  ドラッグ=移動 / 出力●→入力●=接続 / 入力●クリック=切断 / param クリック=編集 / Del=削除";
+    hint.textContent = "  空白ドラッグ=矩形選択 / Space|右ドラッグ=パン / Cmd+クリック=追加選択 / Cmd+C=複製 / Del=削除";
     hint.style.cssText = "color:#888;align-self:center;";
     bar.appendChild(hint);
     document.body.appendChild(bar);
@@ -131,7 +141,7 @@ export class NodeEditor {
       },
     };
     addNode(this.graph, node);
-    this.selected = node.id;
+    this.selectedIds = new Set([node.id]);
   }
 
   // --- pointer 座標 → world 座標 ---
@@ -141,6 +151,11 @@ export class NodeEditor {
 
   private onDown = (e: PointerEvent): void => {
     const w = this.toWorld(e);
+    // パン: Space+左ドラッグ / 中ボタン / 右ボタン（#83 で空白左ドラッグは矩形選択に変更）。
+    if (e.button !== 0 || this.spaceDown) {
+      this.drag = { kind: "pan", startX: e.clientX, startY: e.clientY, ox: this.offset.x, oy: this.offset.y };
+      return;
+    }
     // #80: 遮蔽つき統一ヒットテスト。最前面ノードがイベントを所有する。
     const hit = hitTest(this.graph.nodes, this.registry, w.x, w.y);
     if (hit?.kind === "port") {
@@ -157,7 +172,7 @@ export class NodeEditor {
     }
     if (hit?.kind === "param") {
       // すぐには編集を開かず、ドラッグ（スライダ）かクリック（数値入力）かを up で判定する。
-      this.selected = hit.node.id;
+      this.selectedIds = new Set([hit.node.id]);
       this.drag = {
         kind: "param", nodeId: hit.node.id, paramIndex: hit.paramIndex,
         moved: false, startX: w.x, lastX: w.x,
@@ -174,21 +189,35 @@ export class NodeEditor {
           return;
         }
       }
-      this.selected = hit.node.id;
-      const p = hit.node.position ?? { x: 0, y: 0 };
-      this.drag = { kind: "node", id: hit.node.id, dx: w.x - p.x, dy: w.y - p.y };
+      // Cmd/Ctrl+クリック = 選択トグル（ドラッグは開始しない）
+      if (e.metaKey || e.ctrlKey) {
+        if (this.selectedIds.has(hit.node.id)) this.selectedIds.delete(hit.node.id);
+        else this.selectedIds.add(hit.node.id);
+        return;
+      }
+      // 未選択ノードなら単独選択に置き換え、選択済みならグループのままドラッグ
+      if (!this.selectedIds.has(hit.node.id)) this.selectedIds = new Set([hit.node.id]);
+      const anchors = new Map<string, { dx: number; dy: number }>();
+      for (const id of this.selectedIds) {
+        const n = findNode(this.graph, id);
+        const p = n?.position ?? { x: 0, y: 0 };
+        anchors.set(id, { dx: w.x - p.x, dy: w.y - p.y });
+      }
+      this.drag = { kind: "group", anchors };
       return;
     }
-    this.selected = null;
-    this.drag = { kind: "pan", startX: e.clientX, startY: e.clientY, ox: this.offset.x, oy: this.offset.y };
+    // 空白: 矩形選択を開始（確定は up）
+    this.drag = { kind: "rect", startX: w.x, startY: w.y };
   };
 
   private onMove = (e: PointerEvent): void => {
     this.cursor = this.toWorld(e);
     if (!this.drag) return;
-    if (this.drag.kind === "node") {
-      const node = findNode(this.graph, this.drag.id);
-      if (node) node.position = { x: this.cursor.x - this.drag.dx, y: this.cursor.y - this.drag.dy };
+    if (this.drag.kind === "group") {
+      for (const [id, a] of this.drag.anchors) {
+        const node = findNode(this.graph, id);
+        if (node) node.position = { x: this.cursor.x - a.dx, y: this.cursor.y - a.dy };
+      }
     } else if (this.drag.kind === "pan") {
       this.offset.x = this.drag.ox + (e.clientX - this.drag.startX);
       this.offset.y = this.drag.oy + (e.clientY - this.drag.startY);
@@ -219,6 +248,12 @@ export class NodeEditor {
   }
 
   private onUp = (e: PointerEvent): void => {
+    if (this.drag?.kind === "rect") {
+      // 矩形確定。移動なし（クリック）は選択解除になる（空矩形は何も拾わない）。
+      const w = this.toWorld(e);
+      const rect = normRect(this.drag.startX, this.drag.startY, w.x, w.y);
+      this.selectedIds = new Set(nodesInRect(this.graph.nodes, this.registry, rect));
+    }
     if (this.drag?.kind === "param" && !this.drag.moved) {
       // ドラッグなし＝クリック → 従来の数値入力/選択オーバーレイを開く。
       const node = findNode(this.graph, this.drag.nodeId);
@@ -255,10 +290,25 @@ export class NodeEditor {
   private onKey = (e: KeyboardEvent): void => {
     const t = e.target as HTMLElement | null;
     if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;
-    if ((e.key === "Delete" || e.key === "Backspace") && this.selected) {
-      removeNode(this.graph, this.selected);
-      this.selected = null;
+    if (e.key === " ") this.spaceDown = true;
+    if ((e.key === "Delete" || e.key === "Backspace") && this.selectedIds.size > 0) {
+      for (const id of this.selectedIds) removeNode(this.graph, id);
+      this.selectedIds = new Set();
     }
+    // #83: Cmd/Ctrl+C で選択ノードを即複製（+24px）し、複製群を選択状態にする。
+    if ((e.metaKey || e.ctrlKey) && e.key === "c" && this.selectedIds.size > 0) {
+      e.preventDefault();
+      const newIds = duplicateNodes(this.graph, this.selectedIds, genId, 24);
+      this.selectedIds = new Set(newIds);
+    }
+  };
+
+  private onKeyUp = (e: KeyboardEvent): void => {
+    if (e.key === " ") this.spaceDown = false;
+  };
+
+  private onContextMenu = (e: Event): void => {
+    e.preventDefault();
   };
 
   /**
@@ -315,6 +365,15 @@ export class NodeEditor {
     }
     // ノード
     for (const node of this.graph.nodes) this.drawNode(node);
+    // 矩形選択のオーバーレイ
+    if (drag?.kind === "rect") {
+      const r = normRect(drag.startX, drag.startY, this.cursor.x, this.cursor.y);
+      ctx.fillStyle = "rgba(127,209,255,0.10)";
+      ctx.strokeStyle = "rgba(127,209,255,0.7)";
+      ctx.lineWidth = 1;
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+    }
     ctx.restore();
   }
 
@@ -349,8 +408,8 @@ export class NodeEditor {
     const r = nodeRect(node, def);
     // body
     ctx.fillStyle = "#16161c";
-    ctx.strokeStyle = node.id === this.selected ? "#ffd27f" : "#444";
-    ctx.lineWidth = node.id === this.selected ? 2 : 1;
+    ctx.strokeStyle = this.selectedIds.has(node.id) ? "#ffd27f" : "#444";
+    ctx.lineWidth = this.selectedIds.has(node.id) ? 2 : 1;
     roundRect(ctx, r.x, r.y, r.w, r.h, 6);
     ctx.fill();
     ctx.stroke();
@@ -452,6 +511,8 @@ export class NodeEditor {
     window.removeEventListener("pointermove", this.onMove);
     window.removeEventListener("pointerup", this.onUp);
     window.removeEventListener("keydown", this.onKey);
+    window.removeEventListener("keyup", this.onKeyUp);
+    this.canvas.removeEventListener("contextmenu", this.onContextMenu);
     this.toolbar.remove();
   }
 }
