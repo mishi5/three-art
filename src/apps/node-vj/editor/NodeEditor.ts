@@ -320,7 +320,14 @@ export class NodeEditor {
       e.preventDefault();
       const snap = e.shiftKey ? this.history.redo(this.graph) : this.history.undo(this.graph);
       if (snap) {
+        // preview は履歴対象外の表示状態。スナップショットに含まれてしまうため、
+        // 現存ノードの preview を復元後に引き継ぐ（削除 UNDO で復活するノードは
+        // スナップショット時の値のままにする）。
+        const prevPreview = new Map(this.graph.nodes.map((n) => [n.id, n.preview]));
         replaceGraph(this.graph, snap);
+        for (const node of this.graph.nodes) {
+          if (prevPreview.has(node.id)) node.preview = prevPreview.get(node.id);
+        }
         // 消えたノードを選択から除外
         const alive = new Set(this.graph.nodes.map((n) => n.id));
         this.selectedIds = new Set([...this.selectedIds].filter((id) => alive.has(id)));
