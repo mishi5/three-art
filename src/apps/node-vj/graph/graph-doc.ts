@@ -9,6 +9,8 @@ export interface NodeInstance {
   type: string;
   params: Record<string, unknown>;
   position?: { x: number; y: number };
+  /** #77: ノード横プレビュー小窓の ON/OFF（texture 出力を持つノードのみ意味を持つ）。 */
+  preview?: boolean;
 }
 
 export interface Connection {

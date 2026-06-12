@@ -78,3 +78,17 @@ export function dist2(ax: number, ay: number, bx: number, by: number): number {
   const dx = ax - bx, dy = ay - by;
   return dx * dx + dy * dy;
 }
+
+/** タイトルバー右端のプレビュートグルボタン領域（#77）。 */
+export function previewButtonRect(node: NodeInstance): { x: number; y: number; w: number; h: number } {
+  const p = nodePos(node);
+  return { x: p.x + NODE_WIDTH - 22, y: p.y + 4, w: 18, h: TITLE_H - 8 };
+}
+
+/** プレビュー小窓の表示領域。右横はポート列・配線と重なるためノードの上側に置く。 */
+export { PREVIEW_W, PREVIEW_H } from "../graph/preview";
+import { PREVIEW_W, PREVIEW_H } from "../graph/preview";
+export function previewWindowRect(node: NodeInstance): { x: number; y: number; w: number; h: number } {
+  const p = nodePos(node);
+  return { x: p.x, y: p.y - PREVIEW_H - 8, w: PREVIEW_W, h: PREVIEW_H };
+}
