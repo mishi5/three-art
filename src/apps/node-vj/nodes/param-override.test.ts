@@ -39,6 +39,18 @@ describe("param 入力 override (#74)", () => {
     expect(res.reason).toBe("port not found");
   });
 
+  test("後勝ち再接続で評価の参照元が切り替わる (#84)", () => {
+    const g = createGraph();
+    addNode(g, { id: "n1", type: "Number", params: { value: 10 } });
+    addNode(g, { id: "n2", type: "Number", params: { value: 99 } });
+    addNode(g, { id: "m", type: "Multiply", params: { b: 1 } });
+    expect(addConnection(g, r, conn("e1", "n1", "out", "m", "a")).ok).toBe(true);
+    expect((evaluate(g, r, { timeSec: 0 }).get("m")!.out as number)).toBe(10);
+    // 同じ入力へ n2 を接続 → 後勝ちで置き換わり、評価値も切り替わる
+    expect(addConnection(g, r, conn("e2", "n2", "out", "m", "a")).ok).toBe(true);
+    expect((evaluate(g, r, { timeSec: 0 }).get("m")!.out as number)).toBe(99);
+  });
+
   test("数値 param（PointCloudVisual.radius）へは接続できる", () => {
     const g = createGraph();
     addNode(g, { id: "n", type: "Number", params: { value: 1.2 } });

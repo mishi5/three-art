@@ -83,13 +83,28 @@ describe("addConnection 検査", () => {
     expect(res.reason).toBe("type mismatch");
   });
 
-  test("入力ポート重複は拒否", () => {
+  test("接続済み入力への再接続は後勝ちで置き換える (#84)", () => {
     const g = g3();
     const r = makeRegistry();
     expect(addConnection(g, r, conn("e1", "a", "outN", "b", "inN")).ok).toBe(true);
     const res = addConnection(g, r, conn("e2", "c", "outN", "b", "inN"));
+    expect(res.ok).toBe(true);
+    // e1 は削除され e2 のみが残る
+    expect(g.connections.map((c) => c.id)).toEqual(["e2"]);
+    expect(g.connections[0]!.from.node).toBe("c");
+  });
+
+  test("置き換えで循環になる場合は拒否し既存接続を維持する (#84)", () => {
+    const g = g3();
+    const r = makeRegistry();
+    // a→b, b→c。c→(b.inN) は b の入力を a から c に置き換えるが、b→c が残るため循環。
+    expect(addConnection(g, r, conn("e1", "a", "outN", "b", "inN")).ok).toBe(true);
+    expect(addConnection(g, r, conn("e2", "b", "outN", "c", "inN")).ok).toBe(true);
+    const res = addConnection(g, r, conn("e3", "c", "outN", "b", "inN"));
     expect(res.ok).toBe(false);
-    expect(res.reason).toBe("input already connected");
+    expect(res.reason).toBe("cycle");
+    // 既存の e1 は維持される
+    expect(g.connections.map((c) => c.id).sort()).toEqual(["e1", "e2"]);
   });
 
   test("不在ポートは拒否", () => {
