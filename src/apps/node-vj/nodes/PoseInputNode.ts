@@ -98,13 +98,13 @@ export const PoseInputNode: NodeTypeDef = {
   ],
   params: [
     // プレビュー小窓に骨格を重畳するか（#79）。プレビュー自体の ON/OFF は 👁。
-    { id: "skeleton", label: "skeleton", kind: "boolean", default: false },
+    { id: "skeleton", label: "skeleton", kind: "enum", default: "off", options: ["off", "on"] },
   ],
   createState: () => new PoseInputRuntime(),
   disposeState: (state: NodeState) => (state as PoseInputRuntime).dispose(),
   // #79: カメラ映像のノード隣接プレビュー（texture を持たないため previewSource で提供）
   previewSource: (state: NodeState, node: NodeInstance) =>
-    (state as PoseInputRuntime).previewFrame(Boolean(node.params.skeleton)),
+    (state as PoseInputRuntime).previewFrame(node.params.skeleton === "on"),
   evaluate: (ctx) => {
     const s = ctx.state as PoseInputRuntime | undefined;
     if (!s) {

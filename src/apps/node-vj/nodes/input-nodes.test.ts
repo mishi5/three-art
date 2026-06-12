@@ -63,8 +63,9 @@ describe("PoseInput プレビュー (#79)", () => {
   test("previewSource と skeleton param を持つ", () => {
     expect(typeof PoseInputNode.previewSource).toBe("function");
     const sk = PoseInputNode.params.find((p) => p.id === "skeleton");
-    expect(sk?.kind).toBe("boolean");
-    expect(sk?.default).toBe(false);
+    expect(sk?.kind).toBe("enum");
+    expect(sk?.default).toBe("off");
+    expect(sk?.options).toEqual(["off", "on"]);
   });
 
   test("nodeHasPreview: texture 出力 or previewSource", () => {
