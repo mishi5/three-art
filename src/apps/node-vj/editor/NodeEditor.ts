@@ -1,7 +1,7 @@
 // Canvas2D ノードエディタ。ノードの配置・移動・接続・切断・param 編集を行う。
 // 座標計算は layout.ts を共有し、描画とヒット判定の整合を保つ。
 import {
-  addConnection, addNode, findNode, removeConnection, removeNode,
+  addConnection, addNode, findNode, removeConnection, removeNode, replaceGraph,
   type Connection, type GraphDoc, type NodeInstance,
 } from "../graph/graph-doc";
 import type { NodeRegistry } from "../graph/node-type";
@@ -14,6 +14,7 @@ import {
 } from "./layout";
 import { hitTest } from "./hit-test";
 import { duplicateNodes } from "../graph/duplicate";
+import type { History } from "../graph/history";
 import { nodesInRect, normRect } from "./selection";
 import { openParamInput } from "./param-overlay";
 import { formatPortValue } from "./port-format";
@@ -35,13 +36,13 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 type Drag =
   // 選択グループの一括移動。anchors は各ノードの「カーソル→ノード位置」オフセット。
-  | { kind: "group"; anchors: Map<string, { dx: number; dy: number }> }
+  | { kind: "group"; anchors: Map<string, { dx: number; dy: number }>; moved: boolean }
   | { kind: "wire"; fromNode: string; fromPort: string; type: PortType }
   | { kind: "pan"; startX: number; startY: number; ox: number; oy: number }
   // 空白ドラッグの矩形選択（#83）。start は world 座標。
   | { kind: "rect"; startX: number; startY: number }
   // param 行のスライダドラッグ候補。moved=false のまま up したらクリック（数値入力）扱い。
-  | { kind: "param"; nodeId: string; paramIndex: number; moved: boolean; startX: number; lastX: number }
+  | { kind: "param"; nodeId: string; paramIndex: number; moved: boolean; recorded: boolean; startX: number; lastX: number }
   | null;
 
 /** クリックとドラッグを分ける移動量しきい値 (px)。 */
@@ -67,6 +68,8 @@ export class NodeEditor {
     private canvas: HTMLCanvasElement,
     private graph: GraphDoc,
     private registry: NodeRegistry,
+    /** UNDO/REDO 履歴（#90）。編集系操作の直前に record する。 */
+    private history: History,
     /** 出力ポートのライブ値を引く（GraphRuntime の直近評価結果）。任意。 */
     private getOutputs?: (nodeId: string) => Record<string, unknown> | undefined,
     /** プレビュー小窓用 canvas を引く（#77、GraphRuntime の読み戻し結果）。任意。 */
@@ -140,6 +143,7 @@ export class NodeEditor {
         y: -this.offset.y + 120 + Math.round((idCounter % 5) * 24),
       },
     };
+    this.history.record(this.graph);
     addNode(this.graph, node);
     this.selectedIds = new Set([node.id]);
   }
@@ -166,7 +170,10 @@ export class NodeEditor {
         const existing = this.graph.connections.find(
           (c) => c.to.node === hit.node.id && c.to.port === hit.port,
         );
-        if (existing) removeConnection(this.graph, existing.id);
+        if (existing) {
+          this.history.record(this.graph);
+          removeConnection(this.graph, existing.id);
+        }
       }
       return;
     }
@@ -175,7 +182,7 @@ export class NodeEditor {
       this.selectedIds = new Set([hit.node.id]);
       this.drag = {
         kind: "param", nodeId: hit.node.id, paramIndex: hit.paramIndex,
-        moved: false, startX: w.x, lastX: w.x,
+        moved: false, recorded: false, startX: w.x, lastX: w.x,
       };
       return;
     }
@@ -203,7 +210,7 @@ export class NodeEditor {
         const p = n?.position ?? { x: 0, y: 0 };
         anchors.set(id, { dx: w.x - p.x, dy: w.y - p.y });
       }
-      this.drag = { kind: "group", anchors };
+      this.drag = { kind: "group", anchors, moved: false };
       return;
     }
     // 空白: 矩形選択を開始（確定は up）
@@ -214,6 +221,11 @@ export class NodeEditor {
     this.cursor = this.toWorld(e);
     if (!this.drag) return;
     if (this.drag.kind === "group") {
+      if (!this.drag.moved) {
+        // ドラッグ全体を 1 操作として、最初に動いた時点で記録（クリックだけでは積まない）
+        this.history.record(this.graph);
+        this.drag.moved = true;
+      }
       for (const [id, a] of this.drag.anchors) {
         const node = findNode(this.graph, id);
         if (node) node.position = { x: this.cursor.x - a.dx, y: this.cursor.y - a.dy };
@@ -237,6 +249,11 @@ export class NodeEditor {
     if (!def || !pd || !isParamEditableBySlider(pd)) return;
     // 接続中はドラッグで変更しない（上流値が支配）。
     if (this.resolveConnectedValue(node, pd.id) !== undefined) return;
+    if (!drag.recorded) {
+      // スライダドラッグ全体を 1 操作として記録
+      this.history.record(this.graph);
+      drag.recorded = true;
+    }
     if (isAbsoluteSlider(pd)) {
       const r = nodeRect(node, def);
       node.params[pd.id] = absoluteSliderValue(this.cursor.x, r.x + 6, r.w - 12, pd);
@@ -281,7 +298,9 @@ export class NodeEditor {
           from: { node: this.drag.fromNode, port: this.drag.fromPort },
           to: { node: drop.node, port: drop.port },
         };
-        addConnection(this.graph, this.registry, conn);
+        this.history.record(this.graph);
+        const res = addConnection(this.graph, this.registry, conn);
+        if (!res.ok) this.history.discardLast(); // 無効な接続は操作として積まない
       }
     }
     this.drag = null;
@@ -292,12 +311,33 @@ export class NodeEditor {
     if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;
     if (e.key === " ") this.spaceDown = true;
     if ((e.key === "Delete" || e.key === "Backspace") && this.selectedIds.size > 0) {
+      this.history.record(this.graph);
       for (const id of this.selectedIds) removeNode(this.graph, id);
       this.selectedIds = new Set();
+    }
+    // #90: Cmd+Z = UNDO / Shift+Cmd+Z = REDO（Cmd のみ。Ctrl 系は割り当てない）
+    if (e.metaKey && e.key.toLowerCase() === "z") {
+      e.preventDefault();
+      const snap = e.shiftKey ? this.history.redo(this.graph) : this.history.undo(this.graph);
+      if (snap) {
+        // preview は履歴対象外の表示状態。スナップショットに含まれてしまうため、
+        // 現存ノードの preview を復元後に引き継ぐ（削除 UNDO で復活するノードは
+        // スナップショット時の値のままにする）。
+        const prevPreview = new Map(this.graph.nodes.map((n) => [n.id, n.preview]));
+        replaceGraph(this.graph, snap);
+        for (const node of this.graph.nodes) {
+          if (prevPreview.has(node.id)) node.preview = prevPreview.get(node.id);
+        }
+        // 消えたノードを選択から除外
+        const alive = new Set(this.graph.nodes.map((n) => n.id));
+        this.selectedIds = new Set([...this.selectedIds].filter((id) => alive.has(id)));
+      }
+      return;
     }
     // #83: Cmd/Ctrl+C で選択ノードを即複製（+24px）し、複製群を選択状態にする。
     if ((e.metaKey || e.ctrlKey) && e.key === "c" && this.selectedIds.size > 0) {
       e.preventDefault();
+      this.history.record(this.graph);
       const newIds = duplicateNodes(this.graph, this.selectedIds, genId, 24);
       this.selectedIds = new Set(newIds);
     }
@@ -333,7 +373,11 @@ export class NodeEditor {
       value: node.params[pd.id] ?? pd.default,
       kind: pd.kind,
       options: pd.options,
-      onCommit: (v) => { node.params[pd.id] = v; },
+      onCommit: (v) => {
+        if (node.params[pd.id] === v) return;
+        this.history.record(this.graph);
+        node.params[pd.id] = v;
+      },
     });
   }
 

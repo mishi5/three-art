@@ -4,6 +4,7 @@ import { replaceGraph } from "../graph/graph-doc";
 import type { NodeRegistry } from "../graph/node-type";
 import { serializeGraph, deserializeGraph } from "../graph/serialize";
 import { GraphStore } from "../graph/graph-store";
+import type { History } from "../graph/history";
 
 const BTN_CSS =
   "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;";
@@ -24,6 +25,7 @@ export function buildGraphIoBar(
   graph: GraphDoc,
   registry: NodeRegistry,
   store: GraphStore,
+  history: History,
 ): HTMLDivElement {
   const bar = document.createElement("div");
   // ノード追加ツールバー（上段）との重なりを避けて 2 段目に置く。
@@ -56,6 +58,8 @@ export function buildGraphIoBar(
     try {
       const { graph: loaded, warnings } = deserializeGraph(text, registry);
       replaceGraph(graph, loaded);
+      // 読込はワークスペースの置き換えなので履歴をクリアする（#90）
+      history.clear();
       for (const w of warnings) console.warn(`[graph-io] ${w}`);
       toast(warnings.length ? `${sourceLabel}: 読込（警告 ${warnings.length} 件）` : `${sourceLabel}: 読込完了`);
     } catch (e) {
