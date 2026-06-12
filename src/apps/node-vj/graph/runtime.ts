@@ -170,6 +170,23 @@ export class GraphRuntime {
     return this.previewCanvases.get(nodeId);
   }
 
+  /**
+   * #79: プレビュー小窓の描画ソース。NodeTypeDef.previewSource（video 等）を優先し、
+   * なければ texture 読み戻し canvas（#77）を返す。
+   */
+  getPreviewSource(nodeId: string): CanvasImageSource | undefined {
+    const node = this.graph.nodes.find((n) => n.id === nodeId);
+    const def = node ? this.registry.get(node.type) : undefined;
+    if (node && def?.previewSource) {
+      const state = this.states.get(nodeId);
+      if (state !== undefined) {
+        return def.previewSource(state, node) ?? undefined;
+      }
+      return undefined;
+    }
+    return this.previewCanvases.get(nodeId);
+  }
+
   start(): void {
     const loop = (ms: number): void => {
       this.rafId = requestAnimationFrame(loop);

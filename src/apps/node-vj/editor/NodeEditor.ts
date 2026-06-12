@@ -18,12 +18,18 @@ import type { History } from "../graph/history";
 import { nodesInRect, normRect } from "./selection";
 import { openParamInput } from "./param-overlay";
 import { formatPortValue } from "./port-format";
+import { containRect } from "./fit";
 import { absoluteSliderValue, scrubValue, fillRatio, isAbsoluteSlider } from "./slider-logic";
 import type { ParamDef } from "../graph/node-type";
 
 /** スライダドラッグで編集できる param（数値のみ。enum/boolean/string はクリック編集）。 */
 function isParamEditableBySlider(pd: ParamDef): boolean {
   return pd.kind === "number" || pd.kind === "int";
+}
+
+/** 👁 プレビューを持つノードか（texture 出力 or previewSource、#77/#79）。 */
+export function nodeHasPreview(def: { outputs: { type: string }[]; previewSource?: unknown }): boolean {
+  return def.outputs.some((p) => p.type === "texture") || typeof def.previewSource === "function";
 }
 
 const PORT_COLORS: Record<PortType, string> = {
@@ -72,8 +78,8 @@ export class NodeEditor {
     private history: History,
     /** 出力ポートのライブ値を引く（GraphRuntime の直近評価結果）。任意。 */
     private getOutputs?: (nodeId: string) => Record<string, unknown> | undefined,
-    /** プレビュー小窓用 canvas を引く（#77、GraphRuntime の読み戻し結果）。任意。 */
-    private getPreviewCanvas?: (nodeId: string) => HTMLCanvasElement | undefined,
+    /** プレビュー小窓の描画ソースを引く（#77/#79、GraphRuntime）。任意。 */
+    private getPreviewSource?: (nodeId: string) => CanvasImageSource | undefined,
   ) {
     const c = canvas.getContext("2d");
     if (!c) throw new Error("2d context unavailable");
@@ -189,7 +195,7 @@ export class NodeEditor {
     if (hit?.kind === "node") {
       // #77: texture 出力を持つノードのタイトル右端 👁 はプレビュー小窓のトグル。
       const def = this.registry.get(hit.node.type);
-      if (def?.outputs.some((p) => p.type === "texture")) {
+      if (def && nodeHasPreview(def)) {
         const b = previewButtonRect(hit.node);
         if (w.x >= b.x && w.x <= b.x + b.w && w.y >= b.y && w.y <= b.y + b.h) {
           hit.node.preview = !hit.node.preview;
@@ -466,16 +472,30 @@ export class NodeEditor {
     ctx.textBaseline = "middle";
     ctx.fillText(def.type, r.x + 8, r.y + TITLE_H / 2);
 
-    // #77: texture 出力を持つノードはタイトル右端に 👁（プレビュー小窓トグル）
-    if (def.outputs.some((p) => p.type === "texture")) {
+    // #77/#79: プレビュー対象ノードはタイトル右端に 👁（小窓トグル）
+    if (nodeHasPreview(def)) {
       const b = previewButtonRect(node);
       drawEyeIcon(ctx, b.x + b.w / 2, b.y + b.h / 2, Boolean(node.preview));
       if (node.preview) {
         const w = previewWindowRect(node);
         ctx.fillStyle = "#000";
         ctx.fillRect(w.x, w.y, w.w, w.h);
-        const pc = this.getPreviewCanvas?.(node.id);
-        if (pc) ctx.drawImage(pc, w.x, w.y, w.w, w.h);
+        const src = this.getPreviewSource?.(node.id);
+        if (src) {
+          // video 等はソース寸法から contain でレターボックス描画
+          const sw = (src as HTMLVideoElement).videoWidth ?? (src as HTMLCanvasElement).width ?? w.w;
+          const sh = (src as HTMLVideoElement).videoHeight ?? (src as HTMLCanvasElement).height ?? w.h;
+          const fit = containRect(Number(sw) || w.w, Number(sh) || w.h, w.w, w.h);
+          ctx.drawImage(src, w.x + fit.x, w.y + fit.y, fit.w, fit.h);
+        } else {
+          // 未開始・権限拒否・テクスチャ未着のプレースホルダ
+          ctx.fillStyle = "#666";
+          ctx.font = "11px system-ui";
+          ctx.textAlign = "center";
+          ctx.fillText("no signal", w.x + w.w / 2, w.y + w.h / 2);
+          ctx.textAlign = "left";
+          ctx.font = "13px system-ui";
+        }
         ctx.strokeStyle = "#6c9";
         ctx.lineWidth = 1;
         ctx.strokeRect(w.x, w.y, w.w, w.h);
