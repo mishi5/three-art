@@ -228,11 +228,23 @@ export class NodeEditor {
       const w = this.toWorld(e);
       // 遮蔽つき判定: 手前ノードの本体に隠れた入力ポートへは接続しない。
       const target = hitTest(this.graph.nodes, this.registry, w.x, w.y);
-      if (target?.kind === "port" && target.portKind === "input" && isCompatible(this.drag.type, target.type)) {
+      // ドット直上だけでなく param 行へのドロップも、その行の入力ポート扱いにする
+      // （#84: 小さなドットを外して「動作しない」となる摩擦を解消）。
+      let drop: { node: string; port: string; type: PortType } | null = null;
+      if (target?.kind === "port" && target.portKind === "input") {
+        drop = { node: target.node.id, port: target.port, type: target.type };
+      } else if (target?.kind === "param") {
+        const def = this.registry.get(target.node.type);
+        const pd = def?.params[target.paramIndex];
+        if (def && pd && isParamInput(def, pd.id)) {
+          drop = { node: target.node.id, port: pd.id, type: "number" };
+        }
+      }
+      if (drop && isCompatible(this.drag.type, drop.type)) {
         const conn: Connection = {
           id: genId("c"),
           from: { node: this.drag.fromNode, port: this.drag.fromPort },
-          to: { node: target.node.id, port: target.port },
+          to: { node: drop.node, port: drop.port },
         };
         addConnection(this.graph, this.registry, conn);
       }

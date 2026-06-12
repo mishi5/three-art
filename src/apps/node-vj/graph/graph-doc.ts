@@ -86,15 +86,16 @@ export function addConnection(
     return { ok: false, reason: "type mismatch" };
   }
 
-  // 入力ポートは 1 本のみ（重複入力を禁止）。
-  const occupied = g.connections.some(
+  // 入力ポートは 1 本のみ。接続済みなら後勝ちで置き換える（#84）。
+  // 循環チェックは「置き換えで消える既存エッジ」を除外して行い、
+  // 循環になる場合は拒否して既存接続を維持する。
+  const existing = g.connections.find(
     (c) => c.to.node === conn.to.node && c.to.port === conn.to.port,
   );
-  if (occupied) return { ok: false, reason: "input already connected" };
-
-  if (wouldCreateCycle(g, conn.from.node, conn.to.node)) {
+  if (wouldCreateCycle(g, conn.from.node, conn.to.node, existing?.id)) {
     return { ok: false, reason: "cycle" };
   }
+  if (existing) removeConnection(g, existing.id);
 
   g.connections.push(conn);
   return { ok: true };
@@ -103,10 +104,12 @@ export function addConnection(
 /**
  * `from → to` の辺を加えると循環するか。
  * 既存の辺だけをたどって `to` から `from` に到達できれば循環になる。
+ * excludeConnId は後勝ち置き換え（#84）で消える予定の辺を除外する。
  */
-export function wouldCreateCycle(g: GraphDoc, from: string, to: string): boolean {
+export function wouldCreateCycle(g: GraphDoc, from: string, to: string, excludeConnId?: string): boolean {
   const adj = new Map<string, string[]>();
   for (const c of g.connections) {
+    if (c.id === excludeConnId) continue;
     const list = adj.get(c.from.node) ?? [];
     list.push(c.to.node);
     adj.set(c.from.node, list);
