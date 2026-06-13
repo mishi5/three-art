@@ -3,13 +3,14 @@ import type { NodeState, NodeTypeDef } from "../graph/node-type";
 import { PREVIEW_W, PREVIEW_H } from "../graph/preview";
 import { containRect } from "../editor/fit";
 import { VideoTextureSurface } from "../graph/video-surface";
+import type { PlaybackControl } from "./playback";
 
 /**
  * VideoFileInput ノードの永続状態（#66）。動画ファイルをループ再生して
  * texture を供給する。ファイル読込は user gesture（下部バー）から呼ぶ。
  * 音声トラックは対象外（音は AudioInput の file で扱う）。
  */
-export class VideoFileInputRuntime {
+export class VideoFileInputRuntime implements PlaybackControl {
   private video: HTMLVideoElement;
   private objectUrl: string | null = null;
   private surface = new VideoTextureSurface();
@@ -39,6 +40,30 @@ export class VideoFileInputRuntime {
 
   setLoop(loop: boolean): void {
     this.video.loop = loop;
+  }
+
+  // --- PlaybackControl（#99）---
+  isPlaying(): boolean {
+    return this.started && !this.video.paused;
+  }
+
+  togglePlay(): void {
+    if (!this.started) return;
+    if (this.video.paused) void this.video.play().catch(() => { /* ignore */ });
+    else this.video.pause();
+  }
+
+  getCurrentTime(): number {
+    return this.video.currentTime || 0;
+  }
+
+  getDuration(): number {
+    return Number.isFinite(this.video.duration) ? this.video.duration : 0;
+  }
+
+  seek(t: number): void {
+    const d = this.getDuration();
+    this.video.currentTime = d > 0 ? Math.max(0, Math.min(t, d - 1e-3)) : 0;
   }
 
   /** 画面サイズ RT へ contain 描画した texture（アスペクト比の入口正規化）。 */

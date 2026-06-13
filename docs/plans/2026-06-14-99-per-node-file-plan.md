@@ -46,7 +46,37 @@
 
 ※ ランタイムの `fileName` セットや実ファイルダイアログは DOM/File 依存のため手動確認に委ねる。
 
+## 追加スコープ: ノードごとの再生コントロール（ユーザー要望でこの Issue に統合）
+
+ノード単位でファイルを持つと、再生/停止・再生位置もノード単位で要る。別 Issue に分けず本 PR に含める。
+
+### 共通インターフェース
+`src/apps/node-vj/nodes/playback.ts` に `PlaybackControl`:
+- `isPlaying(): boolean` / `togglePlay(): void` / `getCurrentTime(): number` / `getDuration(): number` / `seek(t): void`
+
+両ランタイムが実装:
+- AudioFileInputRuntime: `FileAudioSource` の `isPlaying`/`togglePause`/`getCurrentTime`/`getDecodedBuffer().duration`/`seek` に委譲。
+- VideoFileInputRuntime: `HTMLVideoElement` の `paused`/`play`/`pause`/`currentTime`/`duration` に委譲。
+
+### レイアウト（layout.ts）
+- fileInput 持ちノードは file 行＋transport 行で **+2*ROW_H**。
+- `fileRowRect`（上）/ `transportRowRect`（下＝ノード最下行）。
+- `transportLayout(rect)` → `{ button, seek }`（再生ボタン＋シークバー）。
+- `seekRatioAt(x, seekRect)` → 0..1。`formatTime(sec)` → "m:ss"。
+
+### NodeEditor
+- コンストラクタに `playback?: { get(nodeId), toggle(nodeId), seek(nodeId, t) }` を追加。
+- transport 行に再生/停止ボタン（▶/⏸）・進捗付きシークバー・時刻を描画。
+- ヒット: ボタン→toggle、シークバー→クリック/ドラッグで seek（Drag に "seek" 種別を追加）。
+
+### main.ts
+- `playback` を runtime.getState 経由で配線（`PlaybackControl` を持つノードのみ機能）。
+
+### TDD 追加
+- layout: nodeHeight +2*ROW_H、transportRowRect/fileRowRect の位置、transportLayout、seekRatioAt、formatTime。
+
 ## 動作確認
 - VideoFileInput / AudioFileInput をノード上のファイル行クリックで個別に選択し、ノードにファイル名が出る。
 - 同種ノードを 2 つ置き、別々のファイルを割り当てられる。
+- 各ノードの再生/停止ボタンと再生位置シークが効く。
 - 下部バーに共有ファイル input が無いこと。

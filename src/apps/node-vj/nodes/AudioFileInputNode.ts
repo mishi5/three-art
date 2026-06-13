@@ -6,12 +6,13 @@ import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "../../../core/types"
 import type { NodeState, NodeTypeDef } from "../graph/node-type";
 import { sectionIndexAt } from "./input-node-logic";
 import { AUDIO_FEATURE_OUTPUTS, OnsetTracker, audioFeatureOutputs } from "./audio-feature-logic";
+import type { PlaybackControl } from "./playback";
 
 /**
  * 音声ファイル入力の永続状態（#100）。loadFile（user gesture）でファイルを読み込み、
  * SongAnalyzer + SectionDetector で section 境界を算出して再生位置に応じた section を返す。
  */
-export class AudioFileInputRuntime {
+export class AudioFileInputRuntime implements PlaybackControl {
   private source: FileAudioSource | null = null;
   boundaries: SectionBoundary[] = [];
   started = false;
@@ -49,6 +50,27 @@ export class AudioFileInputRuntime {
 
   detectOnset(bass: number, t: number): boolean {
     return this.onset.detect(bass, t);
+  }
+
+  // --- PlaybackControl（#99）---
+  isPlaying(): boolean {
+    return this.source?.isPlaying() ?? false;
+  }
+
+  togglePlay(): void {
+    this.source?.togglePause();
+  }
+
+  getCurrentTime(): number {
+    return this.currentTime();
+  }
+
+  getDuration(): number {
+    return this.source?.getDecodedBuffer()?.duration ?? 0;
+  }
+
+  seek(t: number): void {
+    this.source?.seek(t);
   }
 
   dispose(): void {

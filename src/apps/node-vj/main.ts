@@ -9,6 +9,7 @@ import { NodeEditor } from "./editor/NodeEditor";
 import { buildGraphIoBar } from "./editor/graph-io-bar";
 import { GraphStore, localStorageAdapter } from "./graph/graph-store";
 import { History } from "./graph/history";
+import type { PlaybackControl } from "./nodes/playback";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "../../core/types";
 
 const editorCanvas = document.getElementById("editor");
@@ -82,6 +83,16 @@ const editor = new NodeEditor(
     s?.loadFile?.(file).catch((e) => console.warn(`[node-vj] loadFile failed for ${id}:`, e));
   },
   (id) => (runtime.getState(id) as Named | undefined)?.fileName ?? null,
+  // #99: ノードごとの再生コントロール（PlaybackControl を持つノードのみ機能）。
+  {
+    get: (id) => {
+      const s = runtime.getState(id) as Partial<PlaybackControl> | undefined;
+      if (!s || typeof s.getDuration !== "function") return null;
+      return { playing: s.isPlaying!(), current: s.getCurrentTime!(), duration: s.getDuration() };
+    },
+    toggle: (id) => (runtime.getState(id) as Partial<PlaybackControl> | undefined)?.togglePlay?.(),
+    seek: (id, t) => (runtime.getState(id) as Partial<PlaybackControl> | undefined)?.seek?.(t),
+  },
 );
 
 // グラフ保存/読込バー（#65）。読込は replaceGraph で同一参照のまま反映される。
