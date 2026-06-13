@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { NodeState, NodeTypeDef } from "../graph/node-type";
 import { PREVIEW_W, PREVIEW_H } from "../graph/preview";
 import { containRect } from "../editor/fit";
+import { VideoTextureSurface } from "../graph/video-surface";
 
 /**
  * VideoFileInput ノードの永続状態（#66）。動画ファイルをループ再生して
@@ -11,7 +12,7 @@ import { containRect } from "../editor/fit";
 export class VideoFileInputRuntime {
   private video: HTMLVideoElement;
   private objectUrl: string | null = null;
-  private texture: THREE.VideoTexture | null = null;
+  private surface = new VideoTextureSurface();
   private previewCanvas: HTMLCanvasElement | null = null;
   started = false;
 
@@ -37,10 +38,10 @@ export class VideoFileInputRuntime {
     this.video.loop = loop;
   }
 
-  getTexture(): THREE.Texture | null {
-    if (!this.started || this.video.videoWidth === 0) return null;
-    if (!this.texture) this.texture = new THREE.VideoTexture(this.video);
-    return this.texture;
+  /** 画面サイズ RT へ contain 描画した texture（アスペクト比の入口正規化）。 */
+  getTexture(renderer: THREE.WebGLRenderer): THREE.Texture | null {
+    if (!this.started) return null;
+    return this.surface.render(renderer, this.video);
   }
 
   previewFrame(): CanvasImageSource | null {
@@ -60,7 +61,7 @@ export class VideoFileInputRuntime {
   }
 
   dispose(): void {
-    this.texture?.dispose();
+    this.surface.dispose();
     this.video.pause();
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
     this.video.remove();
@@ -84,6 +85,6 @@ export const VideoFileInputNode: NodeTypeDef = {
     const s = ctx.state as VideoFileInputRuntime | undefined;
     if (!s) return {};
     s.setLoop(ctx.param("loop") !== "off");
-    return { texture: s.getTexture() ?? undefined };
+    return { texture: (ctx.env ? s.getTexture(ctx.env.renderer) : null) ?? undefined };
   },
 };

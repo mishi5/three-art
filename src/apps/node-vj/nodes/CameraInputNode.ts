@@ -7,6 +7,7 @@ import type { NodeInstance } from "../graph/graph-doc";
 import type { NodeState, NodeTypeDef } from "../graph/node-type";
 import { PREVIEW_W, PREVIEW_H } from "../graph/preview";
 import { containRect } from "../editor/fit";
+import { VideoTextureSurface } from "../graph/video-surface";
 
 /** 骨格重畳に使う主要エッジ（MediaPipe Pose の landmark index）。 */
 const SKELETON_EDGES: ReadonlyArray<[number, number]> = [
@@ -32,7 +33,7 @@ export class CameraInputRuntime {
   private stream: MediaStream | null = null;
   private pose: PoseInput | null = null;
   private poseStarting = false;
-  private texture: THREE.VideoTexture | null = null;
+  private surface = new VideoTextureSurface();
   private lastLandmarks: Landmark[] | null = null;
   private previewCanvas: HTMLCanvasElement | null = null;
   started = false;
@@ -80,11 +81,14 @@ export class CameraInputRuntime {
     this.lastLandmarks = null;
   }
 
-  /** カメラ映像の texture（映像が来るまでは null）。 */
-  getTexture(): THREE.Texture | null {
-    if (!this.started || this.video.videoWidth === 0) return null;
-    if (!this.texture) this.texture = new THREE.VideoTexture(this.video);
-    return this.texture;
+  /**
+   * カメラ映像の texture（映像が来るまでは null）。
+   * 生の VideoTexture でなく、画面サイズ RT へ contain 描画した texture を返す
+   * （Screen/エフェクトで横伸びしないようアスペクト比を入口で正規化）。
+   */
+  getTexture(renderer: THREE.WebGLRenderer): THREE.Texture | null {
+    if (!this.started) return null;
+    return this.surface.render(renderer, this.video);
   }
 
   /** プレビュー小窓のフレーム合成（#79 と同仕様）。 */
@@ -121,7 +125,7 @@ export class CameraInputRuntime {
 
   dispose(): void {
     this.stopPose();
-    this.texture?.dispose();
+    this.surface.dispose();
     if (this.stream) for (const t of this.stream.getTracks()) t.stop();
     this.video.srcObject = null;
     this.video.remove();
@@ -167,7 +171,7 @@ export const CameraInputNode: NodeTypeDef = {
       center: s.anchors.getCenter(),
     };
     return {
-      texture: s.getTexture() ?? undefined,
+      texture: (ctx.env ? s.getTexture(ctx.env.renderer) : null) ?? undefined,
       pose,
       motion: s.anchors.getMotion(),
     };
