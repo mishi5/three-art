@@ -42,39 +42,34 @@ describe("pickScreenTextures", () => {
     expect(pickScreenTextures(g, r, out)).toEqual([TEX_A]);
   });
 
-  test("Screen が無ければ texture 出力未接続の visual をフォールバック表示", () => {
+  test("#98: Screen が無ければ何も表示しない（フォールバック廃止）", () => {
     const g = createGraph();
     addNode(g, { id: "v1", type: "Vis", params: {} });
     addNode(g, { id: "v2", type: "Vis", params: {} });
     const out = outputsMap({ v1: { texture: TEX_A }, v2: { texture: TEX_B } });
+    expect(pickScreenTextures(g, r, out)).toEqual([]);
+  });
+
+  test("#98: Screen が未記録（未評価相当）なら空", () => {
+    const g = createGraph();
+    addNode(g, { id: "v1", type: "Vis", params: {} });
+    addNode(g, { id: "s", type: "Screen", params: {} });
+    g.connections.push({ id: "c", from: { node: "v1", port: "texture" }, to: { node: "s", port: "texture" } });
+    const out = outputsMap({ v1: { texture: TEX_A }, s: {} });
+    expect(pickScreenTextures(g, r, out)).toEqual([]);
+  });
+
+  test("Screen が複数あればそれぞれの記録テクスチャを表示", () => {
+    const g = createGraph();
+    addNode(g, { id: "s1", type: "Screen", params: {} });
+    addNode(g, { id: "s2", type: "Screen", params: {} });
+    const out = outputsMap({ s1: { _screenTexture: TEX_A }, s2: { _screenTexture: TEX_B } });
     expect(pickScreenTextures(g, r, out)).toEqual([TEX_A, TEX_B]);
   });
 
-  test("texture 出力が接続済みの visual はフォールバック対象外", () => {
+  test("Screen が無ければ空（visual のみ）", () => {
     const g = createGraph();
-    addNode(g, { id: "v1", type: "Vis", params: {} });
-    addNode(g, { id: "v2", type: "Vis", params: {} });
-    addNode(g, { id: "s", type: "Screen", params: {} });
-    // v1 → Screen 接続。ただし Screen がまだ texture を記録していない（未評価相当）なら
-    // v2（未接続）のみがフォールバック表示される
-    g.connections.push({ id: "c", from: { node: "v1", port: "texture" }, to: { node: "s", port: "texture" } });
-    const out = outputsMap({ v1: { texture: TEX_A }, v2: { texture: TEX_B }, s: {} });
-    expect(pickScreenTextures(g, r, out)).toEqual([TEX_B]);
-  });
-
-  test("Screen が texture を記録していれば Screen のみ（フォールバック併用しない）", () => {
-    const g = createGraph();
-    addNode(g, { id: "v1", type: "Vis", params: {} });
-    addNode(g, { id: "v2", type: "Vis", params: {} });
-    addNode(g, { id: "s", type: "Screen", params: {} });
-    g.connections.push({ id: "c", from: { node: "v1", port: "texture" }, to: { node: "s", port: "texture" } });
-    const out = outputsMap({ v1: { texture: TEX_A }, v2: { texture: TEX_B }, s: { _screenTexture: TEX_A } });
-    expect(pickScreenTextures(g, r, out)).toEqual([TEX_A]);
-  });
-
-  test("visual も Screen も無ければ空", () => {
-    const g = createGraph();
-    addNode(g, { id: "n", type: "Num", params: {} });
-    expect(pickScreenTextures(g, r, outputsMap({ n: { out: 1 } }))).toEqual([]);
+    addNode(g, { id: "v", type: "Vis", params: {} });
+    expect(pickScreenTextures(g, r, outputsMap({ v: { texture: TEX_A } }))).toEqual([]);
   });
 });
