@@ -110,6 +110,24 @@ fileInput.addEventListener("change", () => {
 });
 fileLabel.appendChild(fileInput);
 bar.appendChild(fileLabel);
+
+// #66: 動画ファイル → VideoFileInput ノードへ
+const videoLabel = document.createElement("label");
+videoLabel.textContent = "動画ファイル: ";
+videoLabel.style.color = "#aaa";
+const videoInput = document.createElement("input");
+videoInput.type = "file";
+videoInput.accept = "video/*";
+videoInput.addEventListener("change", () => {
+  const file = videoInput.files?.[0];
+  if (!file) return;
+  const node = graph.nodes.find((n) => n.type === "VideoFileInput");
+  if (!node) { console.warn("[node-vj] VideoFileInput ノードを追加してください"); return; }
+  const s = runtime.getState(node.id) as FileLoadable | undefined;
+  s?.loadFile?.(file).catch((e) => console.warn("[node-vj] video loadFile failed:", e));
+});
+videoLabel.appendChild(videoInput);
+bar.appendChild(videoLabel);
 document.body.appendChild(bar);
 
 (window as unknown as { nodeVj: unknown }).nodeVj = { graph, registry, runtime, editor };
