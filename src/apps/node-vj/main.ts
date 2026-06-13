@@ -107,8 +107,8 @@ fileInput.accept = "audio/*";
 fileInput.addEventListener("change", () => {
   const file = fileInput.files?.[0];
   if (!file) return;
-  const audioNode = graph.nodes.find((n) => n.type === "AudioInput");
-  if (!audioNode) { console.warn("[node-vj] AudioInput ノードを追加してください"); return; }
+  const audioNode = graph.nodes.find((n) => n.type === "AudioFileInput");
+  if (!audioNode) { console.warn("[node-vj] AudioFileInput ノードを追加してください"); return; }
   const s = runtime.getState(audioNode.id) as FileLoadable | undefined;
   s?.loadFile?.(file).catch((e) => console.warn("[node-vj] loadFile failed:", e));
 });
