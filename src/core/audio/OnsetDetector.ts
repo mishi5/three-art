@@ -20,6 +20,11 @@ export class OnsetDetector {
     return this.waves;
   }
 
+  /** 直近に onset が発火した時刻（秒）。未発火なら -Infinity。 */
+  getLastOnsetTime(): number {
+    return this.lastOnsetTime;
+  }
+
   reset(): void {
     this.bassPrev = 0;
     this.lastOnsetTime = -Infinity;

@@ -21,12 +21,26 @@ describe("audio-feature-logic (#100)", () => {
     });
   });
 
-  // 既存 AudioInput の挙動を忠実に踏襲（getWaveTimes().length は常に 4 のため
-  // 初回フレームで true・以降 false になる既知の挙動）。
-  test("OnsetTracker: 初回 detect で true、以降は false", () => {
+  // #107: 新規 onset が発火したフレームのみ true を返す（音と無関係な誤発火をしない）。
+  test("OnsetTracker: 無音では false（初回フレーム含む）", () => {
     const t = new OnsetTracker();
-    expect(t.detect(0.5, 0)).toBe(true);
-    expect(t.detect(0.5, 0.2)).toBe(false);
-    expect(t.detect(0.0, 0.4)).toBe(false);
+    expect(t.detect(0.0, 0)).toBe(false);
+    expect(t.detect(0.0, 0.1)).toBe(false);
+  });
+
+  test("OnsetTracker: bass の立ち上がりフレームのみ true・定常は false", () => {
+    const t = new OnsetTracker();
+    expect(t.detect(0.0, 0.0)).toBe(false);
+    expect(t.detect(0.5, 0.1)).toBe(true);   // delta>threshold で発火
+    expect(t.detect(0.5, 0.2)).toBe(false);  // 定常（delta≈0）
+    expect(t.detect(0.5, 0.3)).toBe(false);
+  });
+
+  test("OnsetTracker: cooldown 経過後の再立ち上がりで再び true", () => {
+    const t = new OnsetTracker();
+    t.detect(0.0, 0.0);
+    expect(t.detect(0.5, 0.1)).toBe(true);   // 発火 @ 0.1
+    expect(t.detect(0.0, 0.3)).toBe(false);  // 立ち下がり
+    expect(t.detect(0.5, 0.4)).toBe(true);   // cooldown(0.12) 経過後に再発火
   });
 });

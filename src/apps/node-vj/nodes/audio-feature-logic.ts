@@ -29,19 +29,19 @@ export function audioFeatureOutputs(audio: AudioFeatures, onset: boolean): Recor
 }
 
 /**
- * onset 検出ラッパ。`detect` はこのフレームで新規 onset が発火したかを返す。
- * 注: 既存 AudioInput の挙動を踏襲（getWaveTimes().length は固定長のため、実質的に
- * 初回フレームで true・以降 false になる既知の挙動。修正は別 Issue 扱い）。
+ * onset 検出ラッパ。`detect` はこのフレームで新規 onset が発火したかを返す（#107）。
+ * OnsetDetector の直近 onset 時刻が前フレームより進んだフレームのみ true。
+ * 無音・定常時は false（初回フレームも -Infinity 比較で誤発火しない）。
  */
 export class OnsetTracker {
   private onset = new OnsetDetector();
-  private prevWaveCount = 0;
+  private prevOnsetTime = -Infinity;
 
   detect(bass: number, t: number): boolean {
     this.onset.update(bass, ONSET_THRESHOLD, ONSET_COOLDOWN, t);
-    const count = this.onset.getWaveTimes().length;
-    const fired = count > this.prevWaveCount;
-    this.prevWaveCount = count;
+    const last = this.onset.getLastOnsetTime();
+    const fired = last > this.prevOnsetTime;
+    this.prevOnsetTime = last;
     return fired;
   }
 }

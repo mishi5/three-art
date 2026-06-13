@@ -63,6 +63,21 @@ describe("OnsetDetector", () => {
     expect(times[3]).toBeCloseTo(0.601, 6);
   });
 
+  test("getLastOnsetTime: 初期は -Infinity、発火時刻を返し、cooldown 内では更新されない", () => {
+    const d = new OnsetDetector();
+    expect(d.getLastOnsetTime()).toBe(-Infinity);
+    d.update(0.0, 0.1, 0.12, 0.0);
+    expect(d.getLastOnsetTime()).toBe(-Infinity);   // 未発火
+    d.update(0.5, 0.1, 0.12, 0.1);                  // 発火 @ 0.1
+    expect(d.getLastOnsetTime()).toBeCloseTo(0.1, 6);
+    d.update(0.0, 0.1, 0.12, 0.15);
+    d.update(0.5, 0.1, 0.12, 0.18);                 // cooldown 内 → 更新されない
+    expect(d.getLastOnsetTime()).toBeCloseTo(0.1, 6);
+    d.update(0.0, 0.1, 0.12, 0.3);
+    d.update(0.5, 0.1, 0.12, 0.4);                  // cooldown 経過 → 更新
+    expect(d.getLastOnsetTime()).toBeCloseTo(0.4, 6);
+  });
+
   test("reset で全 wave がクリアされ bassPrev/lastOnsetTime もリセット", () => {
     const d = new OnsetDetector();
     d.update(0.0, 0.1, 0.12, 0.0);
