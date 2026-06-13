@@ -12,6 +12,10 @@ import { AudioInputNode } from "./AudioInputNode";
 import { RainVisualNode } from "./RainVisualNode";
 import { PointCloudVisualNode } from "./PointCloudVisualNode";
 import { BlendNode } from "./BlendNode";
+import { BlurNode } from "./BlurNode";
+import { KaleidoscopeNode } from "./KaleidoscopeNode";
+import { FractalNode } from "./FractalNode";
+import { EdgeVisualNode } from "./EdgeVisualNode";
 import { ScreenNode } from "./ScreenNode";
 
 /** 既定ノードを登録したレジストリを返す。 */
@@ -33,6 +37,11 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(PointCloudVisualNode);
   r.register(RainVisualNode);
   r.register(BlendNode);
+  r.register(EdgeVisualNode);
+  // effect（texture→texture）
+  r.register(BlurNode);
+  r.register(KaleidoscopeNode);
+  r.register(FractalNode);
   // output
   r.register(ScreenNode);
   return r;
