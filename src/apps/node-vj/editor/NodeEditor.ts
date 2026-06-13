@@ -10,7 +10,8 @@ import { signalInputs, isParamInput } from "../graph/node-ports";
 import {
   NODE_WIDTH, TITLE_H, ROW_H, PORT_R, nodeRect,
   inputPortPos, outputPortPos, paramRowY, paramPortPos, resolveInputPortPos,
-  previewButtonRect, previewWindowRect,
+  previewButtonRect, previewWindowRect, hasFileRow, fileRowRect, fileRowLabel,
+  transportRowRect, transportLayout, seekRatioAt, formatTime,
 } from "./layout";
 import { hitTest } from "./hit-test";
 import { duplicateNodes } from "../graph/duplicate";
@@ -50,6 +51,8 @@ type Drag =
   | { kind: "rect"; startX: number; startY: number }
   // param 行のスライダドラッグ候補。moved=false のまま up したらクリック（数値入力）扱い。
   | { kind: "param"; nodeId: string; paramIndex: number; moved: boolean; recorded: boolean; startX: number; lastX: number }
+  // #99: transport 行シークバーのドラッグ（クリック/スクラブで seek）。
+  | { kind: "seek"; nodeId: string; seek: { x: number; w: number }; duration: number }
   | null;
 
 /** クリックとドラッグを分ける移動量しきい値 (px)。 */
@@ -81,6 +84,16 @@ export class NodeEditor {
     private getOutputs?: (nodeId: string) => Record<string, unknown> | undefined,
     /** プレビュー小窓の描画ソースを引く（#77/#79、GraphRuntime）。任意。 */
     private getPreviewSource?: (nodeId: string) => CanvasImageSource | undefined,
+    /** #99: ファイル選択をそのノードのランタイムへ読み込ませる。任意。 */
+    private loadFileIntoNode?: (nodeId: string, file: File) => void,
+    /** #99: ノードの現在のファイル名を引く（ランタイム state）。任意。 */
+    private getFileName?: (nodeId: string) => string | null | undefined,
+    /** #99: 再生コントロール（transport 行）。任意。 */
+    private playback?: {
+      get: (nodeId: string) => { playing: boolean; current: number; duration: number } | null;
+      toggle: (nodeId: string) => void;
+      seek: (nodeId: string, t: number) => void;
+    },
   ) {
     const c = canvas.getContext("2d");
     if (!c) throw new Error("2d context unavailable");
@@ -203,6 +216,29 @@ export class NodeEditor {
           return;
         }
       }
+      // #99: ファイル行クリックで OS ファイルダイアログを開く（pointerdown の user gesture 内）。
+      if (def?.fileInput) {
+        const fr = fileRowRect(hit.node, def);
+        if (fr && w.x >= fr.x && w.x <= fr.x + fr.w && w.y >= fr.y && w.y <= fr.y + fr.h) {
+          this.openFileDialog(hit.node.id, def.fileInput.accept);
+          return;
+        }
+        // #99: transport 行（再生/停止ボタン・シークバー）。
+        const tr = transportRowRect(hit.node, def);
+        if (tr && w.y >= tr.y && w.y <= tr.y + tr.h) {
+          const { button, seek } = transportLayout(tr);
+          if (w.x >= button.x && w.x <= button.x + button.w) {
+            this.playback?.toggle(hit.node.id);
+            return;
+          }
+          const pb = this.playback?.get(hit.node.id);
+          if (pb && pb.duration > 0) {
+            this.playback?.seek(hit.node.id, seekRatioAt(w.x, seek) * pb.duration);
+            this.drag = { kind: "seek", nodeId: hit.node.id, seek, duration: pb.duration };
+          }
+          return;
+        }
+      }
       // Cmd/Ctrl+クリック = 選択トグル（ドラッグは開始しない）
       if (e.metaKey || e.ctrlKey) {
         if (this.selectedIds.has(hit.node.id)) this.selectedIds.delete(hit.node.id);
@@ -242,6 +278,8 @@ export class NodeEditor {
       this.offset.y = this.drag.oy + (e.clientY - this.drag.startY);
     } else if (this.drag.kind === "param") {
       this.dragParam(this.drag);
+    } else if (this.drag.kind === "seek") {
+      this.playback?.seek(this.drag.nodeId, seekRatioAt(this.cursor.x, this.drag.seek) * this.drag.duration);
     }
   };
 
@@ -368,6 +406,24 @@ export class NodeEditor {
     );
     if (!c) return undefined;
     return this.getOutputs?.(c.from.node)?.[c.from.port];
+  }
+
+  /** #99: ノード単位のファイル選択。一時的な input[type=file] を生成して開く。 */
+  private openFileDialog(nodeId: string, accept: string): void {
+    if (!this.loadFileIntoNode) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = accept;
+    input.style.display = "none";
+    document.body.appendChild(input);
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (file) this.loadFileIntoNode?.(nodeId, file);
+      input.remove();
+    });
+    // キャンセル時も DOM に残さない（対応ブラウザのみ発火）。
+    input.addEventListener("cancel", () => input.remove());
+    input.click();
   }
 
   private editParam(e: PointerEvent, node: NodeInstance, paramIndex: number): void {
@@ -577,6 +633,46 @@ export class NodeEditor {
         this.drawPort(pos.x, pos.y, "number");
       }
     });
+    // #99: ファイル選択行（クリックで OS ダイアログ）。現在のファイル名 or「ファイル未選択」。
+    if (hasFileRow(def)) {
+      const fr = fileRowRect(node, def)!;
+      const selected = Boolean(this.getFileName?.(node.id));
+      ctx.fillStyle = selected ? "#243042" : "#262630";
+      roundRect(ctx, fr.x + 6, fr.y + 2, fr.w - 12, fr.h - 4, 4);
+      ctx.fill();
+      ctx.strokeStyle = "#4a5566"; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = "#9ab"; ctx.textAlign = "left"; ctx.font = "11px system-ui";
+      ctx.fillText("📁", fr.x + 12, fr.y + fr.h / 2);
+      const label = fileRowLabel(this.getFileName?.(node.id));
+      ctx.fillStyle = selected ? "#cfe" : "#888";
+      const maxW = fr.w - 38;
+      ctx.fillText(ellipsizeEnd(ctx, label, maxW), fr.x + 30, fr.y + fr.h / 2);
+
+      // transport 行: 再生/停止ボタン・進捗付きシークバー・現在時刻。
+      const tr = transportRowRect(node, def)!;
+      const { button, seek } = transportLayout(tr);
+      const pb = this.playback?.get(node.id);
+      const dur = pb?.duration ?? 0;
+      const cur = pb?.current ?? 0;
+      const playing = Boolean(pb?.playing);
+      // ボタン
+      ctx.fillStyle = dur > 0 ? "#9ab" : "#555";
+      drawTransportIcon(ctx, button, playing);
+      // シークバー（背景＋進捗）
+      ctx.fillStyle = "#2a2a33";
+      roundRect(ctx, seek.x, seek.y, seek.w, seek.h, seek.h / 2);
+      ctx.fill();
+      if (dur > 0) {
+        const ratio = Math.max(0, Math.min(cur / dur, 1));
+        ctx.fillStyle = "#6c9";
+        roundRect(ctx, seek.x, seek.y, Math.max(seek.h, seek.w * ratio), seek.h, seek.h / 2);
+        ctx.fill();
+      }
+      // 現在時刻
+      ctx.fillStyle = "#9ab"; ctx.textAlign = "right"; ctx.font = "10px system-ui";
+      ctx.fillText(formatTime(cur), tr.x + tr.w - 6, tr.y + tr.h / 2);
+      ctx.textAlign = "left";
+    }
   }
 
   private drawPort(x: number, y: number, type: PortType): void {
@@ -619,6 +715,34 @@ function drawEyeIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number, on: 
   ctx.beginPath();
   ctx.arc(cx, cy, on ? 2.4 : 1.6, 0, Math.PI * 2);
   ctx.fill();
+}
+
+/** 再生(▶)/一時停止(⏸) アイコンをボタン矩形中央にベクタ描画（現 fillStyle を使う）。 */
+function drawTransportIcon(
+  ctx: CanvasRenderingContext2D, b: { x: number; y: number; w: number; h: number }, playing: boolean,
+): void {
+  const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+  const s = Math.min(b.w, b.h) * 0.5;
+  if (playing) {
+    const bw = s * 0.32;
+    ctx.fillRect(cx - s / 2, cy - s / 2, bw, s);
+    ctx.fillRect(cx + s / 2 - bw, cy - s / 2, bw, s);
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(cx - s / 2, cy - s / 2);
+    ctx.lineTo(cx + s / 2, cy);
+    ctx.lineTo(cx - s / 2, cy + s / 2);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+/** 末尾を … で切り詰めて maxWidth に収める（収まればそのまま）。 */
+function ellipsizeEnd(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let s = text;
+  while (s.length > 1 && ctx.measureText(s + "…").width > maxWidth) s = s.slice(0, -1);
+  return s + "…";
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {

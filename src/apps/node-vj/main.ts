@@ -9,6 +9,7 @@ import { NodeEditor } from "./editor/NodeEditor";
 import { buildGraphIoBar } from "./editor/graph-io-bar";
 import { GraphStore, localStorageAdapter } from "./graph/graph-store";
 import { History } from "./graph/history";
+import type { PlaybackControl } from "./nodes/playback";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "../../core/types";
 
 const editorCanvas = document.getElementById("editor");
@@ -70,18 +71,36 @@ runtime.start();
 
 // ノードエディタ（全画面）。出力ポートのライブ値は runtime の直近評価結果から引く。
 const history = new History();
+type FileLoadable = { loadFile?: (f: File) => Promise<void> };
+type Named = { fileName?: string | null };
 const editor = new NodeEditor(
   editorCanvas, graph, registry, history,
   (id) => runtime.getOutputs(id),
   (id) => runtime.getPreviewSource(id),
+  // #99: ファイル選択をそのノードのランタイムへ読み込ませる。
+  (id, file) => {
+    const s = runtime.getState(id) as FileLoadable | undefined;
+    s?.loadFile?.(file).catch((e) => console.warn(`[node-vj] loadFile failed for ${id}:`, e));
+  },
+  (id) => (runtime.getState(id) as Named | undefined)?.fileName ?? null,
+  // #99: ノードごとの再生コントロール（PlaybackControl を持つノードのみ機能）。
+  {
+    get: (id) => {
+      const s = runtime.getState(id) as Partial<PlaybackControl> | undefined;
+      if (!s || typeof s.getDuration !== "function") return null;
+      return { playing: s.isPlaying!(), current: s.getCurrentTime!(), duration: s.getDuration() };
+    },
+    toggle: (id) => (runtime.getState(id) as Partial<PlaybackControl> | undefined)?.togglePlay?.(),
+    seek: (id, t) => (runtime.getState(id) as Partial<PlaybackControl> | undefined)?.seek?.(t),
+  },
 );
 
 // グラフ保存/読込バー（#65）。読込は replaceGraph で同一参照のまま反映される。
 buildGraphIoBar(graph, registry, new GraphStore(localStorageAdapter()), history);
 
-// 入力起動コントロール（mic/camera は user gesture 必須のためボタンから start）。
+// 入力起動コントロール（mic/camera/display は user gesture 必須のためボタンから start）。
+// #99: ファイル選択はノード上の「ファイル行」クリックに移行（共有ファイル input は撤去）。
 type Startable = { start?: () => Promise<void> };
-type FileLoadable = { loadFile?: (f: File) => Promise<void> };
 
 const bar = document.createElement("div");
 bar.style.cssText =
@@ -97,41 +116,6 @@ startBtn.addEventListener("click", () => {
   }
 });
 bar.appendChild(startBtn);
-
-const fileLabel = document.createElement("label");
-fileLabel.textContent = "音声ファイル: ";
-fileLabel.style.color = "#aaa";
-const fileInput = document.createElement("input");
-fileInput.type = "file";
-fileInput.accept = "audio/*";
-fileInput.addEventListener("change", () => {
-  const file = fileInput.files?.[0];
-  if (!file) return;
-  const audioNode = graph.nodes.find((n) => n.type === "AudioFileInput");
-  if (!audioNode) { console.warn("[node-vj] AudioFileInput ノードを追加してください"); return; }
-  const s = runtime.getState(audioNode.id) as FileLoadable | undefined;
-  s?.loadFile?.(file).catch((e) => console.warn("[node-vj] loadFile failed:", e));
-});
-fileLabel.appendChild(fileInput);
-bar.appendChild(fileLabel);
-
-// #66: 動画ファイル → VideoFileInput ノードへ
-const videoLabel = document.createElement("label");
-videoLabel.textContent = "動画ファイル: ";
-videoLabel.style.color = "#aaa";
-const videoInput = document.createElement("input");
-videoInput.type = "file";
-videoInput.accept = "video/*";
-videoInput.addEventListener("change", () => {
-  const file = videoInput.files?.[0];
-  if (!file) return;
-  const node = graph.nodes.find((n) => n.type === "VideoFileInput");
-  if (!node) { console.warn("[node-vj] VideoFileInput ノードを追加してください"); return; }
-  const s = runtime.getState(node.id) as FileLoadable | undefined;
-  s?.loadFile?.(file).catch((e) => console.warn("[node-vj] video loadFile failed:", e));
-});
-videoLabel.appendChild(videoInput);
-bar.appendChild(videoLabel);
 document.body.appendChild(bar);
 
 (window as unknown as { nodeVj: unknown }).nodeVj = { graph, registry, runtime, editor };

@@ -14,8 +14,17 @@ export function portRows(def: NodeTypeDef): number {
   return Math.max(signalInputs(def).length, def.outputs.length);
 }
 
+/** #99: ノード上にファイル選択行を出すか（fileInput を持つノード）。 */
+export function hasFileRow(def: NodeTypeDef): boolean {
+  return !!def.fileInput;
+}
+
+/** fileInput 持ちノードが追加する行数（file 選択行＋transport 行）。 */
+const FILE_ROWS = 2;
+
 export function nodeHeight(def: NodeTypeDef): number {
-  return TITLE_H + portRows(def) * ROW_H + def.params.length * ROW_H + PADDING;
+  const fileRows = hasFileRow(def) ? FILE_ROWS * ROW_H : 0;
+  return TITLE_H + portRows(def) * ROW_H + def.params.length * ROW_H + fileRows + PADDING;
 }
 
 export function nodePos(node: NodeInstance): { x: number; y: number } {
@@ -72,6 +81,65 @@ export function resolveInputPortPos(
     if (pidx >= 0) return paramPortPos(node, def, pidx);
   }
   return null;
+}
+
+/**
+ * #99: ファイル選択行のクリック領域。ノード下端 2 行のうち上側（fileInput 無しは null）。
+ */
+export function fileRowRect(
+  node: NodeInstance, def: NodeTypeDef,
+): { x: number; y: number; w: number; h: number } | null {
+  if (!hasFileRow(def)) return null;
+  const p = nodePos(node);
+  return { x: p.x, y: p.y + nodeHeight(def) - 2 * ROW_H, w: NODE_WIDTH, h: ROW_H };
+}
+
+/**
+ * #99: 再生コントロール（transport）行の領域。ノード最下行（fileInput 無しは null）。
+ */
+export function transportRowRect(
+  node: NodeInstance, def: NodeTypeDef,
+): { x: number; y: number; w: number; h: number } | null {
+  if (!hasFileRow(def)) return null;
+  const p = nodePos(node);
+  return { x: p.x, y: p.y + nodeHeight(def) - ROW_H, w: NODE_WIDTH, h: ROW_H };
+}
+
+/** #99: ファイル行のラベル。未選択（空/undefined/null）は「ファイル未選択」。 */
+export function fileRowLabel(name: string | null | undefined): string {
+  return name ? name : "ファイル未選択";
+}
+
+/** transport 行を再生ボタンとシークバーに分割する（時刻表示ぶんを右に確保）。 */
+export function transportLayout(rect: { x: number; y: number; w: number; h: number }): {
+  button: { x: number; y: number; w: number; h: number };
+  seek: { x: number; y: number; w: number; h: number };
+} {
+  const pad = 6;
+  const timeW = 34;
+  const button = { x: rect.x + pad, y: rect.y + 3, w: 18, h: rect.h - 6 };
+  const seekX = button.x + button.w + 6;
+  const seekRight = rect.x + rect.w - pad - timeW;
+  const seek = {
+    x: seekX, y: rect.y + rect.h / 2 - 3,
+    w: Math.max(10, seekRight - seekX), h: 6,
+  };
+  return { button, seek };
+}
+
+/** シークバー上の x 座標 → 再生位置比 0..1（範囲外はクランプ）。 */
+export function seekRatioAt(x: number, seek: { x: number; w: number }): number {
+  if (seek.w <= 0) return 0;
+  const r = (x - seek.x) / seek.w;
+  return r < 0 ? 0 : r > 1 ? 1 : r;
+}
+
+/** 秒を m:ss に整形。非有限/負は 0:00。 */
+export function formatTime(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) return "0:00";
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
 }
 
 export function dist2(ax: number, ay: number, bx: number, by: number): number {
