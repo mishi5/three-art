@@ -61,7 +61,7 @@ describe("serializeGraph / deserializeGraph", () => {
       "version: 1",
       "nodes:",
       "  - id: a",
-      "    type: AudioInput",
+      "    type: AudioFileInput",
       "    params: {}",
       "  - id: m",
       "    type: Multiply",
