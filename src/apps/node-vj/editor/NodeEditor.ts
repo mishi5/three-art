@@ -37,7 +37,7 @@ const PORT_COLORS: Record<PortType, string> = {
   pose: "#ff9af0", audio: "#ffec7f", texture: "#c79aff", trigger: "#ff7f7f",
 };
 const CATEGORY_COLORS: Record<string, string> = {
-  input: "#2a4a6a", process: "#3a5a3a", visual: "#5a3a5a", output: "#5a3a3a",
+  input: "#2a4a6a", process: "#3a5a3a", visual: "#5a3a5a", effect: "#3a4a5a", output: "#5a3a3a",
 };
 
 type Drag =
