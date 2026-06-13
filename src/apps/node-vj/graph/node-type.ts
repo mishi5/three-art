@@ -63,6 +63,12 @@ export interface NodeTypeDef {
   params: ParamDef[];
   /** visual/output 系など副作用を持つ終端ノードは true。 */
   isSink?: boolean;
+  /**
+   * #99: ノード上のファイル選択 UI を出すノードの目印。accept は file ダイアログの
+   * フィルタ（"video/*" / "audio/*" 等）。ランタイム state に loadFile(file) と
+   * fileName: string|null を持つ前提。
+   */
+  fileInput?: { accept: string };
   /** visual/sink ノードの初期化（THREE オブジェクト生成・scene 追加等）。1 度だけ呼ばれる。 */
   createState?(env: NodeEnv): NodeState;
   /**

@@ -15,6 +15,8 @@ export class AudioFileInputRuntime {
   private source: FileAudioSource | null = null;
   boundaries: SectionBoundary[] = [];
   started = false;
+  /** #99: ノード上に表示する現在のファイル名（未選択は null）。 */
+  fileName: string | null = null;
   private ctx: AudioContext | null = null;
   private onset = new OnsetTracker();
 
@@ -24,6 +26,7 @@ export class AudioFileInputRuntime {
 
   /** ファイルを読み込んで再生し、section 解析を実行する。 */
   async loadFile(file: File): Promise<void> {
+    this.fileName = file.name;
     const src = new FileAudioSource(this.getCtx());
     await src.loadFromFile(file);
     await src.start();
@@ -58,6 +61,7 @@ export const AudioFileInputNode: NodeTypeDef = {
   type: "AudioFileInput",
   category: "input",
   isSink: false,
+  fileInput: { accept: "audio/*" },
   inputs: [],
   outputs: [...AUDIO_FEATURE_OUTPUTS, { id: "section", label: "section", type: "number" }],
   params: [],

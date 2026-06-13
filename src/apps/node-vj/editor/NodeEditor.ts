@@ -10,7 +10,7 @@ import { signalInputs, isParamInput } from "../graph/node-ports";
 import {
   NODE_WIDTH, TITLE_H, ROW_H, PORT_R, nodeRect,
   inputPortPos, outputPortPos, paramRowY, paramPortPos, resolveInputPortPos,
-  previewButtonRect, previewWindowRect,
+  previewButtonRect, previewWindowRect, hasFileRow, fileRowRect, fileRowLabel,
 } from "./layout";
 import { hitTest } from "./hit-test";
 import { duplicateNodes } from "../graph/duplicate";
@@ -81,6 +81,10 @@ export class NodeEditor {
     private getOutputs?: (nodeId: string) => Record<string, unknown> | undefined,
     /** プレビュー小窓の描画ソースを引く（#77/#79、GraphRuntime）。任意。 */
     private getPreviewSource?: (nodeId: string) => CanvasImageSource | undefined,
+    /** #99: ファイル選択をそのノードのランタイムへ読み込ませる。任意。 */
+    private loadFileIntoNode?: (nodeId: string, file: File) => void,
+    /** #99: ノードの現在のファイル名を引く（ランタイム state）。任意。 */
+    private getFileName?: (nodeId: string) => string | null | undefined,
   ) {
     const c = canvas.getContext("2d");
     if (!c) throw new Error("2d context unavailable");
@@ -200,6 +204,14 @@ export class NodeEditor {
         const b = previewButtonRect(hit.node);
         if (w.x >= b.x && w.x <= b.x + b.w && w.y >= b.y && w.y <= b.y + b.h) {
           hit.node.preview = !hit.node.preview;
+          return;
+        }
+      }
+      // #99: ファイル行クリックで OS ファイルダイアログを開く（pointerdown の user gesture 内）。
+      if (def?.fileInput) {
+        const fr = fileRowRect(hit.node, def);
+        if (fr && w.x >= fr.x && w.x <= fr.x + fr.w && w.y >= fr.y && w.y <= fr.y + fr.h) {
+          this.openFileDialog(hit.node.id, def.fileInput.accept);
           return;
         }
       }
@@ -368,6 +380,24 @@ export class NodeEditor {
     );
     if (!c) return undefined;
     return this.getOutputs?.(c.from.node)?.[c.from.port];
+  }
+
+  /** #99: ノード単位のファイル選択。一時的な input[type=file] を生成して開く。 */
+  private openFileDialog(nodeId: string, accept: string): void {
+    if (!this.loadFileIntoNode) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = accept;
+    input.style.display = "none";
+    document.body.appendChild(input);
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (file) this.loadFileIntoNode?.(nodeId, file);
+      input.remove();
+    });
+    // キャンセル時も DOM に残さない（対応ブラウザのみ発火）。
+    input.addEventListener("cancel", () => input.remove());
+    input.click();
   }
 
   private editParam(e: PointerEvent, node: NodeInstance, paramIndex: number): void {
@@ -577,6 +607,21 @@ export class NodeEditor {
         this.drawPort(pos.x, pos.y, "number");
       }
     });
+    // #99: ファイル選択行（クリックで OS ダイアログ）。現在のファイル名 or「ファイル未選択」。
+    if (hasFileRow(def)) {
+      const fr = fileRowRect(node, def)!;
+      const selected = Boolean(this.getFileName?.(node.id));
+      ctx.fillStyle = selected ? "#243042" : "#262630";
+      roundRect(ctx, fr.x + 6, fr.y + 2, fr.w - 12, fr.h - 4, 4);
+      ctx.fill();
+      ctx.strokeStyle = "#4a5566"; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = "#9ab"; ctx.textAlign = "left"; ctx.font = "11px system-ui";
+      ctx.fillText("📁", fr.x + 12, fr.y + fr.h / 2);
+      const label = fileRowLabel(this.getFileName?.(node.id));
+      ctx.fillStyle = selected ? "#cfe" : "#888";
+      const maxW = fr.w - 38;
+      ctx.fillText(ellipsizeEnd(ctx, label, maxW), fr.x + 30, fr.y + fr.h / 2);
+    }
   }
 
   private drawPort(x: number, y: number, type: PortType): void {
@@ -619,6 +664,14 @@ function drawEyeIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number, on: 
   ctx.beginPath();
   ctx.arc(cx, cy, on ? 2.4 : 1.6, 0, Math.PI * 2);
   ctx.fill();
+}
+
+/** 末尾を … で切り詰めて maxWidth に収める（収まればそのまま）。 */
+function ellipsizeEnd(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let s = text;
+  while (s.length > 1 && ctx.measureText(s + "…").width > maxWidth) s = s.slice(0, -1);
+  return s + "…";
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {

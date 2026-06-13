@@ -15,6 +15,8 @@ export class VideoFileInputRuntime {
   private surface = new VideoTextureSurface();
   private previewCanvas: HTMLCanvasElement | null = null;
   started = false;
+  /** #99: ノード上に表示する現在のファイル名（未選択は null）。 */
+  fileName: string | null = null;
 
   constructor() {
     this.video = document.createElement("video");
@@ -27,6 +29,7 @@ export class VideoFileInputRuntime {
 
   /** 動画ファイルを読み込んで再生する（user gesture から）。 */
   async loadFile(file: File): Promise<void> {
+    this.fileName = file.name;
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
     this.objectUrl = URL.createObjectURL(file);
     this.video.src = this.objectUrl;
@@ -73,6 +76,7 @@ export const VideoFileInputNode: NodeTypeDef = {
   type: "VideoFileInput",
   category: "input",
   isSink: false,
+  fileInput: { accept: "video/*" },
   inputs: [],
   outputs: [{ id: "texture", label: "tex", type: "texture" }],
   params: [

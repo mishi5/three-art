@@ -14,8 +14,14 @@ export function portRows(def: NodeTypeDef): number {
   return Math.max(signalInputs(def).length, def.outputs.length);
 }
 
+/** #99: ノード上にファイル選択行を出すか（fileInput を持つノード）。 */
+export function hasFileRow(def: NodeTypeDef): boolean {
+  return !!def.fileInput;
+}
+
 export function nodeHeight(def: NodeTypeDef): number {
-  return TITLE_H + portRows(def) * ROW_H + def.params.length * ROW_H + PADDING;
+  const fileRow = hasFileRow(def) ? ROW_H : 0;
+  return TITLE_H + portRows(def) * ROW_H + def.params.length * ROW_H + fileRow + PADDING;
 }
 
 export function nodePos(node: NodeInstance): { x: number; y: number } {
@@ -72,6 +78,22 @@ export function resolveInputPortPos(
     if (pidx >= 0) return paramPortPos(node, def, pidx);
   }
   return null;
+}
+
+/**
+ * #99: ファイル選択行のクリック領域。ノード下端に全幅で置く（fileInput 無しは null）。
+ */
+export function fileRowRect(
+  node: NodeInstance, def: NodeTypeDef,
+): { x: number; y: number; w: number; h: number } | null {
+  if (!hasFileRow(def)) return null;
+  const p = nodePos(node);
+  return { x: p.x, y: p.y + nodeHeight(def) - ROW_H, w: NODE_WIDTH, h: ROW_H };
+}
+
+/** #99: ファイル行のラベル。未選択（空/undefined/null）は「ファイル未選択」。 */
+export function fileRowLabel(name: string | null | undefined): string {
+  return name ? name : "ファイル未選択";
 }
 
 export function dist2(ax: number, ay: number, bx: number, by: number): number {
