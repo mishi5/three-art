@@ -132,7 +132,7 @@ export class NodeEditor {
     dbg.addEventListener("click", () => { this.showOutputValues = !this.showOutputValues; syncDbg(); });
     bar.appendChild(dbg);
     const hint = document.createElement("span");
-    hint.textContent = "  空白=矩形選択 / Space|右ドラッグ=パン / Cmd+クリック=追加選択 / Cmd+C=複製 / Del=削除 / 画面表示は Screen に接続";
+    hint.textContent = "  空白ドラッグ=矩形選択 / Space|右ドラッグ=パン / Cmd+クリック=追加選択 / Cmd+C=複製 / Del=削除";
     hint.style.cssText = "color:#888;align-self:center;";
     bar.appendChild(hint);
     document.body.appendChild(bar);
