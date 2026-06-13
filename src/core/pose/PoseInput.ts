@@ -16,6 +16,8 @@ export class PoseInput {
   private stream: MediaStream | null = null;
   private rafId: number | null = null;
   private lastVideoTime = -1;
+  /** 外部所有の video を使う場合 true（stop でカメラ/要素に触らない）。 */
+  private externalVideo = false;
 
   constructor(private onResult: PoseCallback) {
     this.video = document.createElement("video");
@@ -31,13 +33,23 @@ export class PoseInput {
     return this.video;
   }
 
-  async start(): Promise<void> {
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: 640, height: 480 },
-      audio: false,
-    });
-    this.video.srcObject = this.stream;
-    await this.video.play();
+  /**
+   * 姿勢推定を開始する。externalVideo を渡すと既存のカメラ映像（呼び出し側所有）に
+   * 対して推定だけを行い、カメラの取得・解放には関与しない（#66 CameraInput 用）。
+   */
+  async start(externalVideo?: HTMLVideoElement): Promise<void> {
+    if (externalVideo) {
+      this.externalVideo = true;
+      this.video.remove(); // 自前の隠し video は使わない
+      this.video = externalVideo;
+    } else {
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 640, height: 480 },
+        audio: false,
+      });
+      this.video.srcObject = this.stream;
+      await this.video.play();
+    }
 
     const fileset = await FilesetResolver.forVisionTasks(WASM_BASE);
     this.landmarker = await PoseLandmarker.createFromOptions(fileset, {
@@ -74,7 +86,9 @@ export class PoseInput {
       for (const track of this.stream.getTracks()) track.stop();
       this.stream = null;
     }
-    this.video.srcObject = null;
-    this.video.remove();
+    if (!this.externalVideo) {
+      this.video.srcObject = null;
+      this.video.remove();
+    }
   }
 }

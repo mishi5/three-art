@@ -20,6 +20,7 @@ import { openParamInput } from "./param-overlay";
 import { formatPortValue } from "./port-format";
 import { containRect } from "./fit";
 import { absoluteSliderValue, scrubValue, fillRatio, isAbsoluteSlider } from "./slider-logic";
+import { isToggleParam, toggleOnValue, toggledValue } from "./toggle-param";
 import type { ParamDef } from "../graph/node-type";
 
 /** スライダドラッグで編集できる param（数値のみ。enum/boolean/string はクリック編集）。 */
@@ -372,6 +373,12 @@ export class NodeEditor {
   private editParam(e: PointerEvent, node: NodeInstance, paramIndex: number): void {
     const def = this.registry.require(node.type);
     const pd = def.params[paramIndex]!;
+    // 2 値 enum はトグルボタン化（select オーバーレイを出さず即反転）。
+    if (isToggleParam(pd)) {
+      this.history.record(this.graph);
+      node.params[pd.id] = toggledValue(pd, node.params[pd.id] ?? pd.default);
+      return;
+    }
     openParamInput({
       screenX: (node.position?.x ?? 0) + this.offset.x + 56,
       screenY: paramRowY(node, def, paramIndex) + this.offset.y - 9,
@@ -547,6 +554,19 @@ export class NodeEditor {
       if (live !== undefined) {
         ctx.fillStyle = "#6c9"; ctx.textAlign = "right";
         ctx.fillText(formatPortValue(live, "number") || String(live), r.x + r.w - 10, y);
+      } else if (isToggleParam(p)) {
+        const val = String(node.params[p.id] ?? p.default);
+        const on = val === toggleOnValue(p);
+        const pw = 34, ph = ROW_H - 8;
+        const pxr = r.x + r.w - 10 - pw;
+        ctx.fillStyle = on ? "#2f6b4f" : "#333";
+        roundRect(ctx, pxr, y - ph / 2, pw, ph, ph / 2);
+        ctx.fill();
+        // ノブ
+        ctx.fillStyle = on ? "#9fe" : "#888";
+        ctx.beginPath();
+        ctx.arc(on ? pxr + pw - ph / 2 : pxr + ph / 2, y, ph / 2 - 2, 0, Math.PI * 2);
+        ctx.fill();
       } else {
         ctx.fillStyle = "#fff"; ctx.textAlign = "right";
         ctx.fillText(String(node.params[p.id] ?? p.default), r.x + r.w - 10, y);

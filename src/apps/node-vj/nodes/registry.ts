@@ -7,7 +7,8 @@ import { SineNode } from "./SineNode";
 import { NoiseNode } from "./NoiseNode";
 import { RemapNode } from "./RemapNode";
 import { SmoothNode } from "./SmoothNode";
-import { PoseInputNode } from "./PoseInputNode";
+import { CameraInputNode } from "./CameraInputNode";
+import { VideoFileInputNode } from "./VideoFileInputNode";
 import { AudioInputNode } from "./AudioInputNode";
 import { RainVisualNode } from "./RainVisualNode";
 import { PointCloudVisualNode } from "./PointCloudVisualNode";
@@ -24,7 +25,8 @@ export function createDefaultRegistry(): NodeRegistry {
   // input
   r.register(NumberNode);
   r.register(TimeNode);
-  r.register(PoseInputNode);
+  r.register(CameraInputNode);
+  r.register(VideoFileInputNode);
   r.register(AudioInputNode);
   // process
   r.register(MultiplyNode);
