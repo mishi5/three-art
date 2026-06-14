@@ -4,10 +4,10 @@
 
 export type PortType =
   | "number" | "vec2" | "vec3" | "color"
-  | "pose" | "audio" | "texture" | "trigger";
+  | "pose" | "audio" | "texture" | "trigger" | "points";
 
 export const PORT_TYPES: ReadonlyArray<PortType> = [
-  "number", "vec2", "vec3", "color", "pose", "audio", "texture", "trigger",
+  "number", "vec2", "vec3", "color", "pose", "audio", "texture", "trigger", "points",
 ];
 
 /**
