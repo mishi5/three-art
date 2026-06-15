@@ -16,6 +16,7 @@ import { RainVisualNode } from "./RainVisualNode";
 import { PointCloudVisualNode } from "./PointCloudVisualNode";
 import { PointShapeNode } from "./PointShapeNode";
 import { ParticleRenderNode } from "./ParticleRenderNode";
+import { PointTransformNode } from "./PointTransformNode";
 import { BlendNode } from "./BlendNode";
 import { BlurNode } from "./BlurNode";
 import { KaleidoscopeNode } from "./KaleidoscopeNode";
@@ -42,6 +43,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(NoiseNode);
   r.register(RemapNode);
   r.register(SmoothNode);
+  r.register(PointTransformNode);
   // visual
   r.register(PointCloudVisualNode);
   r.register(ParticleRenderNode);
