@@ -17,8 +17,10 @@ const VERT = /* glsl */ `
   uniform float uBassExpansion;
   uniform float uVolume;
   uniform float uBass;
-  uniform float uPixelPerWorld;   // world 1m → drawing-buffer pixel (z=1 時)
+  uniform float uDpr;        // device pixel ratio
+  uniform float uRefDist;    // カメラ→原点の距離（中心付近で persp≒1 になる基準）
   varying float vSeed;
+  varying float vBright;
 
   void main() {
     float fx = mod(aIndex, uTexW);
@@ -26,11 +28,14 @@ const VERT = /* glsl */ `
     vec2 uv = (vec2(fx, fy) + 0.5) / vec2(uTexW, uTexH);
     vec3 pos = texture2D(uPosTex, uv).rgb;
     vSeed = fract(sin(aIndex * 12.9898) * 43758.5453);
+    // bass/volume で明るさも軽く脈動させる（ビート感）。
+    vBright = clamp(0.7 + 0.45 * uBass + 0.2 * uVolume, 0.0, 1.0);
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_Position = projectionMatrix * mv;
-    // baseSize 等は「ミリm 相当」の指定。world 径に直して透視スケールを掛ける。
-    float sizeWorld = (uBaseSize + uVolume * uVolumeSize + uBass * uBassExpansion) * 0.001;
-    gl_PointSize = clamp(sizeWorld * uPixelPerWorld / max(0.05, -mv.z), 1.0, 64.0);
+    // baseSize 等は画面ピクセル基準。dpr とゆるい遠近スケールを掛ける。
+    float sizePx = uBaseSize + uVolume * uVolumeSize + uBass * uBassExpansion;
+    float persp = uRefDist / max(0.05, -mv.z);
+    gl_PointSize = clamp(sizePx * uDpr * persp, 1.0, 96.0);
   }
 `;
 
@@ -40,6 +45,7 @@ const FRAG = /* glsl */ `
   uniform float uHueSpread;
   uniform float uSaturation;
   varying float vSeed;
+  varying float vBright;
 
   vec3 hsv2rgb(vec3 c) {
     vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
@@ -51,13 +57,13 @@ const FRAG = /* glsl */ `
     vec2 d = gl_PointCoord - 0.5;
     if (dot(d, d) > 0.25) discard;     // 円形粒子
     float hue = fract(uHueBase + uHueSpread * vSeed);
-    gl_FragColor = vec4(hsv2rgb(vec3(hue, uSaturation, 1.0)), 1.0);
+    gl_FragColor = vec4(hsv2rgb(vec3(hue, uSaturation, vBright)), 1.0);
   }
 `;
 
 type UniformKey =
   | "uPosTex" | "uTexW" | "uTexH" | "uBaseSize" | "uVolumeSize" | "uBassExpansion"
-  | "uVolume" | "uBass" | "uPixelPerWorld" | "uHueBase" | "uHueSpread" | "uSaturation";
+  | "uVolume" | "uBass" | "uDpr" | "uRefDist" | "uHueBase" | "uHueSpread" | "uSaturation";
 type Uniforms = Record<UniformKey, THREE.IUniform>;
 
 interface ParticleRenderState {
@@ -90,9 +96,9 @@ export const ParticleRenderNode: NodeTypeDef = {
   ],
   outputs: [{ id: "texture", label: "tex", type: "texture" }],
   params: [
-    { id: "baseSize", label: "baseSize", kind: "number", default: 6.0, min: 0.5, max: 40, step: 0.5 },
-    { id: "volumeSize", label: "volumeSize", kind: "number", default: 8.0, min: 0, max: 40, step: 0.5 },
-    { id: "bassExpansion", label: "bassExpansion", kind: "number", default: 4.0, min: 0, max: 40, step: 0.5 },
+    { id: "baseSize", label: "baseSize", kind: "number", default: 4.0, min: 0.5, max: 40, step: 0.5 },
+    { id: "volumeSize", label: "volumeSize", kind: "number", default: 8.0, min: 0, max: 60, step: 0.5 },
+    { id: "bassExpansion", label: "bassExpansion", kind: "number", default: 18.0, min: 0, max: 60, step: 0.5 },
     { id: "hueBase", label: "hueBase", kind: "number", default: 0.6, min: 0, max: 1, step: 0.01 },
     { id: "hueSpread", label: "hueSpread", kind: "number", default: 0.4, min: 0, max: 1, step: 0.01 },
     { id: "saturation", label: "saturation", kind: "number", default: 0.6, min: 0, max: 1, step: 0.01 },
@@ -101,8 +107,8 @@ export const ParticleRenderNode: NodeTypeDef = {
     const uniforms: Uniforms = {
       uPosTex: { value: null },
       uTexW: { value: 1 }, uTexH: { value: 1 },
-      uBaseSize: { value: 6 }, uVolumeSize: { value: 8 }, uBassExpansion: { value: 4 },
-      uVolume: { value: 0 }, uBass: { value: 0 }, uPixelPerWorld: { value: 1 },
+      uBaseSize: { value: 4 }, uVolumeSize: { value: 8 }, uBassExpansion: { value: 18 },
+      uVolume: { value: 0 }, uBass: { value: 0 }, uDpr: { value: 1 }, uRefDist: { value: 3 },
       uHueBase: { value: 0.6 }, uHueSpread: { value: 0.4 }, uSaturation: { value: 0.6 },
     };
     const material = new THREE.ShaderMaterial({
@@ -152,9 +158,9 @@ export const ParticleRenderNode: NodeTypeDef = {
     u.uSaturation.value = Number(ctx.param("saturation") ?? 0.6);
     u.uVolume.value = audio.volume;
     u.uBass.value = audio.bass;
-    // 透視に応じた点サイズ算出用（PointCloud.setProjection と同じ係数）。
-    const fovYRad = (env.camera.fov * Math.PI) / 180;
-    u.uPixelPerWorld.value = env.renderer.domElement.height / (2 * Math.tan(fovYRad / 2));
+    // 点サイズは画面ピクセル基準: dpr とカメラ距離による遠近を掛ける。
+    u.uDpr.value = env.renderer.getPixelRatio();
+    u.uRefDist.value = env.camera.position.length() || 3;
 
     const texture = s.surface.render(env.renderer, env.camera);
     return { texture };
