@@ -32,8 +32,10 @@ const VERT = /* glsl */ `
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_Position = projectionMatrix * mv;
     // 粒子径は world サイズ（baseSize 等 × 係数）。pixelPerWorld/-z で透視＋解像度追従。
-    float worldDia = (uBaseSize + uVolume * uVolumeSize + uBass * uBassExpansion) * 0.012;
-    gl_PointSize = clamp(worldDia * uPixelPerWorld / max(0.05, -mv.z), 1.0, 256.0);
+    // 上限は world 径側（解像度非依存）で設ける。px クランプを上限にすると高解像度の
+    // 大プレビューだけ先に頭打ちになり、脈動が止まって見えてしまうため。
+    float worldDia = min((uBaseSize + uVolume * uVolumeSize + uBass * uBassExpansion) * 0.012, 0.6);
+    gl_PointSize = clamp(worldDia * uPixelPerWorld / max(0.05, -mv.z), 1.0, 1024.0);
   }
 `;
 
