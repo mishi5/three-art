@@ -5,10 +5,12 @@ import type { NodeEnv, NodeState, NodeTypeDef } from "../graph/node-type";
 import { VisualSurface } from "../graph/visual-surface";
 import type { PointField } from "../graph/point-field";
 
-// 位置テクスチャを頂点で texelFetch（uv 経由）して点描画する。ASCII のみの GLSL。
+// 位置テクスチャから中心を読み、ビュー空間でカメラ向きの板（quad）に展開する。
+// 粒子径は world 単位なので投影で自然に遠近・解像度追従し、GL points の点サイズ上限が無い。
+// ASCII のみの GLSL。
 const VERT = /* glsl */ `
   precision highp float;
-  attribute float aIndex;
+  attribute float aIndex;      // インスタンスごとの粒子インデックス
   uniform sampler2D uPosTex;
   uniform float uTexW;
   uniform float uTexH;
@@ -17,25 +19,24 @@ const VERT = /* glsl */ `
   uniform float uBassExpansion;
   uniform float uVolume;
   uniform float uBass;
-  uniform float uPixelPerWorld;   // drawingBufferHeight/(2 tan(fov/2))。解像度に追従。
+  varying vec2 vUv;
   varying float vSeed;
   varying float vBright;
 
   void main() {
     float fx = mod(aIndex, uTexW);
     float fy = floor(aIndex / uTexW);
-    vec2 uv = (vec2(fx, fy) + 0.5) / vec2(uTexW, uTexH);
-    vec3 pos = texture2D(uPosTex, uv).rgb;
+    vec2 puv = (vec2(fx, fy) + 0.5) / vec2(uTexW, uTexH);
+    vec3 center = texture2D(uPosTex, puv).rgb;
     vSeed = fract(sin(aIndex * 12.9898) * 43758.5453);
-    // bass/volume で明るさも軽く脈動させる（ビート感）。
     vBright = clamp(0.7 + 0.45 * uBass + 0.2 * uVolume, 0.0, 1.0);
-    vec4 mv = modelViewMatrix * vec4(pos, 1.0);
-    gl_Position = projectionMatrix * mv;
-    // 粒子径は world サイズ（baseSize 等 × 係数）。pixelPerWorld/-z で透視＋解像度追従。
-    // 上限は world 径側（解像度非依存）で設ける。px クランプを上限にすると高解像度の
-    // 大プレビューだけ先に頭打ちになり、脈動が止まって見えてしまうため。
+    // world 径（baseSize 等 × 係数）。上限も world 側で（解像度非依存）。
     float worldDia = min((uBaseSize + uVolume * uVolumeSize + uBass * uBassExpansion) * 0.012, 0.6);
-    gl_PointSize = clamp(worldDia * uPixelPerWorld / max(0.05, -mv.z), 1.0, 1024.0);
+    // ビュー空間で板をカメラ向きに展開（ビルボード）。position は [-0.5,0.5] の quad 角。
+    vec4 mvCenter = modelViewMatrix * vec4(center, 1.0);
+    mvCenter.xy += position.xy * worldDia;
+    vUv = uv;
+    gl_Position = projectionMatrix * mvCenter;
   }
 `;
 
@@ -44,6 +45,7 @@ const FRAG = /* glsl */ `
   uniform float uHueBase;
   uniform float uHueSpread;
   uniform float uSaturation;
+  varying vec2 vUv;
   varying float vSeed;
   varying float vBright;
 
@@ -54,7 +56,7 @@ const FRAG = /* glsl */ `
   }
 
   void main() {
-    vec2 d = gl_PointCoord - 0.5;
+    vec2 d = vUv - 0.5;
     if (dot(d, d) > 0.25) discard;     // 円形粒子
     float hue = fract(uHueBase + uHueSpread * vSeed);
     gl_FragColor = vec4(hsv2rgb(vec3(hue, uSaturation, vBright)), 1.0);
@@ -63,29 +65,33 @@ const FRAG = /* glsl */ `
 
 type UniformKey =
   | "uPosTex" | "uTexW" | "uTexH" | "uBaseSize" | "uVolumeSize" | "uBassExpansion"
-  | "uVolume" | "uBass" | "uPixelPerWorld" | "uHueBase" | "uHueSpread" | "uSaturation";
+  | "uVolume" | "uBass" | "uHueBase" | "uHueSpread" | "uSaturation";
 type Uniforms = Record<UniformKey, THREE.IUniform>;
 
 interface ParticleRenderState {
   surface: VisualSurface;
   material: THREE.ShaderMaterial;
   uniforms: Uniforms;
-  points: THREE.Points;
-  geom: THREE.BufferGeometry;
+  base: THREE.PlaneGeometry;   // 共有する quad（角 + uv + index）
+  geom: THREE.InstancedBufferGeometry;
+  mesh: THREE.Mesh;
   count: number;
 }
 
-function buildGeometry(count: number): THREE.BufferGeometry {
-  const geom = new THREE.BufferGeometry();
-  // position は使わない（頂点シェーダがテクスチャから取得）が、頂点数確定のため必要。
-  geom.setAttribute("position", new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+/** count インスタンスぶんの aIndex を持つ instanced quad ジオメトリを作る。 */
+function buildGeometry(base: THREE.PlaneGeometry, count: number): THREE.InstancedBufferGeometry {
+  const geom = new THREE.InstancedBufferGeometry();
+  geom.index = base.index;
+  geom.setAttribute("position", base.attributes.position!);
+  geom.setAttribute("uv", base.attributes.uv!);
   const idx = new Float32Array(count);
   for (let i = 0; i < count; i++) idx[i] = i;
-  geom.setAttribute("aIndex", new THREE.BufferAttribute(idx, 1));
+  geom.setAttribute("aIndex", new THREE.InstancedBufferAttribute(idx, 1));
+  geom.instanceCount = count;
   return geom;
 }
 
-/** パーティクル描画ノード（#101）。points（位置テクスチャ）を点群描画して texture を出力する。 */
+/** パーティクル描画ノード（#101）。points（位置テクスチャ）をビルボード quad で描画して texture を出力する。 */
 export const ParticleRenderNode: NodeTypeDef = {
   type: "ParticleRender",
   category: "visual",
@@ -108,22 +114,24 @@ export const ParticleRenderNode: NodeTypeDef = {
       uPosTex: { value: null },
       uTexW: { value: 1 }, uTexH: { value: 1 },
       uBaseSize: { value: 4 }, uVolumeSize: { value: 8 }, uBassExpansion: { value: 18 },
-      uVolume: { value: 0 }, uBass: { value: 0 }, uPixelPerWorld: { value: 1000 },
+      uVolume: { value: 0 }, uBass: { value: 0 },
       uHueBase: { value: 0.6 }, uHueSpread: { value: 0.4 }, uSaturation: { value: 0.6 },
     };
     const material = new THREE.ShaderMaterial({
       vertexShader: VERT, fragmentShader: FRAG, transparent: false, depthTest: true, uniforms,
     });
-    const geom = buildGeometry(1);
-    const points = new THREE.Points(geom, material);
-    points.frustumCulled = false;
+    const base = new THREE.PlaneGeometry(1, 1);   // 角 [-0.5,0.5], uv [0,1]
+    const geom = buildGeometry(base, 1);
+    const mesh = new THREE.Mesh(geom, material);
+    mesh.frustumCulled = false;
     const surface = new VisualSurface();
-    surface.scene.add(points);
-    return { surface, material, uniforms, points, geom, count: 1 };
+    surface.scene.add(mesh);
+    return { surface, material, uniforms, base, geom, mesh, count: 1 };
   },
   disposeState(state: NodeState): void {
     const s = state as ParticleRenderState;
     s.geom.dispose();
+    s.base.dispose();
     s.material.dispose();
     s.surface.dispose();
   },
@@ -134,14 +142,11 @@ export const ParticleRenderNode: NodeTypeDef = {
     const field = ctx.input("points") as PointField | undefined;
     if (!field) return {};   // 形状未接続なら描画しない（Screen には何も出ない）
 
-    // count 変化に追従して geometry を作り直す。
+    // count 変化に追従して instanced ジオメトリを作り直す（base quad は共有）。
     if (field.count !== s.count) {
-      s.surface.scene.remove(s.points);
+      s.mesh.geometry = buildGeometry(s.base, field.count);
       s.geom.dispose();
-      s.geom = buildGeometry(field.count);
-      s.points = new THREE.Points(s.geom, s.material);
-      s.points.frustumCulled = false;
-      s.surface.scene.add(s.points);
+      s.geom = s.mesh.geometry as THREE.InstancedBufferGeometry;
       s.count = field.count;
     }
 
@@ -150,17 +155,14 @@ export const ParticleRenderNode: NodeTypeDef = {
     u.uPosTex.value = field.texture;
     u.uTexW.value = field.texW;
     u.uTexH.value = field.texH;
-    u.uBaseSize.value = Number(ctx.param("baseSize") ?? 6);
+    u.uBaseSize.value = Number(ctx.param("baseSize") ?? 4);
     u.uVolumeSize.value = Number(ctx.param("volumeSize") ?? 8);
-    u.uBassExpansion.value = Number(ctx.param("bassExpansion") ?? 4);
+    u.uBassExpansion.value = Number(ctx.param("bassExpansion") ?? 18);
     u.uHueBase.value = Number(ctx.param("hueBase") ?? 0.6);
     u.uHueSpread.value = Number(ctx.param("hueSpread") ?? 0.4);
     u.uSaturation.value = Number(ctx.param("saturation") ?? 0.6);
     u.uVolume.value = audio.volume;
     u.uBass.value = audio.bass;
-    // 解像度追従の点サイズ係数（PointCloud.setProjection と同じ）。
-    const fovYRad = (env.camera.fov * Math.PI) / 180;
-    u.uPixelPerWorld.value = env.renderer.domElement.height / (2 * Math.tan(fovYRad / 2));
 
     const texture = s.surface.render(env.renderer, env.camera);
     return { texture };

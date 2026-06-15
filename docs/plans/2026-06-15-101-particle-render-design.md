@@ -47,8 +47,13 @@ lattice/image/bones のアンカー計算・twist 変換・色・描画をすべ
 2. **ParticleRender**（描画本体。本 Issue の主役。`isSink: true`）
    - inputs: `points`(points), `audio`(audio)。outputs: `texture`。
    - params: `baseSize` / `volumeSize` / `bassExpansion` / `hueBase` / `hueSpread` / `saturation`。
-   - `THREE.Points`（count 頂点・各頂点 `aIndex`）の頂点シェーダで位置テクスチャを texelFetch →
-     投影 ＋ `gl_PointSize`（baseSize ＋ audio 駆動）。フラグメントで HSV→RGB の円形粒子。
+   - **`InstancedBufferGeometry`（板ポリ 1 枚を count 個インスタンス化）**。頂点シェーダで位置
+     テクスチャから中心を読み、**ビュー空間でカメラ向きの quad に展開（ビルボード）**。粒子径は
+     **world 単位**（baseSize 等 × 係数）で、投影により遠近・解像度に自然追従し、サイズ・明るさを
+     audio（bass/volume）で脈動。フラグメントで HSV→RGB の円形粒子。
+   - 当初 `THREE.Points`（`gl_PointSize`）で実装したが、点スプライトには GPU ごとの最大ピクセル
+     サイズ上限があり、高解像度プレビュー＋大きい粒子で頭打ち（拡大時のみ脈動停止）したため
+     quad スプライトへ変更。点サイズ上限が無く解像度非依存で一貫する。
    - `VisualSurface` の RT に描いて texture 出力（#98 の Screen 接続必須モデルに準拠）。
 
 責務分担: 形状変形（bassPulse 半径脈動・lattice 波）は生成/Transform 段（#104/#102）。
