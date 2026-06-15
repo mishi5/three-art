@@ -14,6 +14,8 @@ import { DisplayAudioInputNode } from "./DisplayAudioInputNode";
 import { AudioFileInputNode } from "./AudioFileInputNode";
 import { RainVisualNode } from "./RainVisualNode";
 import { PointCloudVisualNode } from "./PointCloudVisualNode";
+import { PointShapeNode } from "./PointShapeNode";
+import { ParticleRenderNode } from "./ParticleRenderNode";
 import { BlendNode } from "./BlendNode";
 import { BlurNode } from "./BlurNode";
 import { KaleidoscopeNode } from "./KaleidoscopeNode";
@@ -32,6 +34,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(MicInputNode);
   r.register(DisplayAudioInputNode);
   r.register(AudioFileInputNode);
+  r.register(PointShapeNode);
   // process
   r.register(MultiplyNode);
   r.register(AddNode);
@@ -41,6 +44,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(SmoothNode);
   // visual
   r.register(PointCloudVisualNode);
+  r.register(ParticleRenderNode);
   r.register(RainVisualNode);
   r.register(BlendNode);
   r.register(EdgeVisualNode);

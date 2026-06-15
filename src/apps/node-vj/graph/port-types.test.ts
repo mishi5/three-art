@@ -4,7 +4,7 @@ import { PORT_TYPES, isCompatible, type PortType } from "./port-types";
 describe("port-types", () => {
   test("PORT_TYPES に ADR #59 の全型が含まれる", () => {
     const expected: PortType[] = [
-      "number", "vec2", "vec3", "color", "pose", "audio", "texture", "trigger",
+      "number", "vec2", "vec3", "color", "pose", "audio", "texture", "trigger", "points",
     ];
     for (const t of expected) expect(PORT_TYPES).toContain(t);
     expect(PORT_TYPES.length).toBe(expected.length);
