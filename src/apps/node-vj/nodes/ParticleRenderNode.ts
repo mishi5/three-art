@@ -17,8 +17,7 @@ const VERT = /* glsl */ `
   uniform float uBassExpansion;
   uniform float uVolume;
   uniform float uBass;
-  uniform float uDpr;        // device pixel ratio
-  uniform float uRefDist;    // カメラ→原点の距離（中心付近で persp≒1 になる基準）
+  uniform float uPixelPerWorld;   // drawingBufferHeight/(2 tan(fov/2))。解像度に追従。
   varying float vSeed;
   varying float vBright;
 
@@ -32,10 +31,9 @@ const VERT = /* glsl */ `
     vBright = clamp(0.7 + 0.45 * uBass + 0.2 * uVolume, 0.0, 1.0);
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_Position = projectionMatrix * mv;
-    // baseSize 等は画面ピクセル基準。dpr とゆるい遠近スケールを掛ける。
-    float sizePx = uBaseSize + uVolume * uVolumeSize + uBass * uBassExpansion;
-    float persp = uRefDist / max(0.05, -mv.z);
-    gl_PointSize = clamp(sizePx * uDpr * persp, 1.0, 96.0);
+    // 粒子径は world サイズ（baseSize 等 × 係数）。pixelPerWorld/-z で透視＋解像度追従。
+    float worldDia = (uBaseSize + uVolume * uVolumeSize + uBass * uBassExpansion) * 0.012;
+    gl_PointSize = clamp(worldDia * uPixelPerWorld / max(0.05, -mv.z), 1.0, 256.0);
   }
 `;
 
@@ -63,7 +61,7 @@ const FRAG = /* glsl */ `
 
 type UniformKey =
   | "uPosTex" | "uTexW" | "uTexH" | "uBaseSize" | "uVolumeSize" | "uBassExpansion"
-  | "uVolume" | "uBass" | "uDpr" | "uRefDist" | "uHueBase" | "uHueSpread" | "uSaturation";
+  | "uVolume" | "uBass" | "uPixelPerWorld" | "uHueBase" | "uHueSpread" | "uSaturation";
 type Uniforms = Record<UniformKey, THREE.IUniform>;
 
 interface ParticleRenderState {
@@ -108,7 +106,7 @@ export const ParticleRenderNode: NodeTypeDef = {
       uPosTex: { value: null },
       uTexW: { value: 1 }, uTexH: { value: 1 },
       uBaseSize: { value: 4 }, uVolumeSize: { value: 8 }, uBassExpansion: { value: 18 },
-      uVolume: { value: 0 }, uBass: { value: 0 }, uDpr: { value: 1 }, uRefDist: { value: 3 },
+      uVolume: { value: 0 }, uBass: { value: 0 }, uPixelPerWorld: { value: 1000 },
       uHueBase: { value: 0.6 }, uHueSpread: { value: 0.4 }, uSaturation: { value: 0.6 },
     };
     const material = new THREE.ShaderMaterial({
@@ -158,9 +156,9 @@ export const ParticleRenderNode: NodeTypeDef = {
     u.uSaturation.value = Number(ctx.param("saturation") ?? 0.6);
     u.uVolume.value = audio.volume;
     u.uBass.value = audio.bass;
-    // 点サイズは画面ピクセル基準: dpr とカメラ距離による遠近を掛ける。
-    u.uDpr.value = env.renderer.getPixelRatio();
-    u.uRefDist.value = env.camera.position.length() || 3;
+    // 解像度追従の点サイズ係数（PointCloud.setProjection と同じ）。
+    const fovYRad = (env.camera.fov * Math.PI) / 180;
+    u.uPixelPerWorld.value = env.renderer.domElement.height / (2 * Math.tan(fovYRad / 2));
 
     const texture = s.surface.render(env.renderer, env.camera);
     return { texture };
