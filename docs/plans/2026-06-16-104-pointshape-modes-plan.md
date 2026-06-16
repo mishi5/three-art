@@ -14,15 +14,17 @@
 これにより「形状生成（PointShape）→ Transform（#102）→ 描画（#101）」のパイプラインで、
 旧 17 param の縦長ノードに頼らず手続き形状を組めるようになる。
 
-## PointShape の拡張
+## PointShape の拡張（mode 依存の無効 param を作らない方針）
+全 param をどの mode でも意味を持つよう統一する:
 - params:
   - `mode`（enum: cube/sphere/lattice, 既定 cube）
-  - `count`（int, cube/sphere の粒子数）
+  - `count`（int, **全 mode 共通**の粒子数。lattice は count から N=round(cbrt(count)) を導出し N^3）
   - `radius`（number, 形状の広がり）
-  - `latticeResolution`（int, 既定 12, 4..20）— lattice の格子解像度 N（粒子数 = N^3）
-  - `noiseAmount`（number, 既定 0.15）/ `noiseScale`（number, 既定 1.0）— lattice の simplex 歪み
-- inputs: `audio`（任意）— lattice の歪み量を bass で増幅。
-- 実効粒子数: lattice は N^3、それ以外は count。テクスチャ寸法は `fieldTexSize(実効count)`。
+  - `noiseAmount`（number, 既定 **0**）/ `noiseScale`（number, 既定 1.0）— **全 mode 共通**の simplex 歪み
+    （cube/sphere も歪ませられる。既定 0 で綺麗な形状）
+- inputs: `audio`（任意）— noise 歪みを bass で増幅（全 mode 共通）。
+- `latticeResolution` は廃止（count に一本化）。
+- 実効粒子数: `shapeCount(mode, count)`（lattice→N^3, 他→count, 上限 MAX_COUNT）。`latticeN(count)` で N 導出。
 
 ## 形状シェーダ（PositionFieldPass のフラグメント）
 index を gl_FragCoord から復元し、mode で分岐:

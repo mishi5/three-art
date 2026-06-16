@@ -1,5 +1,5 @@
 import { expect, test, describe } from "bun:test";
-import { PointShapeNode, shapeCount, MAX_COUNT } from "./PointShapeNode";
+import { PointShapeNode, shapeCount, latticeN, MAX_COUNT } from "./PointShapeNode";
 import type { EvalContext } from "../graph/node-type";
 
 function ctxNoState(over: Partial<EvalContext> = {}): EvalContext {
@@ -20,26 +20,29 @@ describe("PointShape mode param (#104)", () => {
     expect(mode?.default).toBe("cube");
   });
 
-  test("lattice 系 param（latticeResolution/noiseAmount/noiseScale）を持つ", () => {
+  test("全 mode 共通の param のみ（mode 依存の無効 param が無い）: noise 系を持ち latticeResolution は無い", () => {
     const ids = PointShapeNode.params.map((p) => p.id);
-    for (const k of ["latticeResolution", "noiseAmount", "noiseScale"]) expect(ids).toContain(k);
+    expect(ids).toEqual(["mode", "count", "radius", "noiseAmount", "noiseScale"]);
+    expect(ids).not.toContain("latticeResolution");
   });
 
-  test("audio 入力ポートを持つ（lattice の bass 反応用・任意）", () => {
+  test("audio 入力ポートを持つ（noise の bass 反応用・任意）", () => {
     expect(PointShapeNode.inputs.find((p) => p.id === "audio")?.type).toBe("audio");
   });
 });
 
-describe("shapeCount (#104)", () => {
-  test("lattice は N^3、cube/sphere は count", () => {
-    expect(shapeCount("lattice", 4000, 12)).toBe(12 * 12 * 12);
-    expect(shapeCount("cube", 4000, 12)).toBe(4000);
-    expect(shapeCount("sphere", 2500, 12)).toBe(2500);
+describe("shapeCount / latticeN (#104)", () => {
+  test("count は全 mode 共通。lattice は count から N=round(cbrt(count)) を導出し N^3", () => {
+    expect(shapeCount("cube", 4000)).toBe(4000);
+    expect(shapeCount("sphere", 2500)).toBe(2500);
+    const n = latticeN(4000);
+    expect(n).toBe(16);                 // round(cbrt(4000)) = 16
+    expect(shapeCount("lattice", 4000)).toBe(n * n * n); // 4096
   });
   test("最小 1・上限 MAX_COUNT にクランプ", () => {
-    expect(shapeCount("cube", 0, 12)).toBe(1);
-    expect(shapeCount("cube", 999999, 12)).toBe(MAX_COUNT);
-    expect(shapeCount("lattice", 0, 64)).toBe(MAX_COUNT); // 64^3 > MAX
+    expect(shapeCount("cube", 0)).toBe(1);
+    expect(shapeCount("cube", 999999)).toBe(MAX_COUNT);
+    expect(shapeCount("lattice", 999999)).toBeLessThanOrEqual(MAX_COUNT);
   });
 });
 

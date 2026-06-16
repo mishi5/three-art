@@ -9,12 +9,19 @@ export const MAX_COUNT = 65536;
 type ShapeMode = "cube" | "sphere" | "lattice";
 const MODE_INT: Record<ShapeMode, number> = { cube: 0, sphere: 1, lattice: 2 };
 
-/** mode と count / latticeResolution から実効粒子数を返す（lattice は N^3）。最小1・上限 MAX_COUNT。 */
-export function shapeCount(mode: string, count: number, latticeResolution: number): number {
-  const raw = mode === "lattice"
-    ? Math.round(latticeResolution) ** 3
-    : Math.round(count);
-  return Math.max(1, Math.min(MAX_COUNT, raw));
+const MAX_LATTICE_N = Math.floor(Math.cbrt(MAX_COUNT)); // 40（40^3=64000 <= MAX_COUNT）
+
+/** lattice の格子解像度 N = round(cbrt(count))（最小2・N^3<=MAX_COUNT）。count から導出して param を共通化。 */
+export function latticeN(count: number): number {
+  const n = Math.round(Math.cbrt(Math.max(1, count)));
+  return Math.max(2, Math.min(MAX_LATTICE_N, n));
+}
+
+/** mode に依らず count を基準にした実効粒子数（lattice は N^3）。最小1・上限 MAX_COUNT。 */
+export function shapeCount(mode: string, count: number): number {
+  const c = Math.max(1, Math.min(MAX_COUNT, Math.round(count)));
+  if (mode === "lattice") { const n = latticeN(c); return n * n * n; }
+  return c;
 }
 
 // index を復元し mode で形状を分岐して位置テクスチャに書く。snoise は PointCloud のもの
@@ -84,34 +91,35 @@ const FRAG = /* glsl */ `
     return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
   }
 
-  vec3 latticePos(float idx) {
+  vec3 latticeGrid(float idx) {
     float n = max(uLatticeN, 2.0);
     float i = floor(idx + 0.5);
     float ix = mod(i, n);
     float iy = mod(floor(i / n), n);
     float iz = floor(i / (n * n));
-    vec3 g = (vec3(ix, iy, iz) / (n - 1.0) - 0.5) * 2.0 * uRadius;
-    vec3 sc = g * uNoiseScale;
+    return (vec3(ix, iy, iz) / (n - 1.0) - 0.5) * 2.0 * uRadius;
+  }
+
+  void main() {
+    float idx = floor(gl_FragCoord.y) * uTexW + floor(gl_FragCoord.x);
+    vec3 base;
+    if (uMode < 0.5) {
+      base = (hash31(idx + 1.0) * 2.0 - 1.0) * uRadius;           // cube（散布）
+    } else if (uMode < 1.5) {
+      vec3 d = hash31(idx + 1.0) * 2.0 - 1.0;
+      base = normalize(d + 0.0001) * uRadius;                     // sphere（球面）
+    } else {
+      base = latticeGrid(idx);                                    // lattice（規則格子）
+    }
+    // 全 mode 共通の simplex noise 歪み（既定 0=綺麗な形状。bass で増幅）。
+    vec3 sc = base * uNoiseScale;
     float t = uTime * 0.15;
     vec3 w = vec3(
       snoise(sc + vec3(0.0, 0.0, t)),
       snoise(sc + vec3(13.1, 5.7, t)),
       snoise(sc + vec3(7.7, 19.3, t))
     );
-    return g + w * uNoiseAmount * (1.0 + uBass * 1.5);
-  }
-
-  void main() {
-    float idx = floor(gl_FragCoord.y) * uTexW + floor(gl_FragCoord.x);
-    vec3 pos;
-    if (uMode < 0.5) {
-      pos = (hash31(idx + 1.0) * 2.0 - 1.0) * uRadius;           // cube（散布）
-    } else if (uMode < 1.5) {
-      vec3 d = hash31(idx + 1.0) * 2.0 - 1.0;
-      pos = normalize(d + 0.0001) * uRadius;                      // sphere（球面）
-    } else {
-      pos = latticePos(idx);                                      // lattice
-    }
+    vec3 pos = base + w * uNoiseAmount * (1.0 + uBass * 1.5);
     gl_FragColor = vec4(pos, 1.0);
   }
 `;
@@ -139,8 +147,7 @@ export const PointShapeNode: NodeTypeDef = {
     { id: "mode", label: "mode", kind: "enum", default: "cube", options: ["cube", "sphere", "lattice"] },
     { id: "count", label: "count", kind: "int", default: 4000, min: 1, max: MAX_COUNT, step: 1, noInput: true },
     { id: "radius", label: "radius", kind: "number", default: 0.5, min: 0.05, max: 3, step: 0.01 },
-    { id: "latticeResolution", label: "latticeRes", kind: "int", default: 12, min: 4, max: 20, step: 1 },
-    { id: "noiseAmount", label: "noiseAmount", kind: "number", default: 0.15, min: 0, max: 1, step: 0.01 },
+    { id: "noiseAmount", label: "noiseAmount", kind: "number", default: 0, min: 0, max: 1, step: 0.01 },
     { id: "noiseScale", label: "noiseScale", kind: "number", default: 1.0, min: 0.1, max: 5, step: 0.1 },
   ],
   createState(): PointShapeState {
@@ -160,8 +167,8 @@ export const PointShapeNode: NodeTypeDef = {
     const env = ctx.env;
     if (!s || !env) return {};
     const mode = String(ctx.param("mode") ?? "cube") as ShapeMode;
-    const latticeN = Math.round(Number(ctx.param("latticeResolution") ?? 12));
-    const count = shapeCount(mode, Number(ctx.param("count") ?? 4000), latticeN);
+    const reqCount = Number(ctx.param("count") ?? 4000);
+    const count = shapeCount(mode, reqCount);
     if (count !== s.count) {
       const { w, h } = fieldTexSize(count);
       s.pass.setSize(w, h);
@@ -173,7 +180,7 @@ export const PointShapeNode: NodeTypeDef = {
     const u = s.uniforms;
     u.uMode.value = MODE_INT[mode] ?? 0;
     u.uRadius.value = Number(ctx.param("radius") ?? 0.5);
-    u.uLatticeN.value = latticeN;
+    u.uLatticeN.value = latticeN(Math.max(1, Math.min(MAX_COUNT, Math.round(reqCount))));
     u.uNoiseAmount.value = Number(ctx.param("noiseAmount") ?? 0.15);
     u.uNoiseScale.value = Number(ctx.param("noiseScale") ?? 1.0);
     u.uTime.value = ctx.timeSec;
