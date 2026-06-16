@@ -4,7 +4,9 @@ import type { NodeState, NodeTypeDef } from "../graph/node-type";
 import { PositionFieldPass } from "../graph/position-field-pass";
 import { fieldTexSize, type PointField } from "../graph/point-field";
 
-export const MAX_COUNT = 65536;
+// 上限は「テクスチャに収まる最大(256^2)」ではなく実用・安全側の値（128^2）。
+// 粒子数自体より count×サイズのオーバードローが効くため、過大な上限は事故の元。
+export const MAX_COUNT = 16384;
 
 type ShapeMode = "cube" | "sphere" | "lattice";
 const MODE_INT: Record<ShapeMode, number> = { cube: 0, sphere: 1, lattice: 2 };
