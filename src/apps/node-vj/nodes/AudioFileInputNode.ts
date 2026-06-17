@@ -27,6 +27,10 @@ export class AudioFileInputRuntime implements PlaybackControl {
 
   /** ファイルを読み込んで再生し、section 解析を実行する。 */
   async loadFile(file: File): Promise<void> {
+    // #125: 既存の再生中音源を停止してから差し替える（1 ノード 1 音源・多重再生防止）。
+    this.source?.stop();
+    this.source = null;
+    this.started = false;
     this.fileName = file.name;
     const src = new FileAudioSource(this.getCtx());
     await src.loadFromFile(file);
