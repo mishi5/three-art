@@ -123,8 +123,9 @@ export class NodeEditor {
 
   private buildToolbar(): HTMLDivElement {
     const bar = document.createElement("div");
+    // right:8 で viewport 幅に収め、ノード増加時は複数行に折り返す（重なり防止）。
     bar.style.cssText =
-      "position:fixed;left:8px;top:8px;display:flex;gap:6px;flex-wrap:wrap;z-index:150;" +
+      "position:fixed;left:8px;right:8px;top:8px;display:flex;gap:6px;flex-wrap:wrap;z-index:150;" +
       "font:12px system-ui;";
     for (const def of this.registry.list()) {
       const btn = document.createElement("button");

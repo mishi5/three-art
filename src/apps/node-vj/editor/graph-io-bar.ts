@@ -28,9 +28,10 @@ export function buildGraphIoBar(
   history: History,
 ): HTMLDivElement {
   const bar = document.createElement("div");
-  // ノード追加ツールバー（上段）との重なりを避けて 2 段目に置く。
+  // ノード追加ツールバー（上段）はノード増加で複数行に折り返すため、衝突を避けて
+  // 右下に置く（本格的なメニュー整理は #103）。
   bar.style.cssText =
-    "position:fixed;right:12px;top:40px;display:flex;gap:6px;align-items:center;z-index:150;font:12px system-ui;";
+    "position:fixed;right:12px;bottom:8px;display:flex;gap:6px;align-items:center;z-index:150;font:12px system-ui;";
 
   const nameInput = document.createElement("input");
   nameInput.type = "text";
