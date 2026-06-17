@@ -23,6 +23,7 @@ import { BlendNode } from "./BlendNode";
 import { BlurNode } from "./BlurNode";
 import { KaleidoscopeNode } from "./KaleidoscopeNode";
 import { FractalNode } from "./FractalNode";
+import { FlashNode } from "./FlashNode";
 import { EdgeVisualNode } from "./EdgeVisualNode";
 import { ScreenNode } from "./ScreenNode";
 
@@ -58,6 +59,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(BlurNode);
   r.register(KaleidoscopeNode);
   r.register(FractalNode);
+  r.register(FlashNode);
   // output
   r.register(ScreenNode);
   return r;
