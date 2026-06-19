@@ -60,4 +60,16 @@ describe("computeCurrentTime", () => {
     // playOffset=2, startedAt=10, ctxNow=5  → elapsed=-5、raw=(2-5)%100=-3 → +100 = 97
     expect(computeCurrentTime("playing", 2, 10, 5, 100)).toBeCloseTo(97, 6);
   });
+
+  // #115: loop 引数（既定 true は従来どおり wrap）
+  test("loop=false は曲末で duration に張り付く（wrap しない）", () => {
+    // playOffset=98, ctxNow-startedAt=5 → 103。loop=false なら duration=100 でクランプ
+    expect(computeCurrentTime("playing", 98, 0, 5, 100, false)).toBeCloseTo(100, 6);
+    // 曲長内はそのまま
+    expect(computeCurrentTime("playing", 10, 2, 5, 100, false)).toBe(13);
+  });
+
+  test("loop=true（既定）は従来どおり wrap", () => {
+    expect(computeCurrentTime("playing", 98, 0, 5, 100, true)).toBeCloseTo(3, 6);
+  });
 });

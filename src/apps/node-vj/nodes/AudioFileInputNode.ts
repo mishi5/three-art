@@ -20,9 +20,17 @@ export class AudioFileInputRuntime implements PlaybackControl {
   fileName: string | null = null;
   private ctx: AudioContext | null = null;
   private onset = new OnsetTracker();
+  /** #115: ループ再生 ON/OFF。loadFile 前の指定も保持し、読込後の source に適用する。 */
+  private loop = true;
 
   private getCtx(): AudioContext {
     return (this.ctx ??= new AudioContext());
+  }
+
+  /** #115: ループ ON/OFF を設定（再生中・未読込どちらでも保持）。 */
+  setLoop(loop: boolean): void {
+    this.loop = loop;
+    this.source?.setLoop(loop);
   }
 
   /** ファイルを読み込んで再生し、section 解析を実行する。 */
@@ -33,6 +41,7 @@ export class AudioFileInputRuntime implements PlaybackControl {
     this.started = false;
     this.fileName = file.name;
     const src = new FileAudioSource(this.getCtx());
+    src.setLoop(this.loop);
     await src.loadFromFile(file);
     await src.start();
     this.source = src;
@@ -90,12 +99,16 @@ export const AudioFileInputNode: NodeTypeDef = {
   fileInput: { accept: "audio/*" },
   inputs: [],
   outputs: [...AUDIO_FEATURE_OUTPUTS, { id: "section", label: "section", type: "number" }],
-  params: [...ONSET_PARAMS],
+  params: [
+    { id: "loop", label: "loop", kind: "enum", default: "on", options: ["on", "off"] },
+    ...ONSET_PARAMS,
+  ],
   createState: () => new AudioFileInputRuntime(),
   disposeState: (state: NodeState) => (state as AudioFileInputRuntime).dispose(),
   evaluate: (ctx) => {
     const s = ctx.state as AudioFileInputRuntime | undefined;
     if (!s) return { ...audioFeatureOutputs(DEFAULT_AUDIO_FEATURES, false), section: -1 };
+    s.setLoop(ctx.param("loop") !== "off");
     const audio = s.read();
     const { threshold, cooldown } = readOnsetParams(ctx.param);
     const onset = s.detectOnset(audio.bass, ctx.timeSec, threshold, cooldown);
