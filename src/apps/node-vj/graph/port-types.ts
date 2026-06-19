@@ -4,12 +4,13 @@
 
 export type PortType =
   | "number" | "vec2" | "vec3" | "color"
-  | "pose" | "audio" | "texture" | "trigger" | "points"
-  // #128: ルーティング可能な実音声信号（WebAudio AudioNode）。解析結果の `audio` とは別物。
-  | "audioSignal";
+  // #127/#128 命名: `audio` = ルーティング可能な実音声信号（WebAudio AudioNode）。
+  //              `signal` = 解析結果の音響特徴量バンドル（AudioFeatures）。両者は別物・非互換。
+  | "pose" | "signal" | "texture" | "trigger" | "points"
+  | "audio";
 
 export const PORT_TYPES: ReadonlyArray<PortType> = [
-  "number", "vec2", "vec3", "color", "pose", "audio", "texture", "trigger", "points", "audioSignal",
+  "number", "vec2", "vec3", "color", "pose", "signal", "texture", "trigger", "points", "audio",
 ];
 
 /**

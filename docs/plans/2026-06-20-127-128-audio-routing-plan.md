@@ -8,9 +8,12 @@
 
 ## 方針（ユーザ確認済み）
 
-- **案B（実音声信号ルーティング）を一括実装**。`audio`（AudioFeatures）ポートとは別に、
-  ルーティング可能な実音声信号を表す **新ポート型 `audioSignal`**（`{ node: AudioNode }`）を導入。
+- **案B（実音声信号ルーティング）を一括実装**。
+- **命名（ユーザ指定で確定）**: ポート型/名 **`audio` = ルーティング可能な実音声信号**（`{ node: AudioNode }`）、
+  **`signal` = 解析結果の音響特徴量バンドル**（AudioFeatures）。当初案の `audio`/`audioSignal` から入れ替え済み。
+  visual の特徴量入力も `signal` に統一。VideoFileInput の抽出 param は出力 `audio` と紛れるため `extractAudio` に改名。
 - **発音は出口必須に統一**（#98 流・破壊的変更）。Audio 出力ノードに繋がった音だけが鳴る。
+- **AudioMix はミキサー**: 入力ごとの level（音量）+ マスタ gain で合成。
 
 ## 後方互換の制約（重要）
 

@@ -38,8 +38,8 @@ export function nodeHasPreview(def: { outputs: { type: string }[]; previewSource
 
 const PORT_COLORS: Record<PortType, string> = {
   number: "#7fd1ff", vec2: "#9aff9a", vec3: "#9aff9a", color: "#ffd27f",
-  pose: "#ff9af0", audio: "#ffec7f", texture: "#c79aff", trigger: "#ff7f7f",
-  points: "#7fffd4", audioSignal: "#ffb37f",
+  pose: "#ff9af0", signal: "#ffec7f", texture: "#c79aff", trigger: "#ff7f7f",
+  points: "#7fffd4", audio: "#ffb37f",
 };
 const CATEGORY_COLORS: Record<string, string> = {
   input: "#2a4a6a", process: "#3a5a3a", visual: "#5a3a5a", effect: "#3a4a5a", output: "#5a3a3a",

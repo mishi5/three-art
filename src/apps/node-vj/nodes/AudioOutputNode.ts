@@ -17,7 +17,7 @@ export const AudioOutputNode: NodeTypeDef = {
   category: "output",
   description: "音の出口（audio sink）。signal を繋ぐとスピーカーから鳴る。繋がれた音だけが発音される（visual の Screen と同じ思想）。",
   isSink: true,
-  inputs: [{ id: "signal", label: "signal", type: "audioSignal", description: "発音する実音声信号。Mic/AudioFile/Video/Mix の signal を繋ぐ。" }],
+  inputs: [{ id: "audio", label: "audio", type: "audio", description: "発音する実音声信号。Mic/AudioFile/Video/Mix の audio を繋ぐ。" }],
   outputs: [],
   params: [
     { id: "volume", label: "volume", kind: "number", default: 1, min: 0, max: 1, step: 0.01, description: "出力音量（0〜1）。" },
@@ -37,7 +37,7 @@ export const AudioOutputNode: NodeTypeDef = {
   evaluate(ctx) {
     const st = ctx.state as AudioOutputState | undefined;
     if (!st) return {};
-    const node = asAudioNode(ctx.input("signal"));
+    const node = asAudioNode(ctx.input("audio"));
     // 入力が変わったときだけ繋ぎ替える（毎フレーム connect しない）。
     if (node !== st.connected) {
       if (st.connected) { try { st.connected.disconnect(st.gain); } catch { /* ignore */ } }

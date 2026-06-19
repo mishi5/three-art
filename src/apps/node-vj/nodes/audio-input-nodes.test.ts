@@ -17,20 +17,21 @@ function ctxNoState(over: Partial<EvalContext> = {}): EvalContext {
   };
 }
 
-const FEATURE_IDS = ["audio", "volume", "bass", "mid", "treble", "onset"];
+// #127/#128 命名: 特徴量バンドルは "signal"、実音声信号は "audio"。
+const FEATURE_IDS = ["signal", "volume", "bass", "mid", "treble", "onset"];
 
 describe("MicInputNode (#100)", () => {
   test("ポート定義: 音響特徴量のみ（section 無し）・onset param（#109）", () => {
     expect(MicInputNode.type).toBe("MicInput");
     expect(MicInputNode.category).toBe("input");
-    expect(MicInputNode.outputs.map((p) => p.id)).toEqual([...FEATURE_IDS, "signal"]);
-    expect(MicInputNode.outputs.find((p) => p.id === "signal")?.type).toBe("audioSignal");
+    expect(MicInputNode.outputs.map((p) => p.id)).toEqual([...FEATURE_IDS, "audio"]);
+    expect(MicInputNode.outputs.find((p) => p.id === "audio")?.type).toBe("audio");
     expect(MicInputNode.params.map((p) => p.id)).toEqual(["onsetThreshold", "onsetCooldown"]);
   });
 
-  test("state 無しでは onset=false・デフォルト audio", () => {
+  test("state 無しでは onset=false・デフォルト signal", () => {
     const out = MicInputNode.evaluate(ctxNoState());
-    expect(out.audio).toBe(DEFAULT_AUDIO_FEATURES);
+    expect(out.signal).toBe(DEFAULT_AUDIO_FEATURES);
     expect(out.onset).toBe(false);
     expect(out.volume).toBe(0);
   });
@@ -43,13 +44,13 @@ describe("MicInputNode (#100)", () => {
 describe("DisplayAudioInputNode (#100)", () => {
   test("ポート定義: 音響特徴量のみ（section 無し）・onset param（#109）", () => {
     expect(DisplayAudioInputNode.type).toBe("DisplayAudioInput");
-    expect(DisplayAudioInputNode.outputs.map((p) => p.id)).toEqual([...FEATURE_IDS, "signal"]);
+    expect(DisplayAudioInputNode.outputs.map((p) => p.id)).toEqual([...FEATURE_IDS, "audio"]);
     expect(DisplayAudioInputNode.params.map((p) => p.id)).toEqual(["onsetThreshold", "onsetCooldown"]);
   });
 
-  test("state 無しでは onset=false・デフォルト audio", () => {
+  test("state 無しでは onset=false・デフォルト signal", () => {
     const out = DisplayAudioInputNode.evaluate(ctxNoState());
-    expect(out.audio).toBe(DEFAULT_AUDIO_FEATURES);
+    expect(out.signal).toBe(DEFAULT_AUDIO_FEATURES);
     expect(out.onset).toBe(false);
   });
 
@@ -61,17 +62,17 @@ describe("DisplayAudioInputNode (#100)", () => {
 describe("AudioFileInputNode (#100)", () => {
   test("ポート定義: 音響特徴量 + section(number)", () => {
     expect(AudioFileInputNode.type).toBe("AudioFileInput");
-    expect(AudioFileInputNode.outputs.map((p) => p.id)).toEqual([...FEATURE_IDS, "section", "signal"]);
+    expect(AudioFileInputNode.outputs.map((p) => p.id)).toEqual([...FEATURE_IDS, "section", "audio"]);
     expect(AudioFileInputNode.outputs.find((p) => p.id === "section")?.type).toBe("number");
-    expect(AudioFileInputNode.outputs.find((p) => p.id === "signal")?.type).toBe("audioSignal");
     expect(AudioFileInputNode.outputs.find((p) => p.id === "audio")?.type).toBe("audio");
+    expect(AudioFileInputNode.outputs.find((p) => p.id === "signal")?.type).toBe("signal");
   });
 
-  test("state 無しでは section=-1・onset=false・デフォルト audio", () => {
+  test("state 無しでは section=-1・onset=false・デフォルト signal", () => {
     const out = AudioFileInputNode.evaluate(ctxNoState());
     expect(out.section).toBe(-1);
     expect(out.onset).toBe(false);
-    expect(out.audio).toBe(DEFAULT_AUDIO_FEATURES);
+    expect(out.signal).toBe(DEFAULT_AUDIO_FEATURES);
   });
 
   test("loadFile を持つ（ファイル読込 user gesture 用）", () => {

@@ -18,12 +18,12 @@ function ctxNoState(over: Partial<EvalContext> = {}): EvalContext {
 }
 
 describe("audio-signal ヘルパ", () => {
-  test("signalOutput(null) は signal=undefined", () => {
-    expect(signalOutput(null)).toEqual({ signal: undefined });
+  test("signalOutput(null) は audio=undefined（実音声ポートは \"audio\"）", () => {
+    expect(signalOutput(null)).toEqual({ audio: undefined });
   });
-  test("signalOutput(node) は { signal: { node } }", () => {
+  test("signalOutput(node) は { audio: { node } }", () => {
     const fake = { kind: "audionode" } as unknown as AudioNode;
-    expect(signalOutput(fake)).toEqual({ signal: { node: fake } });
+    expect(signalOutput(fake)).toEqual({ audio: { node: fake } });
   });
   test("asAudioNode は signal 値から node を取り出す", () => {
     const fake = { kind: "audionode" } as unknown as AudioNode;
@@ -40,9 +40,9 @@ describe("AudioOutputNode (#128 sink)", () => {
     expect(AudioOutputNode.isSink).toBe(true);
   });
 
-  test("入力 signal(audioSignal)・出力なし", () => {
-    expect(AudioOutputNode.inputs.map((p) => p.id)).toEqual(["signal"]);
-    expect(AudioOutputNode.inputs[0]!.type).toBe("audioSignal");
+  test("入力 audio(実音声信号)・出力なし", () => {
+    expect(AudioOutputNode.inputs.map((p) => p.id)).toEqual(["audio"]);
+    expect(AudioOutputNode.inputs[0]!.type).toBe("audio");
     expect(AudioOutputNode.outputs).toEqual([]);
   });
 
@@ -67,33 +67,39 @@ describe("AudioMixNode (#127)", () => {
     expect(AudioMixNode.category).toBe("process");
   });
 
-  test("複数 signal 入力（in1..in4, audioSignal）", () => {
+  test("複数 audio 入力（in1..in4, 実音声信号）", () => {
     expect(AudioMixNode.inputs.map((p) => p.id)).toEqual(["in1", "in2", "in3", "in4"]);
-    for (const p of AudioMixNode.inputs) expect(p.type).toBe("audioSignal");
+    for (const p of AudioMixNode.inputs) expect(p.type).toBe("audio");
   });
 
-  test("出力: signal + 音響特徴量", () => {
+  test("出力: audio(合成音) + 音響特徴量(signal)", () => {
     expect(AudioMixNode.outputs.map((p) => p.id)).toEqual([
-      "signal", "audio", "volume", "bass", "mid", "treble", "onset",
+      "audio", "signal", "volume", "bass", "mid", "treble", "onset",
     ]);
-    expect(AudioMixNode.outputs.find((p) => p.id === "signal")?.type).toBe("audioSignal");
+    expect(AudioMixNode.outputs.find((p) => p.id === "audio")?.type).toBe("audio");
+    expect(AudioMixNode.outputs.find((p) => p.id === "signal")?.type).toBe("signal");
   });
 
-  test("params: gain + onset", () => {
-    expect(AudioMixNode.params.map((p) => p.id)).toEqual(["gain", "onsetThreshold", "onsetCooldown"]);
+  test("params: 各入力 level1..4 + マスタ gain + onset（ミキサー）", () => {
+    expect(AudioMixNode.params.map((p) => p.id)).toEqual([
+      "level1", "level2", "level3", "level4", "gain", "onsetThreshold", "onsetCooldown",
+    ]);
+    const l1 = AudioMixNode.params.find((p) => p.id === "level1");
+    expect(l1?.kind).toBe("number");
+    expect(l1?.default).toBe(1);
   });
 
-  test("state 無しの evaluate は安全デフォルト（signal なし・onset false）", () => {
+  test("state 無しの evaluate は安全デフォルト（audio なし・signal=デフォルト・onset false）", () => {
     const out = AudioMixNode.evaluate(ctxNoState());
-    expect(out.signal).toBeUndefined();
-    expect(out.audio).toBe(DEFAULT_AUDIO_FEATURES);
+    expect(out.audio).toBeUndefined();
+    expect(out.signal).toBe(DEFAULT_AUDIO_FEATURES);
     expect(out.onset).toBe(false);
   });
 });
 
-describe("audioSignal ポート互換", () => {
-  test("audioSignal 同士のみ接続可", () => {
-    expect(isCompatible("audioSignal", "audioSignal")).toBe(true);
-    expect(isCompatible("audioSignal", "audio")).toBe(false);
+describe("audio ポート互換", () => {
+  test("実音声 audio 同士のみ接続可・特徴量 signal とは非互換", () => {
+    expect(isCompatible("audio", "audio")).toBe(true);
+    expect(isCompatible("audio", "signal")).toBe(false);
   });
 });

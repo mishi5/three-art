@@ -99,7 +99,7 @@ export const ParticleRenderNode: NodeTypeDef = {
   isSink: true,
   inputs: [
     { id: "points", label: "points", type: "points", description: "描画する GPU 位置テクスチャ参照（未接続なら何も描かない）。" },
-    { id: "audio", label: "audio", type: "audio", description: "粒子サイズ・明るさを変調する音響特徴量入力（未接続なら環境の audio）。" },
+    { id: "signal", label: "signal", type: "signal", description: "粒子サイズ・明るさを変調する音響特徴量入力（未接続なら環境の特徴量）。" },
   ],
   outputs: [{ id: "texture", label: "tex", type: "texture", description: "描画結果のテクスチャ。" }],
   params: [
@@ -151,7 +151,7 @@ export const ParticleRenderNode: NodeTypeDef = {
       s.count = field.count;
     }
 
-    const audio = (ctx.input("audio") as AudioFeatures | undefined) ?? env.audio ?? DEFAULT_AUDIO_FEATURES;
+    const audio = (ctx.input("signal") as AudioFeatures | undefined) ?? env.audio ?? DEFAULT_AUDIO_FEATURES;
     const u = s.uniforms;
     u.uPosTex.value = field.texture;
     u.uTexW.value = field.texW;

@@ -43,7 +43,7 @@ export const EdgeVisualNode: NodeTypeDef = {
   isSink: true,
   inputs: [
     { id: "pose", label: "pose", type: "pose", description: "bones モードでアンカー配置に使う姿勢入力。" },
-    { id: "audio", label: "audio", type: "audio", description: "エッジの揺れ等を駆動する音響特徴量入力（未接続なら環境の audio）。" },
+    { id: "signal", label: "signal", type: "signal", description: "エッジの揺れ等を駆動する音響特徴量入力（未接続なら環境の特徴量）。" },
   ],
   outputs: [{ id: "texture", label: "tex", type: "texture", description: "描画結果のテクスチャ。" }],
   params: [
@@ -76,7 +76,7 @@ export const EdgeVisualNode: NodeTypeDef = {
     const pose = ctx.input("pose") as PoseFrame | undefined;
     const joints = pose?.joints ?? makeEmptyJoints();
     const center = pose?.center ?? EMPTY_CENTER;
-    const audio = (ctx.input("audio") as AudioFeatures | undefined) ?? env.audio;
+    const audio = (ctx.input("signal") as AudioFeatures | undefined) ?? env.audio;
     s.edge.update(joints, center, audio, params, ctx.timeSec);
     const texture = s.surface.render(env.renderer, env.camera);
     return { texture };

@@ -26,7 +26,7 @@ export const MicInputNode: NodeTypeDef = {
   disposeState: (state: NodeState) => (state as MicInputRuntime).dispose(),
   evaluate: (ctx) => {
     const s = ctx.state as MicInputRuntime | undefined;
-    if (!s) return { ...audioFeatureOutputs(DEFAULT_AUDIO_FEATURES, false), signal: undefined };
+    if (!s) return { ...audioFeatureOutputs(DEFAULT_AUDIO_FEATURES, false), audio: undefined };
     const audio = s.read();
     const { threshold, cooldown } = readOnsetParams(ctx.param);
     return {

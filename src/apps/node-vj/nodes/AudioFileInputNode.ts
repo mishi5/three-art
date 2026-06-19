@@ -127,7 +127,7 @@ export const AudioFileInputNode: NodeTypeDef = {
   disposeState: (state: NodeState) => (state as AudioFileInputRuntime).dispose(),
   evaluate: (ctx) => {
     const s = ctx.state as AudioFileInputRuntime | undefined;
-    if (!s) return { ...audioFeatureOutputs(DEFAULT_AUDIO_FEATURES, false), section: -1, signal: undefined };
+    if (!s) return { ...audioFeatureOutputs(DEFAULT_AUDIO_FEATURES, false), section: -1, audio: undefined };
     s.setLoop(ctx.param("loop") !== "off");
     const audio = s.read();
     const { threshold, cooldown } = readOnsetParams(ctx.param);

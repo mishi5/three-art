@@ -17,7 +17,7 @@ export const ONSET_PARAMS: ParamDef[] = [
 
 /** 音声入力ノード共通の出力ポート（audio / 各バンド / onset）。section は含まない。 */
 export const AUDIO_FEATURE_OUTPUTS: PortDef[] = [
-  { id: "audio", label: "audio", type: "audio", description: "音響特徴量バンドル。visual ノードの audio 入力へ繋ぐ。" },
+  { id: "signal", label: "signal", type: "signal", description: "音響特徴量バンドル（解析結果）。visual ノードの signal 入力へ繋ぐ。" },
   { id: "volume", label: "volume", type: "number", description: "全体音量（おおむね 0〜1）。" },
   { id: "bass", label: "bass", type: "number", description: "低域成分の強さ（おおむね 0〜1）。" },
   { id: "mid", label: "mid", type: "number", description: "中域成分の強さ（おおむね 0〜1）。" },
@@ -33,10 +33,10 @@ export function readOnsetParams(param: (id: string) => unknown): { threshold: nu
   };
 }
 
-/** AudioFeatures と onset から共通出力オブジェクトを組み立てる。 */
+/** AudioFeatures と onset から共通出力オブジェクトを組み立てる。バンドルのポート名は "signal"。 */
 export function audioFeatureOutputs(audio: AudioFeatures, onset: boolean): Record<string, unknown> {
   return {
-    audio,
+    signal: audio,
     volume: audio.volume, bass: audio.bass, mid: audio.mid, treble: audio.treble,
     onset,
   };

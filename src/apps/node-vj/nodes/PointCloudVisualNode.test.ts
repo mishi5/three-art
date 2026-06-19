@@ -5,9 +5,9 @@ import { createDefaultRegistry } from "./registry";
 describe("PointCloudVisualNode", () => {
   test("pose/audio 入力ポートを持ち sink である", () => {
     expect(PointCloudVisualNode.isSink).toBe(true);
-    expect(PointCloudVisualNode.inputs.map((p) => p.id)).toEqual(["pose", "audio"]);
+    expect(PointCloudVisualNode.inputs.map((p) => p.id)).toEqual(["pose", "signal"]);
     expect(PointCloudVisualNode.inputs.find((p) => p.id === "pose")?.type).toBe("pose");
-    expect(PointCloudVisualNode.inputs.find((p) => p.id === "audio")?.type).toBe("audio");
+    expect(PointCloudVisualNode.inputs.find((p) => p.id === "signal")?.type).toBe("signal");
   });
 
   test("mode enum に 5 モードを持つ", () => {

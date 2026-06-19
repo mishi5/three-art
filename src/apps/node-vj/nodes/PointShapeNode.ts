@@ -144,7 +144,7 @@ export const PointShapeNode: NodeTypeDef = {
   category: "input",
   description: "cube/sphere/lattice の点群を GPU 生成するノード。位置テクスチャを points として出力する。",
   isSink: false,
-  inputs: [{ id: "audio", label: "audio", type: "audio", description: "bass でノイズ歪みを増幅するための音響特徴量入力。" }],
+  inputs: [{ id: "signal", label: "signal", type: "signal", description: "bass でノイズ歪みを増幅するための音響特徴量入力。" }],
   outputs: [{ id: "points", label: "points", type: "points", description: "GPU 位置テクスチャ参照（ParticleRender 等の points 入力へ繋ぐ）。" }],
   params: [
     { id: "mode", label: "mode", kind: "enum", default: "cube", options: ["cube", "sphere", "lattice"], description: "形状。cube=立方体内に散布 / sphere=球面 / lattice=規則格子。" },
@@ -179,7 +179,7 @@ export const PointShapeNode: NodeTypeDef = {
       s.count = count;
       s.field = { texture: s.pass.texture, count, texW: w, texH: h };
     }
-    const audio = ctx.input("audio") as AudioFeatures | undefined;
+    const audio = ctx.input("signal") as AudioFeatures | undefined;
     const u = s.uniforms;
     u.uMode.value = MODE_INT[mode] ?? 0;
     u.uRadius.value = Number(ctx.param("radius") ?? 0.5);

@@ -188,7 +188,7 @@ export const VideoFileInputNode: NodeTypeDef = {
   ],
   params: [
     { id: "loop", label: "loop", kind: "enum", default: "on", options: ["on", "off"], description: "ループ再生の ON/OFF。" },
-    { id: "audio", label: "audio", kind: "enum", default: "off", options: ["off", "on"], description: "動画音声の抽出 ON/OFF。ON で音響特徴量と signal を出力（発音は Audio 出力ノードへ繋いだとき）。既定 OFF=無音・映像のみ。" },
+    { id: "extractAudio", label: "extractAudio", kind: "enum", default: "off", options: ["off", "on"], description: "動画音声の抽出 ON/OFF。ON で音響特徴量(signal)と実音声(audio)を出力（発音は Audio 出力ノードへ繋いだとき）。既定 OFF=無音・映像のみ。" },
     ...ONSET_PARAMS,
   ],
   createState: (env) => new VideoFileInputRuntime(env.audioContext),
@@ -196,12 +196,12 @@ export const VideoFileInputNode: NodeTypeDef = {
   previewSource: (state: NodeState) => (state as VideoFileInputRuntime).previewFrame(),
   evaluate: (ctx) => {
     const s = ctx.state as VideoFileInputRuntime | undefined;
-    const audioOn = ctx.param("audio") === "on";
-    if (!s) return { ...audioFeatureOutputs(DEFAULT_AUDIO_FEATURES, false), signal: undefined };
+    const audioOn = ctx.param("extractAudio") === "on";
+    if (!s) return { ...audioFeatureOutputs(DEFAULT_AUDIO_FEATURES, false), audio: undefined };
     s.setLoop(ctx.param("loop") !== "off");
     s.setAudioEnabled(audioOn);
     const texture = (ctx.env ? s.getTexture(ctx.env.renderer) : null) ?? undefined;
-    if (!audioOn) return { texture, ...audioFeatureOutputs(DEFAULT_AUDIO_FEATURES, false), signal: undefined };
+    if (!audioOn) return { texture, ...audioFeatureOutputs(DEFAULT_AUDIO_FEATURES, false), audio: undefined };
     const audio = s.readAudio();
     const { threshold, cooldown } = readOnsetParams(ctx.param);
     const onset = s.detectOnset(audio.bass, ctx.timeSec, threshold, cooldown);
