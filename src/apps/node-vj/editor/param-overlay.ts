@@ -7,6 +7,8 @@ export interface ParamInputOptions {
   screenX: number;
   screenY: number;
   width: number;
+  /** #92: フォントサイズ(px)。ズーム時に canvas のテキストへ合わせる。既定 12。 */
+  fontPx?: number;
   value: unknown;
   kind: ParamKind;
   options?: string[];
@@ -22,7 +24,7 @@ export function openParamInput(opts: ParamInputOptions): void {
 
   el.style.cssText =
     `position:fixed;left:${opts.screenX}px;top:${opts.screenY}px;width:${opts.width}px;` +
-    "z-index:200;font:12px monospace;box-sizing:border-box;";
+    `z-index:200;font:${opts.fontPx ?? 12}px monospace;box-sizing:border-box;`;
 
   if (el instanceof HTMLSelectElement) {
     for (const o of opts.options!) {

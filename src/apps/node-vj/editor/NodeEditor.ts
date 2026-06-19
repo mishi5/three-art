@@ -15,6 +15,7 @@ import {
 } from "./layout";
 import { hitTest } from "./hit-test";
 import { tooltipForHit, tooltipBox, wrapLines, type TooltipContent } from "./tooltip";
+import { screenToWorld, worldToScreen, zoomAt } from "./viewport";
 import { duplicateNodes } from "../graph/duplicate";
 import type { History } from "../graph/history";
 import { nodesInRect, normRect } from "./selection";
@@ -69,6 +70,8 @@ function genId(prefix: string): string { return `${prefix}${Date.now().toString(
 export class NodeEditor {
   private ctx: CanvasRenderingContext2D;
   private offset = { x: 60, y: 60 };
+  /** #92: ワークスペースのズーム倍率（screen = world * scale + offset）。 */
+  private scale = 1;
   private drag: Drag = null;
   private cursor = { x: 0, y: 0 };
   /** #114: 直近のポインタのスクリーン座標（ツールチップ配置に使う）。 */
@@ -116,6 +119,8 @@ export class NodeEditor {
     window.addEventListener("keyup", this.onKeyUp);
     // 右ドラッグパンのためコンテキストメニューを抑止
     canvas.addEventListener("contextmenu", this.onContextMenu);
+    // #92: ホイール/ピンチでズーム（passive:false で preventDefault するため）
+    canvas.addEventListener("wheel", this.onWheel, { passive: false });
     this.toolbar = this.buildToolbar();
     this.loop();
   }
@@ -155,7 +160,7 @@ export class NodeEditor {
     dbg.addEventListener("click", () => { this.showOutputValues = !this.showOutputValues; syncDbg(); });
     bar.appendChild(dbg);
     const hint = document.createElement("span");
-    hint.textContent = "  空白ドラッグ=矩形選択 / Space|右ドラッグ=パン / Cmd+クリック=追加選択 / Cmd+C=複製 / Del=削除";
+    hint.textContent = "  空白ドラッグ=矩形選択 / Space|右ドラッグ=パン / ホイール=ズーム / 0=ズーム100% / Cmd+クリック=追加選択 / Cmd+C=複製 / Del=削除";
     hint.style.cssText = "color:#888;align-self:center;";
     bar.appendChild(hint);
     document.body.appendChild(bar);
@@ -164,24 +169,39 @@ export class NodeEditor {
 
   addNodeOfType(type: string): void {
     const def = this.registry.require(type);
+    // #92: 画面左上付近（120px）に出すよう world 座標へ変換（ズーム反映）。
+    const jitter = Math.round((idCounter % 5) * 24);
+    const w = screenToWorld(120 + jitter, 120 + jitter, this.offset, this.scale);
     const node: NodeInstance = {
       id: genId("n"),
       type,
       params: Object.fromEntries(def.params.map((p) => [p.id, p.default])),
-      position: {
-        x: -this.offset.x + 120 + Math.round((idCounter % 5) * 24),
-        y: -this.offset.y + 120 + Math.round((idCounter % 5) * 24),
-      },
+      position: { x: w.x, y: w.y },
     };
     this.history.record(this.graph);
     addNode(this.graph, node);
     this.selectedIds = new Set([node.id]);
   }
 
-  // --- pointer 座標 → world 座標 ---
+  // --- pointer 座標 → world 座標（#92: ズーム反映）---
   private toWorld(e: PointerEvent): { x: number; y: number } {
-    return { x: e.clientX - this.offset.x, y: e.clientY - this.offset.y };
+    return screenToWorld(e.clientX, e.clientY, this.offset, this.scale);
   }
+
+  /**
+   * #92: ホイール/トラックパッドのピンチ（ctrl+wheel）でカーソル中心ズーム。
+   * deltaY を指数に通して滑らかに拡縮し、カーソル下の点を画面上で固定する。
+   */
+  private onWheel = (e: WheelEvent): void => {
+    e.preventDefault();
+    // ピンチ（ctrlKey）は感度を上げる。通常ホイールは控えめに。
+    const k = e.ctrlKey ? 0.01 : 0.0015;
+    const factor = Math.exp(-e.deltaY * k);
+    const r = zoomAt(e.clientX, e.clientY, this.offset, this.scale, factor);
+    this.offset = r.offset;
+    this.scale = r.scale;
+    this.hover = null; // ズーム中はツールチップを消す
+  };
 
   /** #114: カーソル下のノード/param/ポートの説明を引き、ホバー状態を更新する。 */
   private updateHover(): void {
@@ -386,6 +406,13 @@ export class NodeEditor {
     const t = e.target as HTMLElement | null;
     if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;
     if (e.key === " ") this.spaceDown = true;
+    // #92: "0" でズームを 100% に戻す（画面中心を固定）。
+    if (e.key === "0" && !e.metaKey && !e.ctrlKey) {
+      const r = zoomAt(window.innerWidth / 2, window.innerHeight / 2, this.offset, this.scale, 1 / this.scale);
+      this.offset = r.offset;
+      this.scale = r.scale;
+      return;
+    }
     if ((e.key === "Delete" || e.key === "Backspace") && this.selectedIds.size > 0) {
       this.history.record(this.graph);
       for (const id of this.selectedIds) removeNode(this.graph, id);
@@ -466,10 +493,14 @@ export class NodeEditor {
       node.params[pd.id] = toggledValue(pd, node.params[pd.id] ?? pd.default);
       return;
     }
+    // #92: ズーム反映。world 座標をスクリーンへ変換し、幅・フォントも scale 倍にして
+    // canvas 上の param 行に重なるようにする。
+    const s = worldToScreen((node.position?.x ?? 0) + 56, paramRowY(node, def, paramIndex), this.offset, this.scale);
     openParamInput({
-      screenX: (node.position?.x ?? 0) + this.offset.x + 56,
-      screenY: paramRowY(node, def, paramIndex) + this.offset.y - 9,
-      width: NODE_WIDTH - 64,
+      screenX: s.x,
+      screenY: s.y - 9 * this.scale,
+      width: (NODE_WIDTH - 64) * this.scale,
+      fontPx: 12 * this.scale,
       value: node.params[pd.id] ?? pd.default,
       kind: pd.kind,
       options: pd.options,
@@ -493,6 +524,7 @@ export class NodeEditor {
     ctx.fillStyle = "#0c0c10";
     ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
     ctx.translate(this.offset.x, this.offset.y);
+    ctx.scale(this.scale, this.scale); // #92: ズーム
 
     // 配線
     for (const c of this.graph.connections) this.drawWire(c);
@@ -776,6 +808,7 @@ export class NodeEditor {
     window.removeEventListener("keydown", this.onKey);
     window.removeEventListener("keyup", this.onKeyUp);
     this.canvas.removeEventListener("contextmenu", this.onContextMenu);
+    this.canvas.removeEventListener("wheel", this.onWheel);
     this.toolbar.remove();
   }
 }
