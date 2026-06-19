@@ -15,6 +15,7 @@ export class MicInputRuntime extends LiveAudioRuntime {
 export const MicInputNode: NodeTypeDef = {
   type: "MicInput",
   category: "input",
+  description: "マイク音声を入力するノード。audio / 各バンド(volume/bass/mid/treble) / onset(trigger) を出力する。",
   isSink: false,
   inputs: [],
   outputs: AUDIO_FEATURE_OUTPUTS,

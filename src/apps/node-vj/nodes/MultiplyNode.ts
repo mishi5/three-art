@@ -4,6 +4,7 @@ import type { NodeTypeDef } from "../graph/node-type";
 export const MultiplyNode: NodeTypeDef = {
   type: "Multiply",
   category: "process",
+  description: "2 入力 a・b を掛け合わせて出力する。未接続入力は param 値（既定 1）にフォールバック。",
   inputs: [
     { id: "a", label: "a", type: "number" },
     { id: "b", label: "b", type: "number" },

@@ -59,11 +59,12 @@ class BlurState {
 export const BlurNode: NodeTypeDef = {
   type: "Blur",
   category: "effect",
+  description: "入力テクスチャにガウスぼかしをかける（水平・垂直の 2 パス）。strength<=0 はパススルー。",
   isSink: true,
-  inputs: [{ id: "in", label: "in", type: "texture" }],
-  outputs: [{ id: "texture", label: "tex", type: "texture" }],
+  inputs: [{ id: "in", label: "in", type: "texture", description: "ぼかす元のテクスチャ。" }],
+  outputs: [{ id: "texture", label: "tex", type: "texture", description: "ぼかし後のテクスチャ。" }],
   params: [
-    { id: "strength", label: "strength", kind: "number", default: 4, min: 0, max: 20, step: 0.1 },
+    { id: "strength", label: "strength", kind: "number", default: 4, min: 0, max: 20, step: 0.1, description: "ぼかしの強さ（カーネル半径）。0 以下で無効化（コストゼロ）。" },
   ],
   createState: () => new BlurState(),
   disposeState: (state: NodeState) => (state as BlurState).dispose(),

@@ -100,12 +100,13 @@ export class VideoFileInputRuntime implements PlaybackControl {
 export const VideoFileInputNode: NodeTypeDef = {
   type: "VideoFileInput",
   category: "input",
+  description: "動画ファイルをループ再生して映像 texture を出力するノード（音声は対象外）。",
   isSink: false,
   fileInput: { accept: "video/*" },
   inputs: [],
-  outputs: [{ id: "texture", label: "tex", type: "texture" }],
+  outputs: [{ id: "texture", label: "tex", type: "texture", description: "動画フレームのテクスチャ（アスペクト比を入口で正規化済み）。" }],
   params: [
-    { id: "loop", label: "loop", kind: "enum", default: "on", options: ["on", "off"] },
+    { id: "loop", label: "loop", kind: "enum", default: "on", options: ["on", "off"], description: "ループ再生の ON/OFF。" },
   ],
   createState: () => new VideoFileInputRuntime(),
   disposeState: (state: NodeState) => (state as VideoFileInputRuntime).dispose(),

@@ -39,18 +39,19 @@ const EMPTY_CENTER = new Float32Array(3);
 export const EdgeVisualNode: NodeTypeDef = {
   type: "EdgeVisual",
   category: "visual",
+  description: "アンカー点どうしを線（エッジ）で結んで描画する visual。結果を texture 出力する。",
   isSink: true,
   inputs: [
-    { id: "pose", label: "pose", type: "pose" },
-    { id: "audio", label: "audio", type: "audio" },
+    { id: "pose", label: "pose", type: "pose", description: "bones モードでアンカー配置に使う姿勢入力。" },
+    { id: "audio", label: "audio", type: "audio", description: "エッジの揺れ等を駆動する音響特徴量入力（未接続なら環境の audio）。" },
   ],
-  outputs: [{ id: "texture", label: "tex", type: "texture" }],
+  outputs: [{ id: "texture", label: "tex", type: "texture", description: "描画結果のテクスチャ。" }],
   params: [
-    { id: "mode", label: "mode", kind: "enum", default: "cube", options: ["bones", "cube", "sphere"] },
-    { id: "anchorCount", label: "anchorCount", kind: "int", default: 64, min: 16, max: 256, step: 1 },
-    { id: "kNeighbors", label: "kNeighbors", kind: "int", default: 2, min: 1, max: 5, step: 1 },
-    { id: "alpha", label: "alpha", kind: "number", default: 0.5, min: 0, max: 1, step: 0.01 },
-    { id: "radius", label: "radius", kind: "number", default: 0.4, min: 0.05, max: 3, step: 0.01 },
+    { id: "mode", label: "mode", kind: "enum", default: "cube", options: ["bones", "cube", "sphere"], description: "アンカー配置の形状。bones=骨格 / cube=立方体 / sphere=球。" },
+    { id: "anchorCount", label: "anchorCount", kind: "int", default: 64, min: 16, max: 256, step: 1, description: "エッジを張るアンカー点の数。" },
+    { id: "kNeighbors", label: "kNeighbors", kind: "int", default: 2, min: 1, max: 5, step: 1, description: "各アンカーが近傍何点と線を結ぶか。" },
+    { id: "alpha", label: "alpha", kind: "number", default: 0.5, min: 0, max: 1, step: 0.01, description: "エッジ線の不透明度（0〜1）。" },
+    { id: "radius", label: "radius", kind: "number", default: 0.4, min: 0.05, max: 3, step: 0.01, description: "形状の半径（world m）。" },
   ],
   createState(): EdgeState {
     const edge = new EdgeOverlay();

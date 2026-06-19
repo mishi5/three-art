@@ -59,16 +59,17 @@ class FlashState {
 export const FlashNode: NodeTypeDef = {
   type: "Flash",
   category: "effect",
+  description: "trigger 発火で一瞬光るフラッシュを下地 texture に加算合成するエフェクト。",
   isSink: true,
   inputs: [
-    { id: "trigger", label: "trig", type: "trigger" },
-    { id: "in", label: "in", type: "texture" },
+    { id: "trigger", label: "trig", type: "trigger", description: "立ち上がりエッジでフラッシュを発火させる trigger。" },
+    { id: "in", label: "in", type: "texture", description: "下地のテクスチャ（未接続なら黒）。" },
   ],
-  outputs: [{ id: "texture", label: "tex", type: "texture" }],
+  outputs: [{ id: "texture", label: "tex", type: "texture", description: "フラッシュを加算合成したテクスチャ。" }],
   params: [
-    { id: "release", label: "release", kind: "number", default: 0.15, min: 0.01, max: 3, step: 0.01 },
-    { id: "hue", label: "hue", kind: "number", default: 0, min: 0, max: 1, step: 0.01 },
-    { id: "saturation", label: "saturation", kind: "number", default: 0, min: 0, max: 1, step: 0.01 },
+    { id: "release", label: "release", kind: "number", default: 0.15, min: 0.01, max: 3, step: 0.01, description: "発火から消えるまでの減衰時間（秒）。" },
+    { id: "hue", label: "hue", kind: "number", default: 0, min: 0, max: 1, step: 0.01, description: "フラッシュ色の色相（0〜1）。" },
+    { id: "saturation", label: "saturation", kind: "number", default: 0, min: 0, max: 1, step: 0.01, description: "フラッシュ色の彩度。0 で白、1 で鮮やかな原色。" },
   ],
   createState: () => new FlashState(),
   disposeState: (state: NodeState) => (state as FlashState).dispose(),

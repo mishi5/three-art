@@ -95,19 +95,20 @@ function buildGeometry(base: THREE.PlaneGeometry, count: number): THREE.Instance
 export const ParticleRenderNode: NodeTypeDef = {
   type: "ParticleRender",
   category: "visual",
+  description: "points（位置テクスチャ）をカメラ向きのビルボード quad で描画する visual。結果を texture 出力する。",
   isSink: true,
   inputs: [
-    { id: "points", label: "points", type: "points" },
-    { id: "audio", label: "audio", type: "audio" },
+    { id: "points", label: "points", type: "points", description: "描画する GPU 位置テクスチャ参照（未接続なら何も描かない）。" },
+    { id: "audio", label: "audio", type: "audio", description: "粒子サイズ・明るさを変調する音響特徴量入力（未接続なら環境の audio）。" },
   ],
-  outputs: [{ id: "texture", label: "tex", type: "texture" }],
+  outputs: [{ id: "texture", label: "tex", type: "texture", description: "描画結果のテクスチャ。" }],
   params: [
-    { id: "baseSize", label: "baseSize", kind: "number", default: 4.0, min: 0.5, max: 40, step: 0.5 },
-    { id: "volumeSize", label: "volumeSize", kind: "number", default: 8.0, min: 0, max: 60, step: 0.5 },
-    { id: "bassExpansion", label: "bassExpansion", kind: "number", default: 18.0, min: 0, max: 60, step: 0.5 },
-    { id: "hueBase", label: "hueBase", kind: "number", default: 0.6, min: 0, max: 1, step: 0.01 },
-    { id: "hueSpread", label: "hueSpread", kind: "number", default: 0.4, min: 0, max: 1, step: 0.01 },
-    { id: "saturation", label: "saturation", kind: "number", default: 0.6, min: 0, max: 1, step: 0.01 },
+    { id: "baseSize", label: "baseSize", kind: "number", default: 4.0, min: 0.5, max: 40, step: 0.5, description: "粒子の基本サイズ。" },
+    { id: "volumeSize", label: "volumeSize", kind: "number", default: 8.0, min: 0, max: 60, step: 0.5, description: "音量に応じて粒子サイズを増す量。" },
+    { id: "bassExpansion", label: "bassExpansion", kind: "number", default: 18.0, min: 0, max: 60, step: 0.5, description: "bass に応じて粒子サイズを増す量。" },
+    { id: "hueBase", label: "hueBase", kind: "number", default: 0.6, min: 0, max: 1, step: 0.01, description: "基準色相（0〜1）。" },
+    { id: "hueSpread", label: "hueSpread", kind: "number", default: 0.4, min: 0, max: 1, step: 0.01, description: "色相の広がり幅（粒子間の色のばらつき）。" },
+    { id: "saturation", label: "saturation", kind: "number", default: 0.6, min: 0, max: 1, step: 0.01, description: "彩度（0〜1）。" },
   ],
   createState(): ParticleRenderState {
     const uniforms: Uniforms = {

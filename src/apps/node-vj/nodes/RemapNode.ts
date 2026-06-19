@@ -5,14 +5,15 @@ import { remap } from "./process-logic";
 export const RemapNode: NodeTypeDef = {
   type: "Remap",
   category: "process",
+  description: "入力値を [inMin,inMax] から [outMin,outMax] の範囲へ線形に写し替える。",
   inputs: [{ id: "in", label: "in", type: "number" }],
   outputs: [{ id: "out", label: "out", type: "number" }],
   params: [
-    { id: "inMin", label: "inMin", kind: "number", default: 0, step: 0.1 },
-    { id: "inMax", label: "inMax", kind: "number", default: 1, step: 0.1 },
-    { id: "outMin", label: "outMin", kind: "number", default: 0, step: 0.1 },
-    { id: "outMax", label: "outMax", kind: "number", default: 1, step: 0.1 },
-    { id: "clamp", label: "clamp", kind: "boolean", default: true },
+    { id: "inMin", label: "inMin", kind: "number", default: 0, step: 0.1, description: "入力レンジの下限。" },
+    { id: "inMax", label: "inMax", kind: "number", default: 1, step: 0.1, description: "入力レンジの上限。" },
+    { id: "outMin", label: "outMin", kind: "number", default: 0, step: 0.1, description: "出力レンジの下限。" },
+    { id: "outMax", label: "outMax", kind: "number", default: 1, step: 0.1, description: "出力レンジの上限。" },
+    { id: "clamp", label: "clamp", kind: "boolean", default: true, description: "ON で出力を [outMin,outMax] に収める（範囲外をはみ出させない）。" },
   ],
   evaluate: (ctx) => {
     const v = (ctx.input("in") as number | undefined) ?? 0;

@@ -15,6 +15,7 @@ export class DisplayAudioInputRuntime extends LiveAudioRuntime {
 export const DisplayAudioInputNode: NodeTypeDef = {
   type: "DisplayAudioInput",
   category: "input",
+  description: "画面共有の音声（getDisplayMedia）を入力するノード。audio / 各バンド / onset(trigger) を出力する。",
   isSink: false,
   inputs: [],
   outputs: AUDIO_FEATURE_OUTPUTS,

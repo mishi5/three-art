@@ -14,6 +14,7 @@ import {
   transportRowRect, transportLayout, seekRatioAt, formatTime,
 } from "./layout";
 import { hitTest } from "./hit-test";
+import { tooltipForHit, tooltipBox, wrapLines, type TooltipContent } from "./tooltip";
 import { duplicateNodes } from "../graph/duplicate";
 import type { History } from "../graph/history";
 import { nodesInRect, normRect } from "./selection";
@@ -59,6 +60,9 @@ type Drag =
 /** クリックとドラッグを分ける移動量しきい値 (px)。 */
 const DRAG_THRESHOLD = 3;
 
+/** #114: ホバー開始からツールチップ表示までの待ち時間 (ms)。 */
+const TOOLTIP_DELAY_MS = 450;
+
 let idCounter = 0;
 function genId(prefix: string): string { return `${prefix}${Date.now().toString(36)}_${++idCounter}`; }
 
@@ -67,6 +71,10 @@ export class NodeEditor {
   private offset = { x: 60, y: 60 };
   private drag: Drag = null;
   private cursor = { x: 0, y: 0 };
+  /** #114: 直近のポインタのスクリーン座標（ツールチップ配置に使う）。 */
+  private pointer = { x: 0, y: 0 };
+  /** #114: 現在ホバー中のツールチップ内容と開始時刻 (performance.now)。未ホバーは null。 */
+  private hover: { content: TooltipContent; sinceMs: number } | null = null;
   private selectedIds = new Set<string>();
   /** Space 押下中は空白ドラッグをパンにする（#83 で空白ドラッグは矩形選択に変更）。 */
   private spaceDown = false;
@@ -175,6 +183,21 @@ export class NodeEditor {
     return { x: e.clientX - this.offset.x, y: e.clientY - this.offset.y };
   }
 
+  /** #114: カーソル下のノード/param/ポートの説明を引き、ホバー状態を更新する。 */
+  private updateHover(): void {
+    const hit = hitTest(this.graph.nodes, this.registry, this.cursor.x, this.cursor.y);
+    const content = tooltipForHit(hit, this.registry);
+    if (!content) {
+      this.hover = null;
+      return;
+    }
+    // 同じ対象に留まっている間は開始時刻を維持し、別対象へ移ったら計り直す。
+    if (this.hover && this.hover.content.title === content.title && this.hover.content.body === content.body) {
+      return;
+    }
+    this.hover = { content, sinceMs: performance.now() };
+  }
+
   private onDown = (e: PointerEvent): void => {
     const w = this.toWorld(e);
     // パン: Space+左ドラッグ / 中ボタン / 右ボタン（#83 で空白左ドラッグは矩形選択に変更）。
@@ -264,7 +287,13 @@ export class NodeEditor {
 
   private onMove = (e: PointerEvent): void => {
     this.cursor = this.toWorld(e);
-    if (!this.drag) return;
+    this.pointer = { x: e.clientX, y: e.clientY };
+    if (!this.drag) {
+      this.updateHover();
+      return;
+    }
+    // ドラッグ中はツールチップを出さない。
+    this.hover = null;
     if (this.drag.kind === "group") {
       if (!this.drag.moved) {
         // ドラッグ全体を 1 操作として、最初に動いた時点で記録（クリックだけでは積まない）
@@ -488,6 +517,58 @@ export class NodeEditor {
       ctx.lineWidth = 1;
       ctx.fillRect(r.x, r.y, r.w, r.h);
       ctx.strokeRect(r.x, r.y, r.w, r.h);
+    }
+    ctx.restore();
+    // #114: ツールチップは offset 変換の外（スクリーン座標）で最前面に描く。
+    this.drawTooltip();
+  }
+
+  /** #114: ホバー継続が一定時間を超えたら、カーソル付近に説明ツールチップを描く。 */
+  private drawTooltip(): void {
+    const hover = this.hover;
+    if (!hover || this.drag) return;
+    if (performance.now() - hover.sinceMs < TOOLTIP_DELAY_MS) return;
+
+    const ctx = this.ctx;
+    const PAD = 8;
+    const MAX_W = 280;
+    const TITLE_FONT = "bold 12px system-ui";
+    const BODY_FONT = "12px system-ui";
+    const LINE_H = 16;
+
+    // 本文を最大幅で折り返し、箱サイズを決める。
+    ctx.font = BODY_FONT;
+    const bodyLines = wrapLines(hover.content.body, MAX_W, (s) => ctx.measureText(s).width);
+    ctx.font = TITLE_FONT;
+    const titleW = ctx.measureText(hover.content.title).width;
+    ctx.font = BODY_FONT;
+    const bodyW = bodyLines.reduce((m, ln) => Math.max(m, ctx.measureText(ln).width), 0);
+    const innerW = Math.min(MAX_W, Math.max(titleW, bodyW));
+    const w = innerW + PAD * 2;
+    const h = PAD * 2 + LINE_H + bodyLines.length * LINE_H;
+
+    const box = tooltipBox(this.pointer.x, this.pointer.y, w, h, window.innerWidth, window.innerHeight);
+
+    ctx.save();
+    // 背景
+    ctx.fillStyle = "rgba(20,20,26,0.96)";
+    ctx.strokeStyle = "#555";
+    ctx.lineWidth = 1;
+    roundRect(ctx, box.x, box.y, box.w, box.h, 5);
+    ctx.fill();
+    ctx.stroke();
+    // テキスト
+    ctx.textBaseline = "top";
+    let ty = box.y + PAD;
+    ctx.font = TITLE_FONT;
+    ctx.fillStyle = "#ffd27f";
+    ctx.fillText(hover.content.title, box.x + PAD, ty);
+    ty += LINE_H;
+    ctx.font = BODY_FONT;
+    ctx.fillStyle = "#ddd";
+    for (const ln of bodyLines) {
+      ctx.fillText(ln, box.x + PAD, ty);
+      ty += LINE_H;
     }
     ctx.restore();
   }

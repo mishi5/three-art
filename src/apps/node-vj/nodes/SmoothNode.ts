@@ -10,10 +10,11 @@ export class SmoothRuntime {
 export const SmoothNode: NodeTypeDef = {
   type: "Smooth",
   category: "process",
+  description: "入力の急変を平滑化する（指数移動平均）。out += (in - out)·factor。",
   inputs: [{ id: "in", label: "in", type: "number" }],
   outputs: [{ id: "out", label: "out", type: "number" }],
   params: [
-    { id: "factor", label: "factor", kind: "number", default: 0.1, min: 0, max: 1, step: 0.01 },
+    { id: "factor", label: "factor", kind: "number", default: 0.1, min: 0, max: 1, step: 0.01, description: "追従係数。1 で即追従、0 で固定（小さいほど滑らか）。" },
   ],
   // env は使わないが、フレーム間状態のため createState を持つ。
   createState: () => new SmoothRuntime(),

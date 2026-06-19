@@ -4,6 +4,7 @@ import type { NodeTypeDef } from "../graph/node-type";
 export const AddNode: NodeTypeDef = {
   type: "Add",
   category: "process",
+  description: "2 入力 a・b を足し合わせて出力する。未接続入力は param 値（既定 0）にフォールバック。",
   inputs: [
     { id: "a", label: "a", type: "number" },
     { id: "b", label: "b", type: "number" },
