@@ -38,16 +38,19 @@ describe("CameraInputNode (#66)", () => {
   });
 });
 
-describe("VideoFileInputNode (#66)", () => {
-  test("ポート定義: texture 出力・loop param", () => {
-    expect(VideoFileInputNode.outputs.map((p) => `${p.id}:${p.type}`)).toEqual(["texture:texture"]);
+describe("VideoFileInputNode (#66/#116)", () => {
+  test("ポート定義: texture 出力・loop param（音声出力は #116 で追加）", () => {
+    expect(VideoFileInputNode.outputs.map((p) => p.id)).toContain("texture");
+    expect(VideoFileInputNode.outputs.find((p) => p.id === "texture")?.type).toBe("texture");
     const loop = VideoFileInputNode.params.find((p) => p.id === "loop");
     expect(loop?.options).toEqual(["on", "off"]);
     expect(typeof VideoFileInputNode.previewSource).toBe("function");
   });
 
-  test("state 無しは no-op", () => {
-    expect(VideoFileInputNode.evaluate(ctxNoState())).toEqual({});
+  test("state 無しでも音響特徴量デフォルトを返す（#116, texture は無し）", () => {
+    const out = VideoFileInputNode.evaluate(ctxNoState());
+    expect(out.texture).toBeUndefined();
+    expect(out.onset).toBe(false);
   });
 });
 
