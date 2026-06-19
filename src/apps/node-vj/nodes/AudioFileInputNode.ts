@@ -5,7 +5,7 @@ import type { SectionBoundary } from "../../../core/audio/analysis-types";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "../../../core/types";
 import type { NodeState, NodeTypeDef } from "../graph/node-type";
 import { sectionIndexAt } from "./input-node-logic";
-import { AUDIO_FEATURE_OUTPUTS, OnsetTracker, audioFeatureOutputs } from "./audio-feature-logic";
+import { AUDIO_FEATURE_OUTPUTS, ONSET_PARAMS, OnsetTracker, audioFeatureOutputs, readOnsetParams } from "./audio-feature-logic";
 import type { PlaybackControl } from "./playback";
 
 /**
@@ -52,8 +52,8 @@ export class AudioFileInputRuntime implements PlaybackControl {
     return this.source?.getCurrentTime() ?? 0;
   }
 
-  detectOnset(bass: number, t: number): boolean {
-    return this.onset.detect(bass, t);
+  detectOnset(bass: number, t: number, threshold: number, cooldown: number): boolean {
+    return this.onset.detect(bass, t, threshold, cooldown);
   }
 
   // --- PlaybackControl（#99）---
@@ -90,14 +90,15 @@ export const AudioFileInputNode: NodeTypeDef = {
   fileInput: { accept: "audio/*" },
   inputs: [],
   outputs: [...AUDIO_FEATURE_OUTPUTS, { id: "section", label: "section", type: "number" }],
-  params: [],
+  params: [...ONSET_PARAMS],
   createState: () => new AudioFileInputRuntime(),
   disposeState: (state: NodeState) => (state as AudioFileInputRuntime).dispose(),
   evaluate: (ctx) => {
     const s = ctx.state as AudioFileInputRuntime | undefined;
     if (!s) return { ...audioFeatureOutputs(DEFAULT_AUDIO_FEATURES, false), section: -1 };
     const audio = s.read();
-    const onset = s.detectOnset(audio.bass, ctx.timeSec);
+    const { threshold, cooldown } = readOnsetParams(ctx.param);
+    const onset = s.detectOnset(audio.bass, ctx.timeSec, threshold, cooldown);
     const section = s.started ? sectionIndexAt(s.boundaries, s.currentTime()) : -1;
     return { ...audioFeatureOutputs(audio, onset), section };
   },
