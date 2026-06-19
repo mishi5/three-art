@@ -23,6 +23,8 @@ export class GraphRuntime {
   /** state を生成した NodeTypeDef を控える（ノード削除後も disposeState を確実に呼ぶため）。 */
   private stateDefs = new Map<string, NodeTypeDef>();
   private audio: AudioFeatures = DEFAULT_AUDIO_FEATURES;
+  /** #127/#128: 全 audio ノードで共有する AudioContext（遅延生成）。 */
+  private audioCtx: AudioContext | null = null;
   private rafId: number | null = null;
   private startMs: number | null = null;
   private lastOutputs = new Map<string, Record<string, unknown>>();
@@ -73,8 +75,23 @@ export class GraphRuntime {
     this.camera.updateProjectionMatrix();
   }
 
+  /** #127/#128: 共有 AudioContext を遅延生成して返す。 */
+  private getAudioContext(): AudioContext {
+    return (this.audioCtx ??= new AudioContext());
+  }
+
+  /** user gesture から共有 AudioContext を resume する（発音に必要）。 */
+  resumeAudio(): void {
+    void this.getAudioContext().resume().catch(() => { /* gesture 不足時は次回 */ });
+  }
+
   private env(): NodeEnv {
-    return { audio: this.audio, renderer: this.renderer, camera: this.camera };
+    return {
+      audio: this.audio,
+      renderer: this.renderer,
+      camera: this.camera,
+      audioContext: this.getAudioContext(),
+    };
   }
 
   /** グラフに合わせて visual/sink ノードの永続状態を生成・破棄する。 */

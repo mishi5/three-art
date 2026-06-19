@@ -13,6 +13,11 @@ export interface NodeEnv {
   /** PointCloud の pixelRatio / projection 算出に使う。 */
   renderer: THREE.WebGLRenderer;
   camera: THREE.PerspectiveCamera;
+  /**
+   * #127/#128: 全 audio ノードで共有する AudioContext。別 ctx の AudioNode 同士は
+   * 繋げないため、音声入力/Mix/Output は必ずこの ctx を使う。runtime が遅延生成して配る。
+   */
+  audioContext: AudioContext;
 }
 
 /** ノードのフレーム間永続状態（visual モジュールのインスタンス等）。 */

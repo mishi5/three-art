@@ -79,6 +79,7 @@ const editor = new NodeEditor(
   (id) => runtime.getPreviewSource(id),
   // #99: ファイル選択をそのノードのランタイムへ読み込ませる。
   (id, file) => {
+    runtime.resumeAudio(); // #128: ファイル読込（user gesture）で共有 AudioContext を起こす
     const s = runtime.getState(id) as FileLoadable | undefined;
     s?.loadFile?.(file).catch((e) => console.warn(`[node-vj] loadFile failed for ${id}:`, e));
   },
@@ -110,6 +111,7 @@ const startBtn = document.createElement("button");
 startBtn.textContent = "▶ 入力開始 (mic/camera)";
 startBtn.style.cssText = "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;";
 startBtn.addEventListener("click", () => {
+  runtime.resumeAudio(); // #128: user gesture で共有 AudioContext を起こす
   for (const n of graph.nodes) {
     const s = runtime.getState(n.id) as Startable | undefined;
     s?.start?.().catch((e) => console.warn(`[node-vj] start failed for ${n.id}:`, e));

@@ -23,7 +23,8 @@ describe("MicInputNode (#100)", () => {
   test("ポート定義: 音響特徴量のみ（section 無し）・onset param（#109）", () => {
     expect(MicInputNode.type).toBe("MicInput");
     expect(MicInputNode.category).toBe("input");
-    expect(MicInputNode.outputs.map((p) => p.id)).toEqual(FEATURE_IDS);
+    expect(MicInputNode.outputs.map((p) => p.id)).toEqual([...FEATURE_IDS, "signal"]);
+    expect(MicInputNode.outputs.find((p) => p.id === "signal")?.type).toBe("audioSignal");
     expect(MicInputNode.params.map((p) => p.id)).toEqual(["onsetThreshold", "onsetCooldown"]);
   });
 
@@ -42,7 +43,7 @@ describe("MicInputNode (#100)", () => {
 describe("DisplayAudioInputNode (#100)", () => {
   test("ポート定義: 音響特徴量のみ（section 無し）・onset param（#109）", () => {
     expect(DisplayAudioInputNode.type).toBe("DisplayAudioInput");
-    expect(DisplayAudioInputNode.outputs.map((p) => p.id)).toEqual(FEATURE_IDS);
+    expect(DisplayAudioInputNode.outputs.map((p) => p.id)).toEqual([...FEATURE_IDS, "signal"]);
     expect(DisplayAudioInputNode.params.map((p) => p.id)).toEqual(["onsetThreshold", "onsetCooldown"]);
   });
 
@@ -60,8 +61,9 @@ describe("DisplayAudioInputNode (#100)", () => {
 describe("AudioFileInputNode (#100)", () => {
   test("ポート定義: 音響特徴量 + section(number)", () => {
     expect(AudioFileInputNode.type).toBe("AudioFileInput");
-    expect(AudioFileInputNode.outputs.map((p) => p.id)).toEqual([...FEATURE_IDS, "section"]);
+    expect(AudioFileInputNode.outputs.map((p) => p.id)).toEqual([...FEATURE_IDS, "section", "signal"]);
     expect(AudioFileInputNode.outputs.find((p) => p.id === "section")?.type).toBe("number");
+    expect(AudioFileInputNode.outputs.find((p) => p.id === "signal")?.type).toBe("audioSignal");
     expect(AudioFileInputNode.outputs.find((p) => p.id === "audio")?.type).toBe("audio");
   });
 

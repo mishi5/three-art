@@ -47,6 +47,15 @@ function makeFakeCtx(): AudioContext {
       smoothingTimeConstant: 0.7,
       frequencyBinCount: 1024,
       getByteFrequencyData: (_arr: Uint8Array) => {},
+      // #128: analyzer.input.connect(outputGain) のため
+      connect: (n: unknown) => n,
+      disconnect: () => {},
+    }),
+    // #128: ルーティング用 outputGain
+    createGain: () => ({
+      gain: { value: 1 },
+      connect: (n: unknown) => n,
+      disconnect: () => {},
     }),
     createMediaStreamSource: (_stream: MediaStream) => {
       const node = {

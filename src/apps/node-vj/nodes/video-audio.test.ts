@@ -19,10 +19,11 @@ const FEATURE_IDS = ["audio", "volume", "bass", "mid", "treble", "onset"];
 
 describe("VideoFileInputNode 音声特徴量出力 (#116)", () => {
   test("ポート定義: texture + 音響特徴量（section 無し）", () => {
-    expect(VideoFileInputNode.outputs.map((p) => p.id)).toEqual(["texture", ...FEATURE_IDS]);
+    expect(VideoFileInputNode.outputs.map((p) => p.id)).toEqual(["texture", ...FEATURE_IDS, "signal"]);
     expect(VideoFileInputNode.outputs.find((p) => p.id === "texture")?.type).toBe("texture");
     expect(VideoFileInputNode.outputs.find((p) => p.id === "audio")?.type).toBe("audio");
     expect(VideoFileInputNode.outputs.find((p) => p.id === "onset")?.type).toBe("trigger");
+    expect(VideoFileInputNode.outputs.find((p) => p.id === "signal")?.type).toBe("audioSignal");
   });
 
   test("params: loop / audio(off,on 既定 off) / onset しきい値・cooldown", () => {
