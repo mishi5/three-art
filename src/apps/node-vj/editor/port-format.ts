@@ -19,6 +19,8 @@ export function formatPortValue(value: unknown, type: PortType): string {
         : "";
     case "pose":
       return "pose";
+    case "signal":
+      return "signal";
     case "audio":
       return "audio";
     case "texture":

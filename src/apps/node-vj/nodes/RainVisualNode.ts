@@ -20,7 +20,7 @@ export const RainVisualNode: NodeTypeDef = {
   description: "音に反応する雨のような縦ストリームを描画する visual。結果を texture 出力する。",
   isSink: true,
   inputs: [
-    { id: "audio", label: "audio", type: "audio", description: "雨の動きを駆動する音響特徴量入力（未接続なら環境の audio）。" },
+    { id: "signal", label: "signal", type: "signal", description: "雨の動きを駆動する音響特徴量入力（未接続なら環境の特徴量）。" },
     { id: "baseSpeed", label: "baseSpeed", type: "number", description: "落下速度の入力（未接続なら param 値）。" },
     { id: "count", label: "count", type: "number", description: "粒子数の入力（未接続なら param 値）。" },
   ],
@@ -59,7 +59,7 @@ export const RainVisualNode: NodeTypeDef = {
       },
     };
     // audio 入力ポートが接続されていればそれを、なければ env.audio をフォールバック。
-    const audio = (ctx.input("audio") as AudioFeatures | undefined) ?? env.audio;
+    const audio = (ctx.input("signal") as AudioFeatures | undefined) ?? env.audio;
     state.rain.update(audio, params, ctx.timeSec);
     const texture = state.surface.render(env.renderer, env.camera);
     return { texture };

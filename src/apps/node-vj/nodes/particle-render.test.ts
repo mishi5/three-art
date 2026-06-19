@@ -35,7 +35,7 @@ describe("ParticleRenderNode (#101)", () => {
     expect(ParticleRenderNode.category).toBe("visual");
     expect(ParticleRenderNode.isSink).toBe(true);
     expect(ParticleRenderNode.inputs.find((p) => p.id === "points")?.type).toBe("points");
-    expect(ParticleRenderNode.inputs.find((p) => p.id === "audio")?.type).toBe("audio");
+    expect(ParticleRenderNode.inputs.find((p) => p.id === "signal")?.type).toBe("signal");
     expect(ParticleRenderNode.outputs.map((p) => `${p.id}:${p.type}`)).toEqual(["texture:texture"]);
   });
   test("描画・色 param を集約（baseSize/volumeSize/hueBase 等）", () => {

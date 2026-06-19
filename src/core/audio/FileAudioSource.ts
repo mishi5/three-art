@@ -49,10 +49,27 @@ export class FileAudioSource implements AudioInput {
   private startedAt: number | null = null;
   /** resume() の await 中フラグ。再エントリでの二重 spawn を防ぐ。 */
   private resumeInFlight = false;
+  /** #128: ルーティング用出力（`analyzer→outputGain`）。 */
+  readonly output: GainNode;
 
-  constructor(ctx: AudioContext) {
+  // 既定は従来どおり destination 直結（pose-particles 後方互換）。node-vj は false にして
+  // outputGain を audioSignal として Mix/Output ノードへ配線する。
+  constructor(ctx: AudioContext, opts: { connectToDestination?: boolean } = {}) {
     this.ctx = ctx;
     this.analyzer = new AudioAnalyzer(ctx);
+    this.output = ctx.createGain();
+    this.analyzer.input.connect(this.output);
+    if (opts.connectToDestination ?? true) {
+      this.output.connect(ctx.destination);
+    } else {
+      // #128: 無音(gain 0)の keep-alive を destination へ繋ぎ、解析グラフを処理させる
+      // （これが無いと BufferSource→analyser が pull されず特徴量がゼロになりうる）。
+      // 可聴出力は output を Audio 出力ノードへ繋いだときのみ。
+      const keep = ctx.createGain();
+      keep.gain.value = 0;
+      this.output.connect(keep);
+      keep.connect(ctx.destination);
+    }
   }
 
   async loadFromUrl(url: string): Promise<void> {
@@ -185,7 +202,8 @@ export class FileAudioSource implements AudioInput {
     const src = this.ctx.createBufferSource();
     src.buffer = this.buffer;
     src.loop = this.loop;
-    src.connect(this.analyzer.input).connect(this.ctx.destination);
+    // #128: 発音経路は constructor で確定済み（analyzer→outputGain[→destination]）。
+    src.connect(this.analyzer.input);
     src.start(0, offset);
     this.source = src;
   }

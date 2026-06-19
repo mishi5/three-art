@@ -4,7 +4,7 @@ import { PORT_TYPES, isCompatible, type PortType } from "./port-types";
 describe("port-types", () => {
   test("PORT_TYPES に ADR #59 の全型が含まれる", () => {
     const expected: PortType[] = [
-      "number", "vec2", "vec3", "color", "pose", "audio", "texture", "trigger", "points",
+      "number", "vec2", "vec3", "color", "pose", "signal", "texture", "trigger", "points", "audio",
     ];
     for (const t of expected) expect(PORT_TYPES).toContain(t);
     expect(PORT_TYPES.length).toBe(expected.length);
@@ -18,5 +18,8 @@ describe("port-types", () => {
     expect(isCompatible("number", "vec3")).toBe(false);
     expect(isCompatible("pose", "audio")).toBe(false);
     expect(isCompatible("texture", "number")).toBe(false);
+    // #127/#128: audio（実音声信号）と signal（解析結果）は別物・非互換
+    expect(isCompatible("audio", "signal")).toBe(false);
+    expect(isCompatible("signal", "audio")).toBe(false);
   });
 });

@@ -17,7 +17,7 @@ export const ONSET_PARAMS: ParamDef[] = [
 
 /** 音声入力ノード共通の出力ポート（audio / 各バンド / onset）。section は含まない。 */
 export const AUDIO_FEATURE_OUTPUTS: PortDef[] = [
-  { id: "audio", label: "audio", type: "audio", description: "音響特徴量バンドル。visual ノードの audio 入力へ繋ぐ。" },
+  { id: "signal", label: "signal", type: "signal", description: "音響特徴量バンドル（解析結果）。visual ノードの signal 入力へ繋ぐ。" },
   { id: "volume", label: "volume", type: "number", description: "全体音量（おおむね 0〜1）。" },
   { id: "bass", label: "bass", type: "number", description: "低域成分の強さ（おおむね 0〜1）。" },
   { id: "mid", label: "mid", type: "number", description: "中域成分の強さ（おおむね 0〜1）。" },
@@ -33,10 +33,10 @@ export function readOnsetParams(param: (id: string) => unknown): { threshold: nu
   };
 }
 
-/** AudioFeatures と onset から共通出力オブジェクトを組み立てる。 */
+/** AudioFeatures と onset から共通出力オブジェクトを組み立てる。バンドルのポート名は "signal"。 */
 export function audioFeatureOutputs(audio: AudioFeatures, onset: boolean): Record<string, unknown> {
   return {
-    audio,
+    signal: audio,
     volume: audio.volume, bass: audio.bass, mid: audio.mid, treble: audio.treble,
     onset,
   };
@@ -73,18 +73,26 @@ export class OnsetTracker {
 export abstract class LiveAudioRuntime {
   source: AudioInput | null = null;
   started = false;
+  /** #127/#128: 共有 AudioContext（createState で runtime から受け取る）。 */
   protected ctx: AudioContext | null = null;
   private onset = new OnsetTracker();
 
+  constructor(ctx?: AudioContext) {
+    this.ctx = ctx ?? null;
+  }
+
   protected getCtx(): AudioContext {
+    // 後方互換: 共有 ctx 未指定なら自前生成（旧挙動）。
     return (this.ctx ??= new AudioContext());
   }
 
-  /** サブクラスが具体的な音源（Mic/Display）を生成する。 */
+  /** サブクラスが具体的な音源（Mic/Display）を生成する。node-vj は destination 非接続で配線する。 */
   protected abstract createSource(ctx: AudioContext): AudioInput;
 
   async start(): Promise<void> {
-    const src = this.createSource(this.getCtx());
+    const ctx = this.getCtx();
+    void ctx.resume().catch(() => { /* gesture 不足時は次回 */ });
+    const src = this.createSource(ctx);
     await src.start();
     this.source = src;
     this.started = true;
@@ -92,6 +100,11 @@ export abstract class LiveAudioRuntime {
 
   read(): AudioFeatures {
     return this.source?.read() ?? DEFAULT_AUDIO_FEATURES;
+  }
+
+  /** #128: audioSignal 出力用の AudioNode（未起動なら null）。 */
+  audioSignalNode(): AudioNode | null {
+    return this.source?.output ?? null;
   }
 
   detectOnset(bass: number, t: number, threshold: number, cooldown: number): boolean {

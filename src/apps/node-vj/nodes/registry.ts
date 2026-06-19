@@ -25,6 +25,8 @@ import { KaleidoscopeNode } from "./KaleidoscopeNode";
 import { FractalNode } from "./FractalNode";
 import { FlashNode } from "./FlashNode";
 import { EdgeVisualNode } from "./EdgeVisualNode";
+import { AudioMixNode } from "./AudioMixNode";
+import { AudioOutputNode } from "./AudioOutputNode";
 import { ScreenNode } from "./ScreenNode";
 
 /** 既定ノードを登録したレジストリを返す。 */
@@ -49,6 +51,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(PointTransformNode);
   r.register(EnvelopeNode);
   r.register(FlipFlopNode);
+  r.register(AudioMixNode);
   // visual
   r.register(PointCloudVisualNode);
   r.register(ParticleRenderNode);
@@ -61,6 +64,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(FractalNode);
   r.register(FlashNode);
   // output
+  r.register(AudioOutputNode);
   r.register(ScreenNode);
   return r;
 }

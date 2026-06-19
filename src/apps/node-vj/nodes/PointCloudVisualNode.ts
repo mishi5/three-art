@@ -42,7 +42,7 @@ export const PointCloudVisualNode: NodeTypeDef = {
   isSink: true,
   inputs: [
     { id: "pose", label: "pose", type: "pose", description: "bones/image モードで骨格に追従させる姿勢入力。" },
-    { id: "audio", label: "audio", type: "audio", description: "音響特徴量入力（未接続なら環境の audio を使う）。" },
+    { id: "signal", label: "signal", type: "signal", description: "音響特徴量入力（未接続なら環境の特徴量を使う）。" },
   ],
   outputs: [{ id: "texture", label: "tex", type: "texture", description: "描画結果のテクスチャ（Screen やエフェクトへ繋ぐ）。" }],
   params: [
@@ -97,7 +97,7 @@ export const PointCloudVisualNode: NodeTypeDef = {
     const joints = pose?.joints ?? makeEmptyJoints();
     const visibility = pose?.visibility ?? EMPTY_VIS;
     const center = pose?.center ?? EMPTY_CENTER;
-    const audio = (ctx.input("audio") as AudioFeatures | undefined) ?? env.audio;
+    const audio = (ctx.input("signal") as AudioFeatures | undefined) ?? env.audio;
 
     s.pc.update(joints, visibility, center, audio, params, ctx.timeSec);
     const texture = s.surface.render(env.renderer, env.camera);

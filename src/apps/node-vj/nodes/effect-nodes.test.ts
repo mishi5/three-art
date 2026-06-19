@@ -26,7 +26,7 @@ describe("effect nodes (#64)", () => {
   });
 
   test("EdgeVisual は pose/audio 入力 + texture 出力の visual", () => {
-    expect(EdgeVisualNode.inputs.map((p) => p.type)).toEqual(["pose", "audio"]);
+    expect(EdgeVisualNode.inputs.map((p) => p.type)).toEqual(["pose", "signal"]);
     expect(EdgeVisualNode.outputs.map((p) => p.type)).toEqual(["texture"]);
     expect(EdgeVisualNode.category).toBe("visual"); // 終端で自動表示対象
   });

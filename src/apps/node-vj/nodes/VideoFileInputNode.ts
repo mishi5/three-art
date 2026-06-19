@@ -10,6 +10,7 @@ import {
   AUDIO_FEATURE_OUTPUTS, ONSET_PARAMS, OnsetTracker,
   audioFeatureOutputs, readOnsetParams,
 } from "./audio-feature-logic";
+import { SIGNAL_OUTPUT, signalOutput } from "../graph/audio-signal";
 
 /**
  * VideoFileInput ノードの永続状態（#66）。動画ファイルをループ再生して texture を供給する。
@@ -36,7 +37,9 @@ export class VideoFileInputRuntime implements PlaybackControl {
   /** 現在 audio 抽出が有効か（gain/muted の状態と一致）。 */
   private audioActive = false;
 
-  constructor() {
+  constructor(ctx?: AudioContext) {
+    // #127/#128: 共有 AudioContext（未指定は後方互換で遅延自前生成）。
+    this.audioCtx = ctx ?? null;
     this.video = document.createElement("video");
     this.video.playsInline = true;
     this.video.muted = true;     // 自動再生のため必須
@@ -60,9 +63,10 @@ export class VideoFileInputRuntime implements PlaybackControl {
   }
 
   /**
-   * #116: 音声抽出の ON/OFF。ON の初回に <video> を MediaElementAudioSourceNode 経由で
-   * analyser + gain → destination へ接続する（source は要素ごとに 1 度のみ生成）。
-   * source → analyser → gain → destination。OFF は gain=0 + muted で無音化（ノードは保持）。
+   * #116/#128: 音声抽出の ON/OFF。ON の初回に <video> を MediaElementAudioSourceNode 経由で
+   * analyser + gain（出力）へ接続する（source は要素ごとに 1 度のみ生成）。
+   * source → analyser → gain(=signal 出力)。destination へは繋がない（発音は Audio 出力ノード経由）。
+   * OFF は muted + signal 非公開で無音化（ノードは保持）。
    */
   setAudioEnabled(enabled: boolean): void {
     if (enabled === this.audioActive) return;
@@ -70,27 +74,35 @@ export class VideoFileInputRuntime implements PlaybackControl {
       if (!this.started) return; // 読込前は何もしない（loadFile 後に有効化される）
       this.ensureAudioGraph();
       this.video.muted = false;
-      if (this.gain) this.gain.gain.value = 1;
       void this.audioCtx?.resume().catch(() => { /* gesture 不足時は次回 */ });
       this.audioActive = true;
     } else {
-      if (this.gain) this.gain.gain.value = 0;
       this.video.muted = true;
       this.audioActive = false;
     }
   }
 
-  /** Web Audio グラフを 1 度だけ構築する。 */
+  /** Web Audio グラフを 1 度だけ構築する（共有 ctx・destination 非接続）。 */
   private ensureAudioGraph(): void {
     if (this.mediaSource) return;
     const ctx = (this.audioCtx ??= new AudioContext());
     this.analyzer = new AudioAnalyzer(ctx);
     this.gain = ctx.createGain();
-    this.gain.gain.value = 0;
+    this.gain.gain.value = 1;
     this.mediaSource = ctx.createMediaElementSource(this.video);
     this.mediaSource.connect(this.analyzer.input);
     this.analyzer.input.connect(this.gain);
-    this.gain.connect(ctx.destination);
+    // #128: destination 直結を廃止。gain を signal として Audio 出力ノードへ繋ぐ。
+    // 無音(gain 0)の keep-alive で解析グラフを生かす（特徴量が止まらないように）。
+    const keep = ctx.createGain();
+    keep.gain.value = 0;
+    this.gain.connect(keep);
+    keep.connect(ctx.destination);
+  }
+
+  /** #128: audioSignal 出力用の AudioNode（audio=off / 未構築なら null）。 */
+  audioSignalNode(): AudioNode | null {
+    return this.audioActive ? this.gain : null;
   }
 
   /** #116: 現在の音響特徴量（audio=off / 未構築時は無音デフォルト）。 */
@@ -153,9 +165,9 @@ export class VideoFileInputRuntime implements PlaybackControl {
   dispose(): void {
     this.surface.dispose();
     this.video.pause();
+    // #128: audioCtx は runtime 共有。close せず自前ノードのみ切断する。
     this.mediaSource?.disconnect();
     this.gain?.disconnect();
-    void this.audioCtx?.close().catch(() => { /* ignore */ });
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
     this.video.remove();
   }
@@ -172,26 +184,27 @@ export const VideoFileInputNode: NodeTypeDef = {
   outputs: [
     { id: "texture", label: "tex", type: "texture", description: "動画フレームのテクスチャ（アスペクト比を入口で正規化済み）。" },
     ...AUDIO_FEATURE_OUTPUTS,
+    SIGNAL_OUTPUT,
   ],
   params: [
     { id: "loop", label: "loop", kind: "enum", default: "on", options: ["on", "off"], description: "ループ再生の ON/OFF。" },
-    { id: "audio", label: "audio", kind: "enum", default: "off", options: ["off", "on"], description: "動画音声の抽出 ON/OFF。ON で音響特徴量を出力しスピーカーへも再生する（既定 OFF=無音・映像のみ）。" },
+    { id: "extractAudio", label: "extractAudio", kind: "enum", default: "off", options: ["off", "on"], description: "動画音声の抽出 ON/OFF。ON で音響特徴量(signal)と実音声(audio)を出力（発音は Audio 出力ノードへ繋いだとき）。既定 OFF=無音・映像のみ。" },
     ...ONSET_PARAMS,
   ],
-  createState: () => new VideoFileInputRuntime(),
+  createState: (env) => new VideoFileInputRuntime(env.audioContext),
   disposeState: (state: NodeState) => (state as VideoFileInputRuntime).dispose(),
   previewSource: (state: NodeState) => (state as VideoFileInputRuntime).previewFrame(),
   evaluate: (ctx) => {
     const s = ctx.state as VideoFileInputRuntime | undefined;
-    const audioOn = ctx.param("audio") === "on";
-    if (!s) return audioFeatureOutputs(DEFAULT_AUDIO_FEATURES, false);
+    const audioOn = ctx.param("extractAudio") === "on";
+    if (!s) return { ...audioFeatureOutputs(DEFAULT_AUDIO_FEATURES, false), audio: undefined };
     s.setLoop(ctx.param("loop") !== "off");
     s.setAudioEnabled(audioOn);
     const texture = (ctx.env ? s.getTexture(ctx.env.renderer) : null) ?? undefined;
-    if (!audioOn) return { texture, ...audioFeatureOutputs(DEFAULT_AUDIO_FEATURES, false) };
+    if (!audioOn) return { texture, ...audioFeatureOutputs(DEFAULT_AUDIO_FEATURES, false), audio: undefined };
     const audio = s.readAudio();
     const { threshold, cooldown } = readOnsetParams(ctx.param);
     const onset = s.detectOnset(audio.bass, ctx.timeSec, threshold, cooldown);
-    return { texture, ...audioFeatureOutputs(audio, onset) };
+    return { texture, ...audioFeatureOutputs(audio, onset), ...signalOutput(s.audioSignalNode()) };
   },
 };

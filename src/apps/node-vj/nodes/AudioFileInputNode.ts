@@ -6,6 +6,7 @@ import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "../../../core/types"
 import type { NodeState, NodeTypeDef } from "../graph/node-type";
 import { sectionIndexAt } from "./input-node-logic";
 import { AUDIO_FEATURE_OUTPUTS, ONSET_PARAMS, OnsetTracker, audioFeatureOutputs, readOnsetParams } from "./audio-feature-logic";
+import { SIGNAL_OUTPUT, signalOutput } from "../graph/audio-signal";
 import type { PlaybackControl } from "./playback";
 
 /**
@@ -18,13 +19,24 @@ export class AudioFileInputRuntime implements PlaybackControl {
   started = false;
   /** #99: ノード上に表示する現在のファイル名（未選択は null）。 */
   fileName: string | null = null;
+  /** #127/#128: 共有 AudioContext（createState で runtime から受け取る）。 */
   private ctx: AudioContext | null = null;
   private onset = new OnsetTracker();
   /** #115: ループ再生 ON/OFF。loadFile 前の指定も保持し、読込後の source に適用する。 */
   private loop = true;
 
+  constructor(ctx?: AudioContext) {
+    this.ctx = ctx ?? null;
+  }
+
   private getCtx(): AudioContext {
+    // 後方互換: 共有 ctx 未指定なら自前生成。
     return (this.ctx ??= new AudioContext());
+  }
+
+  /** #128: audioSignal 出力用の AudioNode（未読込なら null）。 */
+  audioSignalNode(): AudioNode | null {
+    return this.source?.output ?? null;
   }
 
   /** #115: ループ ON/OFF を設定（再生中・未読込どちらでも保持）。 */
@@ -40,7 +52,10 @@ export class AudioFileInputRuntime implements PlaybackControl {
     this.source = null;
     this.started = false;
     this.fileName = file.name;
-    const src = new FileAudioSource(this.getCtx());
+    const ctx = this.getCtx();
+    void ctx.resume().catch(() => { /* gesture 不足時は次回 */ });
+    // #128: destination 非接続。signal を Audio 出力ノード経由で鳴らす。
+    const src = new FileAudioSource(ctx, { connectToDestination: false });
     src.setLoop(this.loop);
     await src.loadFromFile(file);
     await src.start();
@@ -99,21 +114,25 @@ export const AudioFileInputNode: NodeTypeDef = {
   isSink: false,
   fileInput: { accept: "audio/*" },
   inputs: [],
-  outputs: [...AUDIO_FEATURE_OUTPUTS, { id: "section", label: "section", type: "number", description: "再生位置から判定した現在の楽曲セクション番号（0 始まり、未再生は -1）。" }],
+  outputs: [
+    ...AUDIO_FEATURE_OUTPUTS,
+    { id: "section", label: "section", type: "number", description: "再生位置から判定した現在の楽曲セクション番号（0 始まり、未再生は -1）。" },
+    SIGNAL_OUTPUT,
+  ],
   params: [
     { id: "loop", label: "loop", kind: "enum", default: "on", options: ["on", "off"], description: "ループ再生の ON/OFF。" },
     ...ONSET_PARAMS,
   ],
-  createState: () => new AudioFileInputRuntime(),
+  createState: (env) => new AudioFileInputRuntime(env.audioContext),
   disposeState: (state: NodeState) => (state as AudioFileInputRuntime).dispose(),
   evaluate: (ctx) => {
     const s = ctx.state as AudioFileInputRuntime | undefined;
-    if (!s) return { ...audioFeatureOutputs(DEFAULT_AUDIO_FEATURES, false), section: -1 };
+    if (!s) return { ...audioFeatureOutputs(DEFAULT_AUDIO_FEATURES, false), section: -1, audio: undefined };
     s.setLoop(ctx.param("loop") !== "off");
     const audio = s.read();
     const { threshold, cooldown } = readOnsetParams(ctx.param);
     const onset = s.detectOnset(audio.bass, ctx.timeSec, threshold, cooldown);
     const section = s.started ? sectionIndexAt(s.boundaries, s.currentTime()) : -1;
-    return { ...audioFeatureOutputs(audio, onset), section };
+    return { ...audioFeatureOutputs(audio, onset), section, ...signalOutput(s.audioSignalNode()) };
   },
 };

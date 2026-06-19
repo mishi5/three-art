@@ -27,7 +27,7 @@ describe("PointShape mode param (#104)", () => {
   });
 
   test("audio 入力ポートを持つ（noise の bass 反応用・任意）", () => {
-    expect(PointShapeNode.inputs.find((p) => p.id === "audio")?.type).toBe("audio");
+    expect(PointShapeNode.inputs.find((p) => p.id === "signal")?.type).toBe("signal");
   });
 });
 

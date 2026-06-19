@@ -56,8 +56,8 @@ describe("VideoFileInputNode (#66/#116)", () => {
 
 describe("RainVisualNode", () => {
   test("audio 入力ポートを持つ", () => {
-    expect(RainVisualNode.inputs.map((p) => p.id)).toContain("audio");
-    expect(RainVisualNode.inputs.find((p) => p.id === "audio")?.type).toBe("audio");
+    expect(RainVisualNode.inputs.map((p) => p.id)).toContain("signal");
+    expect(RainVisualNode.inputs.find((p) => p.id === "signal")?.type).toBe("signal");
   });
 
   test("state/env 無しでは no-op（空オブジェクト）", () => {
