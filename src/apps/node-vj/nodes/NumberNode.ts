@@ -4,6 +4,7 @@ import type { NodeTypeDef } from "../graph/node-type";
 export const NumberNode: NodeTypeDef = {
   type: "Number",
   category: "input",
+  description: "固定の数値を出力する定数ソース。param value をそのまま出力する。",
   inputs: [],
   outputs: [{ id: "out", label: "n", type: "number" }],
   // 固定値を出力するためだけのノードなので value は入力ポートを持たない。

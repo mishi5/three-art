@@ -11,18 +11,18 @@ export const DEFAULT_ONSET_COOLDOWN = 0.12;
 
 /** audio 入力ノード共通の onset 調整 param（#109）。3 ノードで共有する。 */
 export const ONSET_PARAMS: ParamDef[] = [
-  { id: "onsetThreshold", label: "onsetThr", kind: "number", default: DEFAULT_ONSET_THRESHOLD, min: 0, max: 0.5, step: 0.005 },
-  { id: "onsetCooldown", label: "onsetCD", kind: "number", default: DEFAULT_ONSET_COOLDOWN, min: 0, max: 1, step: 0.01 },
+  { id: "onsetThreshold", label: "onsetThr", kind: "number", default: DEFAULT_ONSET_THRESHOLD, min: 0, max: 0.5, step: 0.005, description: "onset 発火しきい値。bass の前フレーム差がこの値を超えると発火（小さいほど敏感）。" },
+  { id: "onsetCooldown", label: "onsetCD", kind: "number", default: DEFAULT_ONSET_COOLDOWN, min: 0, max: 1, step: 0.01, description: "onset 発火後の再発火までの最小間隔（秒）。連発を防ぐ。" },
 ];
 
 /** 音声入力ノード共通の出力ポート（audio / 各バンド / onset）。section は含まない。 */
 export const AUDIO_FEATURE_OUTPUTS: PortDef[] = [
-  { id: "audio", label: "audio", type: "audio" },
-  { id: "volume", label: "volume", type: "number" },
-  { id: "bass", label: "bass", type: "number" },
-  { id: "mid", label: "mid", type: "number" },
-  { id: "treble", label: "treble", type: "number" },
-  { id: "onset", label: "onset", type: "trigger" },
+  { id: "audio", label: "audio", type: "audio", description: "音響特徴量バンドル。visual ノードの audio 入力へ繋ぐ。" },
+  { id: "volume", label: "volume", type: "number", description: "全体音量（おおむね 0〜1）。" },
+  { id: "bass", label: "bass", type: "number", description: "低域成分の強さ（おおむね 0〜1）。" },
+  { id: "mid", label: "mid", type: "number", description: "中域成分の強さ（おおむね 0〜1）。" },
+  { id: "treble", label: "treble", type: "number", description: "高域成分の強さ（おおむね 0〜1）。" },
+  { id: "onset", label: "onset", type: "trigger", description: "ビート（音の立ち上がり）検出時に発火する trigger。" },
 ];
 
 /** ctx.param から onset しきい値/cooldown を読み出す（未設定は既定値）。 */

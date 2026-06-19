@@ -93,15 +93,16 @@ class BlendSurface {
 export const BlendNode: NodeTypeDef = {
   type: "Blend",
   category: "visual",
+  description: "2 枚のテクスチャ a・b を mode で合成して出力する。未接続入力は黒。",
   isSink: true,
   inputs: [
-    { id: "a", label: "a", type: "texture" },
-    { id: "b", label: "b", type: "texture" },
+    { id: "a", label: "a", type: "texture", description: "下地（base）テクスチャ。" },
+    { id: "b", label: "b", type: "texture", description: "重ねる（blend）テクスチャ。" },
   ],
-  outputs: [{ id: "texture", label: "tex", type: "texture" }],
+  outputs: [{ id: "texture", label: "tex", type: "texture", description: "合成結果のテクスチャ。" }],
   params: [
-    { id: "mode", label: "mode", kind: "enum", default: "add", options: [...BLEND_MODES] },
-    { id: "mix", label: "mix", kind: "number", default: 1, min: 0, max: 1, step: 0.01 },
+    { id: "mode", label: "mode", kind: "enum", default: "add", options: [...BLEND_MODES], description: "合成モード。normal=上書き / add=加算 / multiply=乗算 / screen=スクリーン。" },
+    { id: "mix", label: "mix", kind: "number", default: 1, min: 0, max: 1, step: 0.01, description: "合成の強さ。0 で a そのまま、1 で完全合成（a と合成結果の補間）。" },
   ],
   createState: () => new BlendSurface(),
   disposeState: (state: NodeState) => (state as BlendSurface).dispose(),

@@ -142,15 +142,16 @@ interface PointShapeState {
 export const PointShapeNode: NodeTypeDef = {
   type: "PointShape",
   category: "input",
+  description: "cube/sphere/lattice の点群を GPU 生成するノード。位置テクスチャを points として出力する。",
   isSink: false,
-  inputs: [{ id: "audio", label: "audio", type: "audio" }],
-  outputs: [{ id: "points", label: "points", type: "points" }],
+  inputs: [{ id: "audio", label: "audio", type: "audio", description: "bass でノイズ歪みを増幅するための音響特徴量入力。" }],
+  outputs: [{ id: "points", label: "points", type: "points", description: "GPU 位置テクスチャ参照（ParticleRender 等の points 入力へ繋ぐ）。" }],
   params: [
-    { id: "mode", label: "mode", kind: "enum", default: "cube", options: ["cube", "sphere", "lattice"] },
-    { id: "count", label: "count", kind: "int", default: 4000, min: 1, max: MAX_COUNT, step: 1, noInput: true },
-    { id: "radius", label: "radius", kind: "number", default: 0.5, min: 0.05, max: 3, step: 0.01 },
-    { id: "noiseAmount", label: "noiseAmount", kind: "number", default: 0, min: 0, max: 1, step: 0.01 },
-    { id: "noiseScale", label: "noiseScale", kind: "number", default: 1.0, min: 0.1, max: 5, step: 0.1 },
+    { id: "mode", label: "mode", kind: "enum", default: "cube", options: ["cube", "sphere", "lattice"], description: "形状。cube=立方体内に散布 / sphere=球面 / lattice=規則格子。" },
+    { id: "count", label: "count", kind: "int", default: 4000, min: 1, max: MAX_COUNT, step: 1, noInput: true, description: "粒子数（lattice は近い N^3 に丸める）。" },
+    { id: "radius", label: "radius", kind: "number", default: 0.5, min: 0.05, max: 3, step: 0.01, description: "形状の半径（world m）。" },
+    { id: "noiseAmount", label: "noiseAmount", kind: "number", default: 0, min: 0, max: 1, step: 0.01, description: "simplex noise による歪みの強さ（0=綺麗な形状。bass で増幅される）。" },
+    { id: "noiseScale", label: "noiseScale", kind: "number", default: 1.0, min: 0.1, max: 5, step: 0.1, description: "ノイズの空間周波数（大きいほど細かい歪み）。" },
   ],
   createState(): PointShapeState {
     const uniforms: ShapeUniforms = {

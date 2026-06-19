@@ -43,16 +43,17 @@ interface PointTransformState {
 export const PointTransformNode: NodeTypeDef = {
   type: "PointTransform",
   category: "process",
+  description: "点群を平行移動・回転する。回転（原点まわり）→平行移動の順に適用し points を出力する。",
   isSink: false,
-  inputs: [{ id: "points", label: "points", type: "points" }],
-  outputs: [{ id: "points", label: "points", type: "points" }],
+  inputs: [{ id: "points", label: "points", type: "points", description: "変換元の GPU 位置テクスチャ参照（未接続は no-op）。" }],
+  outputs: [{ id: "points", label: "points", type: "points", description: "変換後の GPU 位置テクスチャ参照。" }],
   params: [
-    { id: "translateX", label: "translateX", kind: "number", default: 0, min: -3, max: 3, step: 0.01 },
-    { id: "translateY", label: "translateY", kind: "number", default: 0, min: -3, max: 3, step: 0.01 },
-    { id: "translateZ", label: "translateZ", kind: "number", default: 0, min: -3, max: 3, step: 0.01 },
-    { id: "rotateX", label: "rotateX", kind: "number", default: 0, min: -180, max: 180, step: 1 },
-    { id: "rotateY", label: "rotateY", kind: "number", default: 0, min: -180, max: 180, step: 1 },
-    { id: "rotateZ", label: "rotateZ", kind: "number", default: 0, min: -180, max: 180, step: 1 },
+    { id: "translateX", label: "translateX", kind: "number", default: 0, min: -3, max: 3, step: 0.01, description: "X 方向の平行移動（world m）。" },
+    { id: "translateY", label: "translateY", kind: "number", default: 0, min: -3, max: 3, step: 0.01, description: "Y 方向の平行移動（world m）。" },
+    { id: "translateZ", label: "translateZ", kind: "number", default: 0, min: -3, max: 3, step: 0.01, description: "Z 方向の平行移動（world m）。" },
+    { id: "rotateX", label: "rotateX", kind: "number", default: 0, min: -180, max: 180, step: 1, description: "X 軸まわりの回転（度）。" },
+    { id: "rotateY", label: "rotateY", kind: "number", default: 0, min: -180, max: 180, step: 1, description: "Y 軸まわりの回転（度）。" },
+    { id: "rotateZ", label: "rotateZ", kind: "number", default: 0, min: -180, max: 180, step: 1, description: "Z 軸まわりの回転（度）。" },
   ],
   createState(): PointTransformState {
     const uniforms: TransformUniforms = {

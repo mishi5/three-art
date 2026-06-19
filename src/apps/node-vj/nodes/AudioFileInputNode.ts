@@ -95,12 +95,13 @@ export class AudioFileInputRuntime implements PlaybackControl {
 export const AudioFileInputNode: NodeTypeDef = {
   type: "AudioFileInput",
   category: "input",
+  description: "音声ファイルを再生して入力するノード。audio / 各バンド / onset に加え、楽曲解析した section を出力する。",
   isSink: false,
   fileInput: { accept: "audio/*" },
   inputs: [],
-  outputs: [...AUDIO_FEATURE_OUTPUTS, { id: "section", label: "section", type: "number" }],
+  outputs: [...AUDIO_FEATURE_OUTPUTS, { id: "section", label: "section", type: "number", description: "再生位置から判定した現在の楽曲セクション番号（0 始まり、未再生は -1）。" }],
   params: [
-    { id: "loop", label: "loop", kind: "enum", default: "on", options: ["on", "off"] },
+    { id: "loop", label: "loop", kind: "enum", default: "on", options: ["on", "off"], description: "ループ再生の ON/OFF。" },
     ...ONSET_PARAMS,
   ],
   createState: () => new AudioFileInputRuntime(),

@@ -140,16 +140,17 @@ export class CameraInputRuntime {
 export const CameraInputNode: NodeTypeDef = {
   type: "CameraInput",
   category: "input",
+  description: "カメラ映像と姿勢推定を入力するノード。映像 texture・骨格 pose・動き量 motion を出力する。",
   isSink: false,
   inputs: [],
   outputs: [
-    { id: "texture", label: "tex", type: "texture" },
-    { id: "pose", label: "pose", type: "pose" },
-    { id: "motion", label: "motion", type: "number" },
+    { id: "texture", label: "tex", type: "texture", description: "カメラ映像のテクスチャ（アスペクト比を入口で正規化済み）。" },
+    { id: "pose", label: "pose", type: "pose", description: "MediaPipe Pose で推定した骨格（poseDetect=off なら空）。" },
+    { id: "motion", label: "motion", type: "number", description: "骨格の動き量（大きいほど激しく動いている）。" },
   ],
   params: [
-    { id: "poseDetect", label: "poseDetect", kind: "enum", default: "on", options: ["on", "off"] },
-    { id: "skeleton", label: "skeleton", kind: "enum", default: "off", options: ["off", "on"] },
+    { id: "poseDetect", label: "poseDetect", kind: "enum", default: "on", options: ["on", "off"], description: "姿勢推定の ON/OFF。off なら映像のみ供給し推定コストをゼロにする。" },
+    { id: "skeleton", label: "skeleton", kind: "enum", default: "off", options: ["off", "on"], description: "プレビュー小窓に骨格線を重畳表示するか。" },
   ],
   createState: () => new CameraInputRuntime(),
   disposeState: (state: NodeState) => (state as CameraInputRuntime).dispose(),

@@ -22,6 +22,8 @@ export interface PortDef {
   id: string;
   label: string;
   type: PortType;
+  /** #114: マウスオーバー時に出すツールチップ説明（任意）。 */
+  description?: string;
 }
 
 export type ParamKind = "number" | "int" | "boolean" | "enum" | "string";
@@ -37,6 +39,8 @@ export interface ParamDef {
   options?: string[];
   /** true なら数値 param でも入力ポートを作らない（Number.value のような固定値ソース用）。 */
   noInput?: boolean;
+  /** #114: マウスオーバー時に出すツールチップ説明（任意）。 */
+  description?: string;
 }
 
 /** evaluate に渡される文脈。入力値は接続解決済み（未接続は param フォールバック）。 */
@@ -58,6 +62,8 @@ export interface EvalContext {
 export interface NodeTypeDef {
   type: string;
   category?: string;
+  /** #114: マウスオーバー時に出すノード説明（任意）。 */
+  description?: string;
   inputs: PortDef[];
   outputs: PortDef[];
   params: ParamDef[];
