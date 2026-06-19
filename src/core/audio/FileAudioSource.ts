@@ -14,19 +14,24 @@ export function clampSeek(t: number, duration: number): number {
 
 export type PlaybackState = "stopped" | "playing" | "paused";
 
-/** 状態と内部時刻から現在の再生位置を算出。playing 中だけ ctxNow を使う。 */
+/**
+ * 状態と内部時刻から現在の再生位置を算出。playing 中だけ ctxNow を使う。
+ * loop=true（既定）は曲長で wrap、loop=false は曲末で duration に張り付く（#115）。
+ */
 export function computeCurrentTime(
   state: PlaybackState,
   playOffset: number,
   startedAt: number | null,
   ctxNow: number,
   duration: number,
+  loop = true,
 ): number {
   if (state === "stopped") return 0;
   if (state === "paused") return playOffset;
   if (startedAt === null || duration <= 0) return 0;
-  const elapsed = ctxNow - startedAt;
-  const raw = (playOffset + elapsed) % duration;
+  const t = playOffset + (ctxNow - startedAt);
+  if (!loop) return Math.max(0, Math.min(t, duration));   // loop off: 曲末で停止位置に張り付く
+  const raw = t % duration;
   return raw < 0 ? raw + duration : raw;
 }
 
@@ -36,6 +41,8 @@ export class FileAudioSource implements AudioInput {
   private source: AudioBufferSourceNode | null = null;
   private buffer: AudioBuffer | null = null;
   private state: PlaybackState = "stopped";
+  /** #115: ループ再生 ON/OFF。既定 true。 */
+  private loop = true;
   /** 曲頭からの累積位置 (秒)。pause/seek で更新。 */
   private playOffset = 0;
   /** state==="playing" 突入時の ctx.currentTime。それ以外は null。 */
@@ -79,6 +86,7 @@ export class FileAudioSource implements AudioInput {
       this.startedAt,
       this.ctx.currentTime,
       this.buffer.duration,
+      this.loop,
     );
     this.disposeSource();
     this.startedAt = null;
@@ -136,6 +144,12 @@ export class FileAudioSource implements AudioInput {
     return this.state === "playing";
   }
 
+  /** #115: ループ再生 ON/OFF。再生中の source にも即反映する。 */
+  setLoop(loop: boolean): void {
+    this.loop = loop;
+    if (this.source) this.source.loop = loop;
+  }
+
   stop(): void {
     this.disposeSource();
     this.state = "stopped";
@@ -161,6 +175,7 @@ export class FileAudioSource implements AudioInput {
       this.startedAt,
       this.ctx.currentTime,
       this.buffer?.duration ?? 0,
+      this.loop,
     );
   }
 
@@ -169,7 +184,7 @@ export class FileAudioSource implements AudioInput {
     if (!this.buffer) return;
     const src = this.ctx.createBufferSource();
     src.buffer = this.buffer;
-    src.loop = true;
+    src.loop = this.loop;
     src.connect(this.analyzer.input).connect(this.ctx.destination);
     src.start(0, offset);
     this.source = src;

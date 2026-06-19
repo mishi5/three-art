@@ -76,6 +76,13 @@ describe("AudioFileInputNode (#100)", () => {
     expect(typeof AudioFileInputNode.createState).toBe("function");
   });
 
+  test("loop param（enum on/off, 既定 on）を持つ（#115, VideoFileInput と同形）", () => {
+    const loop = AudioFileInputNode.params.find((p) => p.id === "loop");
+    expect(loop?.kind).toBe("enum");
+    expect(loop?.options).toEqual(["on", "off"]);
+    expect(loop?.default).toBe("on");
+  });
+
   test("プレビュー対象でない", () => {
     expect(nodeHasPreview(AudioFileInputNode)).toBe(false);
   });
