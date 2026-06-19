@@ -20,11 +20,11 @@ function ctxNoState(over: Partial<EvalContext> = {}): EvalContext {
 const FEATURE_IDS = ["audio", "volume", "bass", "mid", "treble", "onset"];
 
 describe("MicInputNode (#100)", () => {
-  test("ポート定義: 音響特徴量のみ（section 無し）・param 無し", () => {
+  test("ポート定義: 音響特徴量のみ（section 無し）・onset param（#109）", () => {
     expect(MicInputNode.type).toBe("MicInput");
     expect(MicInputNode.category).toBe("input");
     expect(MicInputNode.outputs.map((p) => p.id)).toEqual(FEATURE_IDS);
-    expect(MicInputNode.params).toEqual([]);
+    expect(MicInputNode.params.map((p) => p.id)).toEqual(["onsetThreshold", "onsetCooldown"]);
   });
 
   test("state 無しでは onset=false・デフォルト audio", () => {
@@ -40,10 +40,10 @@ describe("MicInputNode (#100)", () => {
 });
 
 describe("DisplayAudioInputNode (#100)", () => {
-  test("ポート定義: 音響特徴量のみ（section 無し）・param 無し", () => {
+  test("ポート定義: 音響特徴量のみ（section 無し）・onset param（#109）", () => {
     expect(DisplayAudioInputNode.type).toBe("DisplayAudioInput");
     expect(DisplayAudioInputNode.outputs.map((p) => p.id)).toEqual(FEATURE_IDS);
-    expect(DisplayAudioInputNode.params).toEqual([]);
+    expect(DisplayAudioInputNode.params.map((p) => p.id)).toEqual(["onsetThreshold", "onsetCooldown"]);
   });
 
   test("state 無しでは onset=false・デフォルト audio", () => {
