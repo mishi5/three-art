@@ -109,4 +109,19 @@ describe("wrapLines", () => {
   test("空文字は空配列", () => {
     expect(wrapLines("", 100, measure)).toEqual([]);
   });
+
+  test("空白の無い長文（日本語想定）も文字単位で折り返し各行が幅以内", () => {
+    // 25 文字の空白なし文字列を maxWidth=100(=10文字) で折り返す
+    const cjkLike = "あいうえおかきくけこさしすせそたちつてとなにぬねの";
+    const lines = wrapLines(cjkLike, 100, measure);
+    for (const ln of lines) expect(measure(ln)).toBeLessThanOrEqual(100);
+    expect(lines.length).toBeGreaterThan(1);
+    // 文字が欠落・重複していないこと
+    expect(lines.join("")).toBe(cjkLike);
+  });
+
+  test("折り返した行に空白を含む語が混在しても各行が幅以内", () => {
+    const lines = wrapLines("abc あいうえおかきくけこさしすせそ xyz", 100, measure);
+    for (const ln of lines) expect(measure(ln)).toBeLessThanOrEqual(100);
+  });
 });

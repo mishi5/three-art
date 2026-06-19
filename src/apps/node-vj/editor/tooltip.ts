@@ -78,21 +78,35 @@ export function tooltipBox(
 
 /**
  * テキストを最大幅 maxWidth(px) で折り返す。measure は文字列の描画幅を返す関数。
- * 空白区切りで貪欲に詰め、1 単語が幅を超える場合はその単語を 1 行に置く（はみ出し許容）。
+ * 空白区切りで貪欲に詰め、1 単語が幅を超える場合は文字単位で分割する
+ * （日本語など空白の無い文も枠内に収める）。
  */
 export function wrapLines(text: string, maxWidth: number, measure: (s: string) => number): string[] {
   const trimmed = text.trim();
   if (!trimmed) return [];
-  const words = trimmed.split(/\s+/);
   const lines: string[] = [];
   let current = "";
-  for (const word of words) {
-    const candidate = current ? `${current} ${word}` : word;
-    if (current && measure(candidate) > maxWidth) {
-      lines.push(current);
+  for (const word of trimmed.split(/\s+/)) {
+    // 現在行に空白付きで収まるなら詰める。
+    if (current && measure(`${current} ${word}`) <= maxWidth) {
+      current = `${current} ${word}`;
+      continue;
+    }
+    // 収まらないので改行。単語が単体で収まればそのまま新しい行に。
+    if (current) lines.push(current);
+    if (measure(word) <= maxWidth) {
       current = word;
-    } else {
-      current = candidate;
+      continue;
+    }
+    // 単語自体が幅を超える（空白の無い長文）→ 文字単位で分割。
+    current = "";
+    for (const ch of word) {
+      if (current && measure(current + ch) > maxWidth) {
+        lines.push(current);
+        current = ch;
+      } else {
+        current += ch;
+      }
     }
   }
   if (current) lines.push(current);
