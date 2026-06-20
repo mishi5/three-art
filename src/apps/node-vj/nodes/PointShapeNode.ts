@@ -141,7 +141,7 @@ interface PointShapeState {
 /** 形状生成ノード（#104: cube/sphere/lattice）。位置テクスチャを points として出力する。 */
 export const PointShapeNode: NodeTypeDef = {
   type: "PointShape",
-  category: "input",
+  category: "generator",
   description: "cube/sphere/lattice の点群を GPU 生成するノード。位置テクスチャを points として出力する。",
   isSink: false,
   inputs: [{ id: "signal", label: "signal", type: "signal", description: "bass でノイズ歪みを増幅するための音響特徴量入力。" }],

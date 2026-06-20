@@ -3,7 +3,7 @@ import type { NodeTypeDef } from "../graph/node-type";
 /** 経過秒ソース。`timeSec * scale` を出力する。 */
 export const TimeNode: NodeTypeDef = {
   type: "Time",
-  category: "input",
+  category: "generator",
   description: "経過秒を出力する時間ソース。timeSec × scale を出力する。",
   inputs: [],
   outputs: [{ id: "out", label: "sec", type: "number" }],

@@ -16,6 +16,7 @@ import {
 import { hitTest } from "./hit-test";
 import { tooltipForHit, tooltipBox, wrapLines, type TooltipContent } from "./tooltip";
 import { screenToWorld, worldToScreen, zoomAt } from "./viewport";
+import { groupNodesByCategory } from "./node-menu";
 import { duplicateNodes } from "../graph/duplicate";
 import type { History } from "../graph/history";
 import { nodesInRect, normRect } from "./selection";
@@ -83,6 +84,10 @@ export class NodeEditor {
   private spaceDown = false;
   private rafId: number | null = null;
   private toolbar: HTMLDivElement;
+  /** #103: 右クリック/ツールバーのコンテキストメニュー（開いていなければ null）。 */
+  private contextMenu: HTMLDivElement | null = null;
+  /** #103: 開いているフライアウトサブメニュー（カテゴリ → 型一覧）。 */
+  private submenu: HTMLDivElement | null = null;
   /** 出力ポート横のライブ値表示（デバッグ用）。既定 OFF、ツールバーで切替。 */
   private showOutputValues = false;
 
@@ -138,14 +143,15 @@ export class NodeEditor {
     const bar = document.createElement("div");
     // right:8 で viewport 幅に収め、ノード増加時は複数行に折り返す（重なり防止）。
     bar.style.cssText =
-      "position:fixed;left:8px;right:8px;top:8px;display:flex;gap:6px;flex-wrap:wrap;z-index:150;" +
+      "position:fixed;left:8px;right:8px;top:8px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;z-index:150;" +
       "font:12px system-ui;";
-    for (const def of this.registry.list()) {
+    // #103: カテゴリボタン → クリックでそのカテゴリの型ドロップダウンを開く（階層化）。
+    for (const group of groupNodesByCategory(this.registry.list())) {
       const btn = document.createElement("button");
-      btn.textContent = "+ " + def.type;
+      btn.textContent = group.category + " ▾";
       btn.style.cssText =
-        "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;";
-      btn.addEventListener("click", () => this.addNodeOfType(def.type));
+        "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 10px;cursor:pointer;text-transform:capitalize;";
+      btn.addEventListener("click", () => this.showCategoryDropdown(btn, group));
       bar.appendChild(btn);
     }
     // デバッグ: 出力ポート横のライブ値表示トグル（既定 OFF）。
@@ -160,18 +166,18 @@ export class NodeEditor {
     dbg.addEventListener("click", () => { this.showOutputValues = !this.showOutputValues; syncDbg(); });
     bar.appendChild(dbg);
     const hint = document.createElement("span");
-    hint.textContent = "  空白ドラッグ=矩形選択 / Space|右ドラッグ=パン / ホイール=ズーム / 0=ズーム100% / Cmd+クリック=追加選択 / Cmd+C=複製 / Del=削除";
+    hint.textContent = "  右クリック=メニュー / 空白ドラッグ=矩形選択 / Space|右ドラッグ=パン / ホイール=ズーム / 0=ズーム100% / Cmd+C=複製 / Del=削除";
     hint.style.cssText = "color:#888;align-self:center;";
     bar.appendChild(hint);
     document.body.appendChild(bar);
     return bar;
   }
 
-  addNodeOfType(type: string): void {
+  addNodeOfType(type: string, worldPos?: { x: number; y: number }): void {
     const def = this.registry.require(type);
-    // #92: 画面左上付近（120px）に出すよう world 座標へ変換（ズーム反映）。
+    // #92/#103: world 座標へ配置。worldPos 指定（右クリック）はその位置、未指定は画面左上付近。
     const jitter = Math.round((idCounter % 5) * 24);
-    const w = screenToWorld(120 + jitter, 120 + jitter, this.offset, this.scale);
+    const w = worldPos ?? screenToWorld(120 + jitter, 120 + jitter, this.offset, this.scale);
     const node: NodeInstance = {
       id: genId("n"),
       type,
@@ -361,6 +367,13 @@ export class NodeEditor {
   }
 
   private onUp = (e: PointerEvent): void => {
+    // #103: 右クリック（移動なし）はコンテキストメニュー。右ドラッグはパンのまま。
+    if (this.drag?.kind === "pan" && e.button === 2 &&
+        Math.hypot(e.clientX - this.drag.startX, e.clientY - this.drag.startY) < DRAG_THRESHOLD) {
+      this.drag = null;
+      this.openContextMenu(e);
+      return;
+    }
     if (this.drag?.kind === "rect") {
       // 矩形確定。移動なし（クリック）は選択解除になる（空矩形は何も拾わない）。
       const w = this.toWorld(e);
@@ -451,8 +464,143 @@ export class NodeEditor {
   };
 
   private onContextMenu = (e: Event): void => {
-    e.preventDefault();
+    e.preventDefault(); // ネイティブメニューは出さない（独自メニューを onUp で出す）
   };
+
+  /** #103: 右クリック位置にコンテキストメニューを開く。ノード上ならノード操作、空白なら追加メニュー。 */
+  private openContextMenu(e: PointerEvent): void {
+    const w = this.toWorld(e);
+    const hit = hitTest(this.graph.nodes, this.registry, w.x, w.y);
+    if (hit && hit.kind !== "port") {
+      this.showNodeMenu(e.clientX, e.clientY, hit.node);
+    } else {
+      this.showAddMenu(e.clientX, e.clientY, w);
+    }
+  }
+
+  /** メニュー DOM の土台を作る（既存メニューは閉じる）。 */
+  private buildMenu(screenX: number, screenY: number): HTMLDivElement {
+    this.closeContextMenu();
+    const menu = document.createElement("div");
+    menu.style.cssText =
+      `position:fixed;left:${screenX}px;top:${screenY}px;z-index:300;background:#16161c;` +
+      "border:1px solid #444;border-radius:6px;padding:4px;font:12px system-ui;color:#ddd;" +
+      "max-height:80vh;overflow:auto;box-shadow:0 4px 16px rgba(0,0,0,0.5);min-width:120px;";
+    // メニュー外クリックで閉じる（次フレームから購読し、開いた右クリック up を拾わない）。
+    setTimeout(() => window.addEventListener("pointerdown", this.closeOnOutside, true), 0);
+    this.contextMenu = menu;
+    document.body.appendChild(menu);
+    return menu;
+  }
+
+  private addMenuLabel(menu: HTMLElement, text: string): void {
+    const el = document.createElement("div");
+    el.textContent = text;
+    el.style.cssText = "color:#666;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;padding:4px 8px 2px;";
+    menu.appendChild(el);
+  }
+
+  private addMenuItem(menu: HTMLElement, text: string, onClick: () => void): void {
+    const item = document.createElement("div");
+    item.textContent = text;
+    item.style.cssText = "padding:4px 10px;border-radius:4px;cursor:pointer;white-space:nowrap;";
+    item.addEventListener("mouseenter", () => { item.style.background = "#2a2a36"; });
+    item.addEventListener("mouseleave", () => { item.style.background = "transparent"; });
+    item.addEventListener("click", () => { this.closeContextMenu(); onClick(); });
+    menu.appendChild(item);
+  }
+
+  /** 階層メニューのカテゴリ行（ホバーで型のサブメニューを開く）。 */
+  private addCategoryRow(menu: HTMLElement, group: { category: string; types: string[] }, worldPos?: { x: number; y: number }): void {
+    const row = document.createElement("div");
+    row.style.cssText =
+      "display:flex;justify-content:space-between;gap:12px;padding:4px 10px;border-radius:4px;cursor:default;white-space:nowrap;";
+    const name = document.createElement("span"); name.textContent = group.category;
+    const arrow = document.createElement("span"); arrow.textContent = "▸"; arrow.style.color = "#888";
+    row.append(name, arrow);
+    row.addEventListener("mouseenter", () => {
+      row.style.background = "#2a2a36";
+      const r = row.getBoundingClientRect();
+      this.openSubmenu(r.right - 2, r.top - 4, group.types, worldPos);
+    });
+    row.addEventListener("mouseleave", () => { row.style.background = "transparent"; });
+    menu.appendChild(row);
+  }
+
+  /** カテゴリ行のホバーで開く型一覧サブメニュー（フライアウト）。 */
+  private openSubmenu(x: number, y: number, types: string[], worldPos?: { x: number; y: number }): void {
+    this.closeSubmenu();
+    const sub = document.createElement("div");
+    sub.style.cssText =
+      `position:fixed;left:${x}px;top:${y}px;z-index:301;background:#16161c;` +
+      "border:1px solid #444;border-radius:6px;padding:4px;font:12px system-ui;color:#ddd;" +
+      "max-height:80vh;overflow:auto;box-shadow:0 4px 16px rgba(0,0,0,0.5);min-width:120px;";
+    for (const type of types) {
+      this.addMenuItem(sub, "+ " + type, () => this.addNodeOfType(type, worldPos));
+    }
+    this.submenu = sub;
+    document.body.appendChild(sub);
+    // 画面端からはみ出す場合は左側・上側へ寄せる。
+    const r = sub.getBoundingClientRect();
+    if (r.right > window.innerWidth) sub.style.left = `${Math.max(4, x - r.width - (this.contextMenu?.offsetWidth ?? 140))}px`;
+    if (r.bottom > window.innerHeight) sub.style.top = `${Math.max(4, window.innerHeight - r.height - 4)}px`;
+  }
+
+  /** 空白右クリック: カテゴリ階層の追加メニュー（型はサブメニュー）。選んだ type を world 位置に生成。 */
+  private showAddMenu(screenX: number, screenY: number, worldPos: { x: number; y: number }): void {
+    const menu = this.buildMenu(screenX, screenY);
+    this.addMenuLabel(menu, "ノードを追加");
+    for (const group of groupNodesByCategory(this.registry.list())) {
+      this.addCategoryRow(menu, group, worldPos);
+    }
+  }
+
+  /** ツールバーのカテゴリボタン押下: そのカテゴリの型ドロップダウンを下に開く。 */
+  private showCategoryDropdown(anchor: HTMLElement, group: { category: string; types: string[] }): void {
+    if (this.contextMenu) { this.closeContextMenu(); return; } // 同じボタン再押下で閉じる
+    const r = anchor.getBoundingClientRect();
+    const menu = this.buildMenu(r.left, r.bottom + 4);
+    for (const type of group.types) {
+      this.addMenuItem(menu, "+ " + type, () => this.addNodeOfType(type));
+    }
+  }
+
+  /** ノード上右クリック: 複製・削除。対象が未選択なら単独選択にしてから操作する。 */
+  private showNodeMenu(screenX: number, screenY: number, node: NodeInstance): void {
+    if (!this.selectedIds.has(node.id)) this.selectedIds = new Set([node.id]);
+    const menu = this.buildMenu(screenX, screenY);
+    const n = this.selectedIds.size;
+    this.addMenuItem(menu, n > 1 ? `複製 (${n})` : "複製", () => {
+      this.history.record(this.graph);
+      const newIds = duplicateNodes(this.graph, this.selectedIds, genId, 24);
+      this.selectedIds = new Set(newIds);
+    });
+    this.addMenuItem(menu, n > 1 ? `削除 (${n})` : "削除", () => {
+      this.history.record(this.graph);
+      for (const id of this.selectedIds) removeNode(this.graph, id);
+      this.selectedIds = new Set();
+    });
+  }
+
+  private closeOnOutside = (e: PointerEvent): void => {
+    const t = e.target as Node;
+    const inMenu = this.contextMenu?.contains(t) || this.submenu?.contains(t);
+    if (!inMenu) this.closeContextMenu();
+  };
+
+  private closeSubmenu(): void {
+    if (!this.submenu) return;
+    this.submenu.remove();
+    this.submenu = null;
+  }
+
+  private closeContextMenu(): void {
+    this.closeSubmenu();
+    if (!this.contextMenu) return;
+    window.removeEventListener("pointerdown", this.closeOnOutside, true);
+    this.contextMenu.remove();
+    this.contextMenu = null;
+  }
 
   /**
    * param 入力ポートが接続されていれば、上流ノードの直近ライブ出力値を返す。
@@ -809,6 +957,7 @@ export class NodeEditor {
     window.removeEventListener("keyup", this.onKeyUp);
     this.canvas.removeEventListener("contextmenu", this.onContextMenu);
     this.canvas.removeEventListener("wheel", this.onWheel);
+    this.closeContextMenu();
     this.toolbar.remove();
   }
 }
