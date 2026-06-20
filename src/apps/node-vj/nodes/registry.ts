@@ -24,6 +24,7 @@ import { BlurNode } from "./BlurNode";
 import { KaleidoscopeNode } from "./KaleidoscopeNode";
 import { FractalNode } from "./FractalNode";
 import { FlashNode } from "./FlashNode";
+import { TextureTransformNode } from "./TextureTransformNode";
 import { EdgeVisualNode } from "./EdgeVisualNode";
 import { AudioMixNode } from "./AudioMixNode";
 import { AudioOutputNode } from "./AudioOutputNode";
@@ -63,6 +64,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(KaleidoscopeNode);
   r.register(FractalNode);
   r.register(FlashNode);
+  r.register(TextureTransformNode);
   // output
   r.register(AudioOutputNode);
   r.register(ScreenNode);
