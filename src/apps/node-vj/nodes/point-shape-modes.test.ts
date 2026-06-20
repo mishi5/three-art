@@ -1,6 +1,6 @@
 import { expect, test, describe } from "bun:test";
 import * as THREE from "three";
-import { PointShapeNode, shapeCount, latticeN, MAX_COUNT, packPoseUniforms } from "./PointShapeNode";
+import { PointShapeNode, shapeCount, latticeN, imageGridRes, MAX_COUNT, packPoseUniforms } from "./PointShapeNode";
 import { NUM_JOINTS, type PoseFrame } from "../../../core/types";
 import type { EvalContext } from "../graph/node-type";
 
@@ -15,10 +15,10 @@ function ctxNoState(over: Partial<EvalContext> = {}): EvalContext {
 }
 
 describe("PointShape mode param (#104)", () => {
-  test("mode enum に cube/sphere/lattice/bones", () => {
+  test("mode enum に cube/sphere/lattice/bones/image", () => {
     const mode = PointShapeNode.params.find((p) => p.id === "mode");
     expect(mode?.kind).toBe("enum");
-    expect(mode?.options).toEqual(["cube", "sphere", "lattice", "bones"]);
+    expect(mode?.options).toEqual(["cube", "sphere", "lattice", "bones", "image"]);
     expect(mode?.default).toBe("cube");
   });
 
@@ -68,6 +68,30 @@ describe("PointShape bones モード (#120)", () => {
     expect(shapeCount("bones", 4000)).toBe(4000);
     expect(shapeCount("bones", 0)).toBe(1);
     expect(shapeCount("bones", 999999)).toBe(MAX_COUNT);
+  });
+});
+
+describe("PointShape image モード (#121)", () => {
+  test("texture 入力ポート（id=in・effect 系と統一）を持つ", () => {
+    const inPort = PointShapeNode.inputs.find((p) => p.id === "in");
+    expect(inPort?.type).toBe("texture");
+    expect(inPort?.label).toBe("in");
+  });
+
+  test("param は全 mode 共通のまま（image で増えない）", () => {
+    const ids = PointShapeNode.params.map((p) => p.id);
+    expect(ids).toEqual(["mode", "count", "radius", "noiseAmount", "noiseScale"]);
+  });
+
+  test("imageGridRes は round(sqrt(count))・最小1・上限128 にクランプ", () => {
+    expect(imageGridRes(4000)).toBe(63);          // round(sqrt(4000)) = 63
+    expect(imageGridRes(0)).toBe(1);
+    expect(imageGridRes(999999)).toBe(128);        // floor(sqrt(MAX_COUNT))
+  });
+
+  test("shapeCount(image) はグリッド res^2", () => {
+    expect(shapeCount("image", 4000)).toBe(imageGridRes(4000) ** 2); // 63^2 = 3969
+    expect(shapeCount("image", 999999)).toBeLessThanOrEqual(MAX_COUNT);
   });
 });
 

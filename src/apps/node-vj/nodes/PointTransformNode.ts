@@ -84,6 +84,7 @@ export const PointTransformNode: NodeTypeDef = {
       Number(ctx.param("rotateX") ?? 0), Number(ctx.param("rotateY") ?? 0), Number(ctx.param("rotateZ") ?? 0),
     ));
     s.pass.render(env.renderer);
-    return { points: { texture: s.pass.texture, count: field.count, texW: field.texW, texH: field.texH } satisfies PointField };
+    // #121: 色テクスチャは位置変換の影響を受けないのでそのまま透過する。
+    return { points: { texture: s.pass.texture, count: field.count, texW: field.texW, texH: field.texH, colorTexture: field.colorTexture } satisfies PointField };
   },
 };

@@ -12,6 +12,7 @@ import { VideoFileInputNode } from "./VideoFileInputNode";
 import { MicInputNode } from "./MicInputNode";
 import { DisplayInputNode } from "./DisplayInputNode";
 import { AudioFileInputNode } from "./AudioFileInputNode";
+import { ImageFileInputNode } from "./ImageFileInputNode";
 import { RainVisualNode } from "./RainVisualNode";
 import { PointCloudVisualNode } from "./PointCloudVisualNode";
 import { PointShapeNode } from "./PointShapeNode";
@@ -42,6 +43,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(MicInputNode);
   r.register(DisplayInputNode);
   r.register(AudioFileInputNode);
+  r.register(ImageFileInputNode);
   r.register(PointShapeNode);
   // process
   r.register(MultiplyNode);

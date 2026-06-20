@@ -19,9 +19,12 @@ const VERT = /* glsl */ `
   uniform float uBassExpansion;
   uniform float uVolume;
   uniform float uBass;
+  uniform sampler2D uColorTex;   // #121: per-particle 色テクスチャ（image モード等）
+  uniform float uHasColor;       // 0=従来 HSV(seed) / 1=uColorTex を採用
   varying vec2 vUv;
   varying float vSeed;
   varying float vBright;
+  varying vec3 vColor;
 
   void main() {
     float fx = mod(aIndex, uTexW);
@@ -31,6 +34,7 @@ const VERT = /* glsl */ `
     vec3 center = texel.rgb;
     // 位置テクスチャの .a は粒子径マスク（bones の可視度ゲート等）。通常モードは 1.0 で不変。
     float vMask = texel.a;
+    vColor = uHasColor > 0.5 ? texture2D(uColorTex, puv).rgb : vec3(0.0);
     vSeed = fract(sin(aIndex * 12.9898) * 43758.5453);
     vBright = clamp(0.7 + 0.45 * uBass + 0.2 * uVolume, 0.0, 1.0);
     // world 径（baseSize 等 × 係数）。上限も world 側で（解像度非依存）。
@@ -48,9 +52,11 @@ const FRAG = /* glsl */ `
   uniform float uHueBase;
   uniform float uHueSpread;
   uniform float uSaturation;
+  uniform float uHasColor;
   varying vec2 vUv;
   varying float vSeed;
   varying float vBright;
+  varying vec3 vColor;
 
   vec3 hsv2rgb(vec3 c) {
     vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
@@ -61,14 +67,21 @@ const FRAG = /* glsl */ `
   void main() {
     vec2 d = vUv - 0.5;
     if (dot(d, d) > 0.25) discard;     // 円形粒子
-    float hue = fract(uHueBase + uHueSpread * vSeed);
-    gl_FragColor = vec4(hsv2rgb(vec3(hue, uSaturation, vBright)), 1.0);
+    vec3 col;
+    if (uHasColor > 0.5) {
+      col = vColor * vBright;           // per-particle 色（image 等）× audio 明度
+    } else {
+      float hue = fract(uHueBase + uHueSpread * vSeed);
+      col = hsv2rgb(vec3(hue, uSaturation, vBright));
+    }
+    gl_FragColor = vec4(col, 1.0);
   }
 `;
 
 type UniformKey =
   | "uPosTex" | "uTexW" | "uTexH" | "uBaseSize" | "uVolumeSize" | "uBassExpansion"
-  | "uVolume" | "uBass" | "uHueBase" | "uHueSpread" | "uSaturation";
+  | "uVolume" | "uBass" | "uHueBase" | "uHueSpread" | "uSaturation"
+  | "uColorTex" | "uHasColor";
 type Uniforms = Record<UniformKey, THREE.IUniform>;
 
 interface ParticleRenderState {
@@ -79,6 +92,7 @@ interface ParticleRenderState {
   geom: THREE.InstancedBufferGeometry;
   mesh: THREE.Mesh;
   count: number;
+  fallbackTex: THREE.Texture;  // colorTexture 未接続時に sampler へ束ねる 1x1
 }
 
 /** count インスタンスぶんの aIndex を持つ instanced quad ジオメトリを作る。 */
@@ -114,12 +128,15 @@ export const ParticleRenderNode: NodeTypeDef = {
     { id: "saturation", label: "saturation", kind: "number", default: 0.6, min: 0, max: 1, step: 0.01, description: "彩度（0〜1）。" },
   ],
   createState(): ParticleRenderState {
+    const fallbackTex = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.RGBAFormat);
+    fallbackTex.needsUpdate = true;
     const uniforms: Uniforms = {
       uPosTex: { value: null },
       uTexW: { value: 1 }, uTexH: { value: 1 },
       uBaseSize: { value: 4 }, uVolumeSize: { value: 8 }, uBassExpansion: { value: 18 },
       uVolume: { value: 0 }, uBass: { value: 0 },
       uHueBase: { value: 0.6 }, uHueSpread: { value: 0.4 }, uSaturation: { value: 0.6 },
+      uColorTex: { value: fallbackTex }, uHasColor: { value: 0 },
     };
     const material = new THREE.ShaderMaterial({
       vertexShader: VERT, fragmentShader: FRAG, transparent: false, depthTest: true, uniforms,
@@ -130,7 +147,7 @@ export const ParticleRenderNode: NodeTypeDef = {
     mesh.frustumCulled = false;
     const surface = new VisualSurface();
     surface.scene.add(mesh);
-    return { surface, material, uniforms, base, geom, mesh, count: 1 };
+    return { surface, material, uniforms, base, geom, mesh, count: 1, fallbackTex };
   },
   disposeState(state: NodeState): void {
     const s = state as ParticleRenderState;
@@ -138,6 +155,7 @@ export const ParticleRenderNode: NodeTypeDef = {
     s.base.dispose();
     s.material.dispose();
     s.surface.dispose();
+    s.fallbackTex.dispose();
   },
   evaluate(ctx) {
     const s = ctx.state as ParticleRenderState | undefined;
@@ -167,6 +185,9 @@ export const ParticleRenderNode: NodeTypeDef = {
     u.uSaturation.value = Number(ctx.param("saturation") ?? 0.6);
     u.uVolume.value = audio.volume;
     u.uBass.value = audio.bass;
+    // #121: image 等が出力する per-particle 色テクスチャがあれば採用（無ければ HSV(seed)）。
+    u.uColorTex.value = field.colorTexture ?? s.fallbackTex;
+    u.uHasColor.value = field.colorTexture ? 1 : 0;
 
     const texture = s.surface.render(env.renderer, env.camera);
     return { texture };
