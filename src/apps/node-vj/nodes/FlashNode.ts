@@ -2,6 +2,7 @@ import * as THREE from "three";
 import type { NodeState, NodeTypeDef } from "../graph/node-type";
 import { ShaderSurface, NDC_VERTEX, blackTexture } from "../graph/shader-surface";
 import { envelopeValue } from "./EnvelopeNode";
+import { EFFECT_ENABLED_PARAM, isEffectEnabled, bypassOutput } from "./effect-bypass";
 
 /** Flash の発火状態（純）。立ち上がりエッジで triggerTime を記録し、減衰 level を返す。 */
 export class FlashRuntime {
@@ -67,6 +68,7 @@ export const FlashNode: NodeTypeDef = {
   ],
   outputs: [{ id: "texture", label: "tex", type: "texture", description: "フラッシュを加算合成したテクスチャ。" }],
   params: [
+    EFFECT_ENABLED_PARAM,
     { id: "release", label: "release", kind: "number", default: 0.15, min: 0.01, max: 3, step: 0.01, description: "発火から消えるまでの減衰時間（秒）。" },
     { id: "hue", label: "hue", kind: "number", default: 0, min: 0, max: 1, step: 0.01, description: "フラッシュ色の色相（0〜1）。" },
     { id: "saturation", label: "saturation", kind: "number", default: 0, min: 0, max: 1, step: 0.01, description: "フラッシュ色の彩度。0 で白、1 で鮮やかな原色。" },
@@ -75,8 +77,10 @@ export const FlashNode: NodeTypeDef = {
   disposeState: (state: NodeState) => (state as FlashState).dispose(),
   evaluate(ctx) {
     const s = ctx.state as FlashState | undefined;
+    if (!s) return {};
+    if (!isEffectEnabled(ctx.param)) return bypassOutput(ctx.input, s.black); // #134 無効時パススルー
     const env = ctx.env;
-    if (!s || !env) return {};
+    if (!env) return {};
     s.run.feed(Boolean(ctx.input("trigger")), ctx.timeSec);
     const level = s.run.getLevel(ctx.timeSec, Number(ctx.param("release") ?? 0.15));
     const u = s.material.uniforms;

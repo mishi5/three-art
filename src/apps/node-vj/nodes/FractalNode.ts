@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { NodeState, NodeTypeDef } from "../graph/node-type";
 import { ShaderSurface, NDC_VERTEX, blackTexture } from "../graph/shader-surface";
+import { EFFECT_ENABLED_PARAM, isEffectEnabled, bypassOutput } from "./effect-bypass";
 
 // core/effects/FractalEffect の GLSL を移植。
 const FRAG = /* glsl */ `
@@ -69,6 +70,7 @@ export const FractalNode: NodeTypeDef = {
   inputs: [{ id: "in", label: "in", type: "texture", description: "再帰コピーする元のテクスチャ。" }],
   outputs: [{ id: "texture", label: "tex", type: "texture", description: "エフェクト適用後のテクスチャ。" }],
   params: [
+    EFFECT_ENABLED_PARAM,
     { id: "iterations", label: "iterations", kind: "int", default: 3, min: 1, max: 6, step: 1, description: "再帰の重ね回数。" },
     { id: "scale", label: "scale", kind: "number", default: 0.7, min: 0.5, max: 0.95, step: 0.01, description: "1 段ごとの縮小率（小さいほど急に縮む）。" },
     { id: "rotation", label: "rotation", kind: "number", default: 0, min: -3.14, max: 3.14, step: 0.01, description: "1 段ごとの回転量（ラジアン）。" },
@@ -81,8 +83,10 @@ export const FractalNode: NodeTypeDef = {
   disposeState: (state: NodeState) => (state as FractalState).dispose(),
   evaluate(ctx) {
     const s = ctx.state as FractalState | undefined;
+    if (!s) return {};
+    if (!isEffectEnabled(ctx.param)) return bypassOutput(ctx.input, s.black); // #134 無効時パススルー
     const env = ctx.env;
-    if (!s || !env) return {};
+    if (!env) return {};
     const u = s.surface.material.uniforms;
     u.tDiffuse!.value = (ctx.input("in") as THREE.Texture | undefined) ?? s.black;
     u.uIterations!.value = Math.max(1, Math.min(6, Math.round(Number(ctx.param("iterations") ?? 3))));

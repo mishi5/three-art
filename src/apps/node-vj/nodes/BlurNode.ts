@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { NodeState, NodeTypeDef } from "../graph/node-type";
 import { ShaderSurface, NDC_VERTEX, blackTexture } from "../graph/shader-surface";
+import { EFFECT_ENABLED_PARAM, isEffectEnabled, bypassOutput } from "./effect-bypass";
 
 // core/effects/BlurEffect の gaussian カーネルを移植（h/v 2 パス）。
 const FRAG = /* glsl */ `
@@ -64,14 +65,17 @@ export const BlurNode: NodeTypeDef = {
   inputs: [{ id: "in", label: "in", type: "texture", description: "ぼかす元のテクスチャ。" }],
   outputs: [{ id: "texture", label: "tex", type: "texture", description: "ぼかし後のテクスチャ。" }],
   params: [
+    EFFECT_ENABLED_PARAM,
     { id: "strength", label: "strength", kind: "number", default: 4, min: 0, max: 20, step: 0.1, description: "ぼかしの強さ（カーネル半径）。0 以下で無効化（コストゼロ）。" },
   ],
   createState: () => new BlurState(),
   disposeState: (state: NodeState) => (state as BlurState).dispose(),
   evaluate(ctx) {
     const s = ctx.state as BlurState | undefined;
+    if (!s) return {};
+    if (!isEffectEnabled(ctx.param)) return bypassOutput(ctx.input, s.black); // #134 無効時パススルー
     const env = ctx.env;
-    if (!s || !env) return {};
+    if (!env) return {};
     const input = (ctx.input("in") as THREE.Texture | undefined) ?? s.black;
     const strength = Number(ctx.param("strength") ?? 0);
     if (strength <= 0) return { texture: input }; // パススルー（コストゼロ）
