@@ -72,8 +72,10 @@ describe("PointShape bones モード (#120)", () => {
 });
 
 describe("PointShape image モード (#121)", () => {
-  test("texture 入力ポートを持つ（任意・画像ソース）", () => {
-    expect(PointShapeNode.inputs.find((p) => p.id === "texture")?.type).toBe("texture");
+  test("texture 入力ポート（id=in・effect 系と統一）を持つ", () => {
+    const inPort = PointShapeNode.inputs.find((p) => p.id === "in");
+    expect(inPort?.type).toBe("texture");
+    expect(inPort?.label).toBe("in");
   });
 
   test("param は全 mode 共通のまま（image で増えない）", () => {

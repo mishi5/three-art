@@ -283,7 +283,7 @@ export const PointShapeNode: NodeTypeDef = {
   inputs: [
     { id: "signal", label: "signal", type: "signal", description: "bass でノイズ歪み・bones クラスタ膨張・image の Z 押し出しを増幅するための音響特徴量入力。" },
     { id: "pose", label: "pose", type: "pose", description: "bones モードで点群を骨格（13関節）に追従させる姿勢入力（任意）。" },
-    { id: "texture", label: "image", type: "texture", description: "image モードでサンプルする画像ソース（ImageFileInput 等。未接続なら image は不可視）。" },
+    { id: "in", label: "in", type: "texture", description: "image モードでサンプルする画像ソース（ImageFileInput 等。未接続なら image は不可視）。" },
   ],
   outputs: [{ id: "points", label: "points", type: "points", description: "GPU 位置テクスチャ参照（ParticleRender 等の points 入力へ繋ぐ）。image では色も付与。" }],
   params: [
@@ -353,7 +353,7 @@ export const PointShapeNode: NodeTypeDef = {
 
     // image モード: 画像テクスチャ・グリッド・平面サイズ（アスペクト比）・audio を反映。
     const isImage = mode === "image";
-    const imageTex = ctx.input("texture") as THREE.Texture | undefined;
+    const imageTex = ctx.input("in") as THREE.Texture | undefined;
     const hasImage = isImage && !!imageTex;
     const res = imageGridRes(reqCount);
     const aspect = imageAspect(imageTex);
