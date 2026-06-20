@@ -87,7 +87,7 @@ export const TextureTransformNode: NodeTypeDef = {
     { id: "rotation", label: "rotation", kind: "number", default: 0, min: -3.14159, max: 3.14159, step: 0.01, description: "中心まわりの回転（ラジアン）。" },
     { id: "flipX", label: "flipX", kind: "enum", default: "off", options: ["off", "on"], description: "左右反転。" },
     { id: "flipY", label: "flipY", kind: "enum", default: "off", options: ["off", "on"], description: "上下反転。" },
-    { id: "wrap", label: "wrap", kind: "enum", default: "clamp", options: ["clamp", "repeat", "mirror", "none"], description: "はみ出し時の処理（clamp=端を引き伸ばし / repeat=タイル / mirror=鏡像 / none=描画しない[透明]）。" },
+    { id: "wrap", label: "wrap", kind: "enum", default: "none", options: ["none", "repeat", "mirror", "clamp"], description: "はみ出し時の処理（none=描画しない[透明] / repeat=タイル / mirror=鏡像 / clamp=端を引き伸ばし）。" },
   ],
   createState: () => new TexTransformState(),
   disposeState: (state: NodeState) => (state as TexTransformState).dispose(),
