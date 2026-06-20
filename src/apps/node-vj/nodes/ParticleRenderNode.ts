@@ -27,11 +27,14 @@ const VERT = /* glsl */ `
     float fx = mod(aIndex, uTexW);
     float fy = floor(aIndex / uTexW);
     vec2 puv = (vec2(fx, fy) + 0.5) / vec2(uTexW, uTexH);
-    vec3 center = texture2D(uPosTex, puv).rgb;
+    vec4 texel = texture2D(uPosTex, puv);
+    vec3 center = texel.rgb;
+    // 位置テクスチャの .a は粒子径マスク（bones の可視度ゲート等）。通常モードは 1.0 で不変。
+    float vMask = texel.a;
     vSeed = fract(sin(aIndex * 12.9898) * 43758.5453);
     vBright = clamp(0.7 + 0.45 * uBass + 0.2 * uVolume, 0.0, 1.0);
     // world 径（baseSize 等 × 係数）。上限も world 側で（解像度非依存）。
-    float worldDia = min((uBaseSize + uVolume * uVolumeSize + uBass * uBassExpansion) * 0.012, 0.6);
+    float worldDia = min((uBaseSize + uVolume * uVolumeSize + uBass * uBassExpansion) * 0.012, 0.6) * vMask;
     // ビュー空間で板をカメラ向きに展開（ビルボード）。position は [-0.5,0.5] の quad 角。
     vec4 mvCenter = modelViewMatrix * vec4(center, 1.0);
     mvCenter.xy += position.xy * worldDia;
