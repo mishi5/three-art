@@ -1,5 +1,5 @@
 import { expect, test, describe } from "bun:test";
-import { transformUV, wrapCoord, sampleUV, type TexTransformParams } from "./texture-transform-logic";
+import { transformUV, wrapCoord, sampleUV, isOutOfBounds, type TexTransformParams } from "./texture-transform-logic";
 
 const ID: TexTransformParams = {
   offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1, rotation: 0,
@@ -49,6 +49,21 @@ describe("wrapCoord", () => {
     expect(wrapCoord(1.2, "mirror")).toBeCloseTo(0.8, 6);
     expect(wrapCoord(2.3, "mirror")).toBeCloseTo(0.3, 6);
     expect(wrapCoord(-0.2, "mirror")).toBeCloseTo(0.2, 6);
+  });
+  test("none は座標を変えない（可視判定は別）", () => {
+    expect(wrapCoord(1.2, "none")).toBeCloseTo(1.2, 6);
+    expect(wrapCoord(-0.3, "none")).toBeCloseTo(-0.3, 6);
+  });
+});
+
+describe("isOutOfBounds（none=描画しない の可視判定）", () => {
+  test("範囲内は false", () => {
+    expect(isOutOfBounds(0.0, 1.0)).toBe(false);
+    expect(isOutOfBounds(0.5, 0.5)).toBe(false);
+  });
+  test("いずれかが [0,1] 外なら true", () => {
+    expect(isOutOfBounds(-0.01, 0.5)).toBe(true);
+    expect(isOutOfBounds(0.5, 1.01)).toBe(true);
   });
 });
 

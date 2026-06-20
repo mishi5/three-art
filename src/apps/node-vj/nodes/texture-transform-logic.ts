@@ -2,7 +2,7 @@
 // シェーダ（TextureTransformNode の FRAG）と同じ式を JS でも持ち、TDD する。
 // 出力画素の UV から「どこをサンプルするか」を返す逆変換。
 
-export type WrapMode = "clamp" | "repeat" | "mirror";
+export type WrapMode = "clamp" | "repeat" | "mirror" | "none";
 
 export interface TexTransformParams {
   /** 画像の平行移動（UV 単位、+で右/下へ移動）。 */
@@ -47,14 +47,20 @@ export function transformUV(
   return { u: px + 0.5 - p.offsetX, v: py + 0.5 - p.offsetY };
 }
 
-/** 1 座標を wrap モードで [0,1] に写す。 */
+/** 1 座標を wrap モードで [0,1] に写す。"none" は写さずそのまま返す（可視判定は isOutOfBounds）。 */
 export function wrapCoord(x: number, mode: WrapMode): number {
   if (mode === "repeat") return x - Math.floor(x);
   if (mode === "mirror") {
     const m = Math.abs(x) % 2;
     return m > 1 ? 2 - m : m;
   }
+  if (mode === "none") return x;
   return Math.min(1, Math.max(0, x)); // clamp
+}
+
+/** "none"（描画しない）用: サンプル UV が [0,1] の範囲外か。範囲外なら透明にする。 */
+export function isOutOfBounds(u: number, v: number): boolean {
+  return u < 0 || u > 1 || v < 0 || v > 1;
 }
 
 /** transformUV → wrap を合成した最終サンプル UV。 */

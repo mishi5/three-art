@@ -13,14 +13,17 @@ uniform vec2 uOffset;
 uniform vec2 uScale;
 uniform float uRotation;
 uniform vec2 uFlip;     // 0=off, 1=on
-uniform float uWrap;    // 0=clamp, 1=repeat, 2=mirror
+uniform float uWrap;    // 0=clamp, 1=repeat, 2=mirror, 3=none(透明)
 uniform float uAspect;
 
 float wrapC(float x, float m) {
   if (m < 0.5) return clamp(x, 0.0, 1.0);
   if (m < 1.5) return fract(x);
-  float w = mod(abs(x), 2.0);
-  return w > 1.0 ? 2.0 - w : w;
+  if (m < 2.5) {
+    float w = mod(abs(x), 2.0);
+    return w > 1.0 ? 2.0 - w : w;
+  }
+  return x; // none: そのまま（範囲外は透明にする）
 }
 
 void main() {
@@ -34,12 +37,17 @@ void main() {
   if (uFlip.x > 0.5) p.x = -p.x;
   if (uFlip.y > 0.5) p.y = -p.y;
   vec2 suv = p + 0.5 - uOffset;
+  // none(=3): 範囲外は描画しない（透明）。
+  if (uWrap > 2.5 && (suv.x < 0.0 || suv.x > 1.0 || suv.y < 0.0 || suv.y > 1.0)) {
+    gl_FragColor = vec4(0.0);
+    return;
+  }
   suv = vec2(wrapC(suv.x, uWrap), wrapC(suv.y, uWrap));
   gl_FragColor = texture2D(tDiffuse, suv);
 }
 `;
 
-const WRAP_INT: Record<string, number> = { clamp: 0, repeat: 1, mirror: 2 };
+const WRAP_INT: Record<string, number> = { clamp: 0, repeat: 1, mirror: 2, none: 3 };
 
 class TexTransformState {
   readonly black = blackTexture();
@@ -79,7 +87,7 @@ export const TextureTransformNode: NodeTypeDef = {
     { id: "rotation", label: "rotation", kind: "number", default: 0, min: -3.14159, max: 3.14159, step: 0.01, description: "中心まわりの回転（ラジアン）。" },
     { id: "flipX", label: "flipX", kind: "enum", default: "off", options: ["off", "on"], description: "左右反転。" },
     { id: "flipY", label: "flipY", kind: "enum", default: "off", options: ["off", "on"], description: "上下反転。" },
-    { id: "wrap", label: "wrap", kind: "enum", default: "clamp", options: ["clamp", "repeat", "mirror"], description: "はみ出し時の処理（clamp=端を引き伸ばし / repeat=タイル / mirror=鏡像）。" },
+    { id: "wrap", label: "wrap", kind: "enum", default: "clamp", options: ["clamp", "repeat", "mirror", "none"], description: "はみ出し時の処理（clamp=端を引き伸ばし / repeat=タイル / mirror=鏡像 / none=描画しない[透明]）。" },
   ],
   createState: () => new TexTransformState(),
   disposeState: (state: NodeState) => (state as TexTransformState).dispose(),
