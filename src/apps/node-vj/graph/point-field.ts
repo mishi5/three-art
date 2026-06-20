@@ -11,6 +11,11 @@ export interface PointField {
   count: number;
   texW: number;
   texH: number;
+  /**
+   * #121: 任意の per-particle 色テクスチャ（RGBA32F, RGB=色, 1テクセル=1粒子）。
+   * image モード等が出力する。無ければ ParticleRender は従来の HSV(seed) で着色する。
+   */
+  colorTexture?: THREE.Texture;
 }
 
 /**
