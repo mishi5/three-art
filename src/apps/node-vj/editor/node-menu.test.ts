@@ -2,17 +2,19 @@ import { expect, test, describe } from "bun:test";
 import { CATEGORY_ORDER, groupNodesByCategory } from "./node-menu";
 
 describe("groupNodesByCategory", () => {
-  test("カテゴリ順（input→process→visual→effect→output）に並べる", () => {
+  test("カテゴリ順（input→generator→process→visual→effect→output）に並べる", () => {
     const defs = [
       { type: "Screen", category: "output" },
-      { type: "Number", category: "input" },
+      { type: "Camera", category: "input" },
+      { type: "Number", category: "generator" },
       { type: "Multiply", category: "process" },
       { type: "Blur", category: "effect" },
       { type: "RainVisual", category: "visual" },
     ];
     const groups = groupNodesByCategory(defs);
     expect(groups.map((g) => g.category)).toEqual([...CATEGORY_ORDER]);
-    expect(groups.find((g) => g.category === "input")?.types).toEqual(["Number"]);
+    expect(groups.find((g) => g.category === "input")?.types).toEqual(["Camera"]);
+    expect(groups.find((g) => g.category === "generator")?.types).toEqual(["Number"]);
     expect(groups.find((g) => g.category === "output")?.types).toEqual(["Screen"]);
   });
 

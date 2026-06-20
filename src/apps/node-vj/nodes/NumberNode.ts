@@ -3,7 +3,7 @@ import type { NodeTypeDef } from "../graph/node-type";
 /** 定数 number ソース。param `value` を出力する。 */
 export const NumberNode: NodeTypeDef = {
   type: "Number",
-  category: "input",
+  category: "generator",
   description: "固定の数値を出力する定数ソース。param value をそのまま出力する。",
   inputs: [],
   outputs: [{ id: "out", label: "n", type: "number" }],

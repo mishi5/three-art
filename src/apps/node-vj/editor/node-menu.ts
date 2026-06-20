@@ -1,8 +1,9 @@
 // #103: ノード追加メニューのカテゴリ分け（純関数）。
 // ツールバー整理と右クリック追加メニューの両方で共有する。
 
-/** 表示順のカテゴリ。これ以外（未設定含む）は末尾の "other" にまとめる。 */
-export const CATEGORY_ORDER = ["input", "process", "visual", "effect", "output"] as const;
+/** 表示順のカテゴリ。これ以外（未設定含む）は末尾の "other" にまとめる。
+ *  generator = 値/時間/形状の生成元（Number/Time/PointShape）。input は外部入力（Camera/Mic 等）専用。 */
+export const CATEGORY_ORDER = ["input", "generator", "process", "visual", "effect", "output"] as const;
 
 export interface NodeMenuGroup {
   category: string;

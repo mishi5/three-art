@@ -14,9 +14,9 @@ function ctxNoState(over: Partial<EvalContext> = {}): EvalContext {
 }
 
 describe("PointShapeNode (#101)", () => {
-  test("points 出力を持つ input ノード", () => {
+  test("points 出力を持つ generator ノード", () => {
     expect(PointShapeNode.type).toBe("PointShape");
-    expect(PointShapeNode.category).toBe("input");
+    expect(PointShapeNode.category).toBe("generator");
     expect(PointShapeNode.outputs.map((p) => `${p.id}:${p.type}`)).toEqual(["points:points"]);
   });
   test("count / radius param を持つ", () => {
