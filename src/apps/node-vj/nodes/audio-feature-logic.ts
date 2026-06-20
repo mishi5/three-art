@@ -1,5 +1,5 @@
 // 音声入力ノード共通の音響特徴量ロジック（#100）。
-// MicInput / DisplayAudioInput / AudioFileInput で重複する出力ポート定義・onset 検出・
+// MicInput / DisplayInput / AudioFileInput で重複する出力ポート定義・onset 検出・
 // ライブ音源ランタイムをここに集約する。
 import type { AudioInput } from "../../../core/audio/AudioInput";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "../../../core/types";
