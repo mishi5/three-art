@@ -84,8 +84,10 @@ export class NodeEditor {
   private spaceDown = false;
   private rafId: number | null = null;
   private toolbar: HTMLDivElement;
-  /** #103: 右クリックのコンテキストメニュー（開いていなければ null）。 */
+  /** #103: 右クリック/ツールバーのコンテキストメニュー（開いていなければ null）。 */
   private contextMenu: HTMLDivElement | null = null;
+  /** #103: 開いているフライアウトサブメニュー（カテゴリ → 型一覧）。 */
+  private submenu: HTMLDivElement | null = null;
   /** 出力ポート横のライブ値表示（デバッグ用）。既定 OFF、ツールバーで切替。 */
   private showOutputValues = false;
 
@@ -143,23 +145,14 @@ export class NodeEditor {
     bar.style.cssText =
       "position:fixed;left:8px;right:8px;top:8px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;z-index:150;" +
       "font:12px system-ui;";
-    // #103: カテゴリ別にグルーピングして表示（input/process/visual/effect/output/other）。
+    // #103: カテゴリボタン → クリックでそのカテゴリの型ドロップダウンを開く（階層化）。
     for (const group of groupNodesByCategory(this.registry.list())) {
-      const box = document.createElement("div");
-      box.style.cssText = "display:flex;gap:4px;align-items:center;";
-      const label = document.createElement("span");
-      label.textContent = group.category;
-      label.style.cssText = "color:#666;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;";
-      box.appendChild(label);
-      for (const type of group.types) {
-        const btn = document.createElement("button");
-        btn.textContent = "+ " + type;
-        btn.style.cssText =
-          "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;";
-        btn.addEventListener("click", () => this.addNodeOfType(type));
-        box.appendChild(btn);
-      }
-      bar.appendChild(box);
+      const btn = document.createElement("button");
+      btn.textContent = group.category + " ▾";
+      btn.style.cssText =
+        "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 10px;cursor:pointer;text-transform:capitalize;";
+      btn.addEventListener("click", () => this.showCategoryDropdown(btn, group));
+      bar.appendChild(btn);
     }
     // デバッグ: 出力ポート横のライブ値表示トグル（既定 OFF）。
     const dbg = document.createElement("button");
@@ -517,14 +510,58 @@ export class NodeEditor {
     menu.appendChild(item);
   }
 
-  /** 空白右クリック: カテゴリ別の追加メニュー。選んだ type を world 位置に生成。 */
+  /** 階層メニューのカテゴリ行（ホバーで型のサブメニューを開く）。 */
+  private addCategoryRow(menu: HTMLElement, group: { category: string; types: string[] }, worldPos?: { x: number; y: number }): void {
+    const row = document.createElement("div");
+    row.style.cssText =
+      "display:flex;justify-content:space-between;gap:12px;padding:4px 10px;border-radius:4px;cursor:default;white-space:nowrap;";
+    const name = document.createElement("span"); name.textContent = group.category;
+    const arrow = document.createElement("span"); arrow.textContent = "▸"; arrow.style.color = "#888";
+    row.append(name, arrow);
+    row.addEventListener("mouseenter", () => {
+      row.style.background = "#2a2a36";
+      const r = row.getBoundingClientRect();
+      this.openSubmenu(r.right - 2, r.top - 4, group.types, worldPos);
+    });
+    row.addEventListener("mouseleave", () => { row.style.background = "transparent"; });
+    menu.appendChild(row);
+  }
+
+  /** カテゴリ行のホバーで開く型一覧サブメニュー（フライアウト）。 */
+  private openSubmenu(x: number, y: number, types: string[], worldPos?: { x: number; y: number }): void {
+    this.closeSubmenu();
+    const sub = document.createElement("div");
+    sub.style.cssText =
+      `position:fixed;left:${x}px;top:${y}px;z-index:301;background:#16161c;` +
+      "border:1px solid #444;border-radius:6px;padding:4px;font:12px system-ui;color:#ddd;" +
+      "max-height:80vh;overflow:auto;box-shadow:0 4px 16px rgba(0,0,0,0.5);min-width:120px;";
+    for (const type of types) {
+      this.addMenuItem(sub, "+ " + type, () => this.addNodeOfType(type, worldPos));
+    }
+    this.submenu = sub;
+    document.body.appendChild(sub);
+    // 画面端からはみ出す場合は左側・上側へ寄せる。
+    const r = sub.getBoundingClientRect();
+    if (r.right > window.innerWidth) sub.style.left = `${Math.max(4, x - r.width - (this.contextMenu?.offsetWidth ?? 140))}px`;
+    if (r.bottom > window.innerHeight) sub.style.top = `${Math.max(4, window.innerHeight - r.height - 4)}px`;
+  }
+
+  /** 空白右クリック: カテゴリ階層の追加メニュー（型はサブメニュー）。選んだ type を world 位置に生成。 */
   private showAddMenu(screenX: number, screenY: number, worldPos: { x: number; y: number }): void {
     const menu = this.buildMenu(screenX, screenY);
+    this.addMenuLabel(menu, "ノードを追加");
     for (const group of groupNodesByCategory(this.registry.list())) {
-      this.addMenuLabel(menu, group.category);
-      for (const type of group.types) {
-        this.addMenuItem(menu, "+ " + type, () => this.addNodeOfType(type, worldPos));
-      }
+      this.addCategoryRow(menu, group, worldPos);
+    }
+  }
+
+  /** ツールバーのカテゴリボタン押下: そのカテゴリの型ドロップダウンを下に開く。 */
+  private showCategoryDropdown(anchor: HTMLElement, group: { category: string; types: string[] }): void {
+    if (this.contextMenu) { this.closeContextMenu(); return; } // 同じボタン再押下で閉じる
+    const r = anchor.getBoundingClientRect();
+    const menu = this.buildMenu(r.left, r.bottom + 4);
+    for (const type of group.types) {
+      this.addMenuItem(menu, "+ " + type, () => this.addNodeOfType(type));
     }
   }
 
@@ -546,10 +583,19 @@ export class NodeEditor {
   }
 
   private closeOnOutside = (e: PointerEvent): void => {
-    if (this.contextMenu && !this.contextMenu.contains(e.target as Node)) this.closeContextMenu();
+    const t = e.target as Node;
+    const inMenu = this.contextMenu?.contains(t) || this.submenu?.contains(t);
+    if (!inMenu) this.closeContextMenu();
   };
 
+  private closeSubmenu(): void {
+    if (!this.submenu) return;
+    this.submenu.remove();
+    this.submenu = null;
+  }
+
   private closeContextMenu(): void {
+    this.closeSubmenu();
     if (!this.contextMenu) return;
     window.removeEventListener("pointerdown", this.closeOnOutside, true);
     this.contextMenu.remove();
