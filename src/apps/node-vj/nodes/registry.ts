@@ -27,6 +27,7 @@ import { FlashNode } from "./FlashNode";
 import { TextureTransformNode } from "./TextureTransformNode";
 import { EdgeVisualNode } from "./EdgeVisualNode";
 import { AudioMixNode } from "./AudioMixNode";
+import { AudioDelayNode } from "./AudioDelayNode";
 import { AudioOutputNode } from "./AudioOutputNode";
 import { ScreenNode } from "./ScreenNode";
 
@@ -53,6 +54,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(EnvelopeNode);
   r.register(FlipFlopNode);
   r.register(AudioMixNode);
+  r.register(AudioDelayNode);
   // visual
   r.register(PointCloudVisualNode);
   r.register(ParticleRenderNode);
