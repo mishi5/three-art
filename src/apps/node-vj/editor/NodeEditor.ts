@@ -16,6 +16,7 @@ import {
 import { hitTest } from "./hit-test";
 import { tooltipForHit, tooltipBox, wrapLines, type TooltipContent } from "./tooltip";
 import { screenToWorld, worldToScreen, zoomAt } from "./viewport";
+import { groupNodesByCategory } from "./node-menu";
 import { duplicateNodes } from "../graph/duplicate";
 import type { History } from "../graph/history";
 import { nodesInRect, normRect } from "./selection";
@@ -83,6 +84,8 @@ export class NodeEditor {
   private spaceDown = false;
   private rafId: number | null = null;
   private toolbar: HTMLDivElement;
+  /** #103: 右クリックのコンテキストメニュー（開いていなければ null）。 */
+  private contextMenu: HTMLDivElement | null = null;
   /** 出力ポート横のライブ値表示（デバッグ用）。既定 OFF、ツールバーで切替。 */
   private showOutputValues = false;
 
@@ -138,15 +141,25 @@ export class NodeEditor {
     const bar = document.createElement("div");
     // right:8 で viewport 幅に収め、ノード増加時は複数行に折り返す（重なり防止）。
     bar.style.cssText =
-      "position:fixed;left:8px;right:8px;top:8px;display:flex;gap:6px;flex-wrap:wrap;z-index:150;" +
+      "position:fixed;left:8px;right:8px;top:8px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;z-index:150;" +
       "font:12px system-ui;";
-    for (const def of this.registry.list()) {
-      const btn = document.createElement("button");
-      btn.textContent = "+ " + def.type;
-      btn.style.cssText =
-        "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;";
-      btn.addEventListener("click", () => this.addNodeOfType(def.type));
-      bar.appendChild(btn);
+    // #103: カテゴリ別にグルーピングして表示（input/process/visual/effect/output/other）。
+    for (const group of groupNodesByCategory(this.registry.list())) {
+      const box = document.createElement("div");
+      box.style.cssText = "display:flex;gap:4px;align-items:center;";
+      const label = document.createElement("span");
+      label.textContent = group.category;
+      label.style.cssText = "color:#666;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;";
+      box.appendChild(label);
+      for (const type of group.types) {
+        const btn = document.createElement("button");
+        btn.textContent = "+ " + type;
+        btn.style.cssText =
+          "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;";
+        btn.addEventListener("click", () => this.addNodeOfType(type));
+        box.appendChild(btn);
+      }
+      bar.appendChild(box);
     }
     // デバッグ: 出力ポート横のライブ値表示トグル（既定 OFF）。
     const dbg = document.createElement("button");
@@ -160,18 +173,18 @@ export class NodeEditor {
     dbg.addEventListener("click", () => { this.showOutputValues = !this.showOutputValues; syncDbg(); });
     bar.appendChild(dbg);
     const hint = document.createElement("span");
-    hint.textContent = "  空白ドラッグ=矩形選択 / Space|右ドラッグ=パン / ホイール=ズーム / 0=ズーム100% / Cmd+クリック=追加選択 / Cmd+C=複製 / Del=削除";
+    hint.textContent = "  右クリック=メニュー / 空白ドラッグ=矩形選択 / Space|右ドラッグ=パン / ホイール=ズーム / 0=ズーム100% / Cmd+C=複製 / Del=削除";
     hint.style.cssText = "color:#888;align-self:center;";
     bar.appendChild(hint);
     document.body.appendChild(bar);
     return bar;
   }
 
-  addNodeOfType(type: string): void {
+  addNodeOfType(type: string, worldPos?: { x: number; y: number }): void {
     const def = this.registry.require(type);
-    // #92: 画面左上付近（120px）に出すよう world 座標へ変換（ズーム反映）。
+    // #92/#103: world 座標へ配置。worldPos 指定（右クリック）はその位置、未指定は画面左上付近。
     const jitter = Math.round((idCounter % 5) * 24);
-    const w = screenToWorld(120 + jitter, 120 + jitter, this.offset, this.scale);
+    const w = worldPos ?? screenToWorld(120 + jitter, 120 + jitter, this.offset, this.scale);
     const node: NodeInstance = {
       id: genId("n"),
       type,
@@ -361,6 +374,13 @@ export class NodeEditor {
   }
 
   private onUp = (e: PointerEvent): void => {
+    // #103: 右クリック（移動なし）はコンテキストメニュー。右ドラッグはパンのまま。
+    if (this.drag?.kind === "pan" && e.button === 2 &&
+        Math.hypot(e.clientX - this.drag.startX, e.clientY - this.drag.startY) < DRAG_THRESHOLD) {
+      this.drag = null;
+      this.openContextMenu(e);
+      return;
+    }
     if (this.drag?.kind === "rect") {
       // 矩形確定。移動なし（クリック）は選択解除になる（空矩形は何も拾わない）。
       const w = this.toWorld(e);
@@ -451,8 +471,90 @@ export class NodeEditor {
   };
 
   private onContextMenu = (e: Event): void => {
-    e.preventDefault();
+    e.preventDefault(); // ネイティブメニューは出さない（独自メニューを onUp で出す）
   };
+
+  /** #103: 右クリック位置にコンテキストメニューを開く。ノード上ならノード操作、空白なら追加メニュー。 */
+  private openContextMenu(e: PointerEvent): void {
+    const w = this.toWorld(e);
+    const hit = hitTest(this.graph.nodes, this.registry, w.x, w.y);
+    if (hit && hit.kind !== "port") {
+      this.showNodeMenu(e.clientX, e.clientY, hit.node);
+    } else {
+      this.showAddMenu(e.clientX, e.clientY, w);
+    }
+  }
+
+  /** メニュー DOM の土台を作る（既存メニューは閉じる）。 */
+  private buildMenu(screenX: number, screenY: number): HTMLDivElement {
+    this.closeContextMenu();
+    const menu = document.createElement("div");
+    menu.style.cssText =
+      `position:fixed;left:${screenX}px;top:${screenY}px;z-index:300;background:#16161c;` +
+      "border:1px solid #444;border-radius:6px;padding:4px;font:12px system-ui;color:#ddd;" +
+      "max-height:80vh;overflow:auto;box-shadow:0 4px 16px rgba(0,0,0,0.5);min-width:120px;";
+    // メニュー外クリックで閉じる（次フレームから購読し、開いた右クリック up を拾わない）。
+    setTimeout(() => window.addEventListener("pointerdown", this.closeOnOutside, true), 0);
+    this.contextMenu = menu;
+    document.body.appendChild(menu);
+    return menu;
+  }
+
+  private addMenuLabel(menu: HTMLElement, text: string): void {
+    const el = document.createElement("div");
+    el.textContent = text;
+    el.style.cssText = "color:#666;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;padding:4px 8px 2px;";
+    menu.appendChild(el);
+  }
+
+  private addMenuItem(menu: HTMLElement, text: string, onClick: () => void): void {
+    const item = document.createElement("div");
+    item.textContent = text;
+    item.style.cssText = "padding:4px 10px;border-radius:4px;cursor:pointer;white-space:nowrap;";
+    item.addEventListener("mouseenter", () => { item.style.background = "#2a2a36"; });
+    item.addEventListener("mouseleave", () => { item.style.background = "transparent"; });
+    item.addEventListener("click", () => { this.closeContextMenu(); onClick(); });
+    menu.appendChild(item);
+  }
+
+  /** 空白右クリック: カテゴリ別の追加メニュー。選んだ type を world 位置に生成。 */
+  private showAddMenu(screenX: number, screenY: number, worldPos: { x: number; y: number }): void {
+    const menu = this.buildMenu(screenX, screenY);
+    for (const group of groupNodesByCategory(this.registry.list())) {
+      this.addMenuLabel(menu, group.category);
+      for (const type of group.types) {
+        this.addMenuItem(menu, "+ " + type, () => this.addNodeOfType(type, worldPos));
+      }
+    }
+  }
+
+  /** ノード上右クリック: 複製・削除。対象が未選択なら単独選択にしてから操作する。 */
+  private showNodeMenu(screenX: number, screenY: number, node: NodeInstance): void {
+    if (!this.selectedIds.has(node.id)) this.selectedIds = new Set([node.id]);
+    const menu = this.buildMenu(screenX, screenY);
+    const n = this.selectedIds.size;
+    this.addMenuItem(menu, n > 1 ? `複製 (${n})` : "複製", () => {
+      this.history.record(this.graph);
+      const newIds = duplicateNodes(this.graph, this.selectedIds, genId, 24);
+      this.selectedIds = new Set(newIds);
+    });
+    this.addMenuItem(menu, n > 1 ? `削除 (${n})` : "削除", () => {
+      this.history.record(this.graph);
+      for (const id of this.selectedIds) removeNode(this.graph, id);
+      this.selectedIds = new Set();
+    });
+  }
+
+  private closeOnOutside = (e: PointerEvent): void => {
+    if (this.contextMenu && !this.contextMenu.contains(e.target as Node)) this.closeContextMenu();
+  };
+
+  private closeContextMenu(): void {
+    if (!this.contextMenu) return;
+    window.removeEventListener("pointerdown", this.closeOnOutside, true);
+    this.contextMenu.remove();
+    this.contextMenu = null;
+  }
 
   /**
    * param 入力ポートが接続されていれば、上流ノードの直近ライブ出力値を返す。
@@ -809,6 +911,7 @@ export class NodeEditor {
     window.removeEventListener("keyup", this.onKeyUp);
     this.canvas.removeEventListener("contextmenu", this.onContextMenu);
     this.canvas.removeEventListener("wheel", this.onWheel);
+    this.closeContextMenu();
     this.toolbar.remove();
   }
 }
