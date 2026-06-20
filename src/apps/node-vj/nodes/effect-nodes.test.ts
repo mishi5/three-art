@@ -21,8 +21,16 @@ describe("effect nodes (#64)", () => {
     }
   });
 
-  test("Blur の params は strength のみ", () => {
-    expect(BlurNode.params.map((p) => p.id)).toEqual(["strength"]);
+  test("Blur の params は enabled + strength（#134）", () => {
+    expect(BlurNode.params.map((p) => p.id)).toEqual(["enabled", "strength"]);
+  });
+
+  test("effect 各ノードに enabled トグルがある（#134）", () => {
+    for (const n of [BlurNode, KaleidoscopeNode, FractalNode]) {
+      const en = n.params.find((p) => p.id === "enabled");
+      expect(en?.kind).toBe("enum");
+      expect(en?.default).toBe("on");
+    }
   });
 
   test("EdgeVisual は pose/audio 入力 + texture 出力の visual", () => {

@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { NodeState, NodeTypeDef } from "../graph/node-type";
 import { ShaderSurface, NDC_VERTEX, blackTexture } from "../graph/shader-surface";
+import { EFFECT_ENABLED_PARAM, isEffectEnabled, bypassOutput } from "./effect-bypass";
 
 // #138: 2D テクスチャ Transform（平行移動/拡縮/回転/反転 + wrap）。
 // UV の逆変換式は texture-transform-logic.ts（transformUV/wrapCoord）と一致させること。
@@ -80,6 +81,7 @@ export const TextureTransformNode: NodeTypeDef = {
   inputs: [{ id: "in", label: "in", type: "texture", description: "変換する元のテクスチャ。" }],
   outputs: [{ id: "texture", label: "tex", type: "texture", description: "変換後のテクスチャ。" }],
   params: [
+    EFFECT_ENABLED_PARAM,
     { id: "offsetX", label: "offsetX", kind: "number", default: 0, min: -1, max: 1, step: 0.01, description: "横方向の移動（UV 単位、+で右へ）。" },
     { id: "offsetY", label: "offsetY", kind: "number", default: 0, min: -1, max: 1, step: 0.01, description: "縦方向の移動（UV 単位、+で下へ）。" },
     { id: "scaleX", label: "scaleX", kind: "number", default: 1, min: 0.1, max: 4, step: 0.01, description: "横方向の拡大率（>1 でズームイン）。" },
@@ -93,8 +95,10 @@ export const TextureTransformNode: NodeTypeDef = {
   disposeState: (state: NodeState) => (state as TexTransformState).dispose(),
   evaluate(ctx) {
     const s = ctx.state as TexTransformState | undefined;
+    if (!s) return {};
+    if (!isEffectEnabled(ctx.param)) return bypassOutput(ctx.input, s.black); // #134 無効時パススルー
     const env = ctx.env;
-    if (!s || !env) return {};
+    if (!env) return {};
     const u = s.surface.material.uniforms;
     u.tDiffuse!.value = (ctx.input("in") as THREE.Texture | undefined) ?? s.black;
     (u.uOffset!.value as THREE.Vector2).set(Number(ctx.param("offsetX") ?? 0), Number(ctx.param("offsetY") ?? 0));

@@ -18,7 +18,7 @@ describe("TextureTransformNode (#138)", () => {
 
   test("params: offset/scale/rotation/flip/wrap", () => {
     expect(TextureTransformNode.params.map((p) => p.id)).toEqual([
-      "offsetX", "offsetY", "scaleX", "scaleY", "rotation", "flipX", "flipY", "wrap",
+      "enabled", "offsetX", "offsetY", "scaleX", "scaleY", "rotation", "flipX", "flipY", "wrap",
     ]);
     const wrap = TextureTransformNode.params.find((p) => p.id === "wrap");
     expect(wrap?.options).toEqual(["none", "repeat", "mirror", "clamp"]);

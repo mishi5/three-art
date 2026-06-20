@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { NodeState, NodeTypeDef } from "../graph/node-type";
 import { ShaderSurface, NDC_VERTEX, blackTexture } from "../graph/shader-surface";
+import { EFFECT_ENABLED_PARAM, isEffectEnabled, bypassOutput } from "./effect-bypass";
 
 // core/effects/KaleidoscopeEffect の GLSL を移植。
 const FRAG = /* glsl */ `
@@ -59,6 +60,7 @@ export const KaleidoscopeNode: NodeTypeDef = {
   inputs: [{ id: "in", label: "in", type: "texture", description: "万華鏡化する元のテクスチャ。" }],
   outputs: [{ id: "texture", label: "tex", type: "texture", description: "エフェクト適用後のテクスチャ。" }],
   params: [
+    EFFECT_ENABLED_PARAM,
     { id: "segments", label: "segments", kind: "int", default: 6, min: 2, max: 16, step: 1, description: "分割数（鏡像セクターの数）。" },
     { id: "rotation", label: "rotation", kind: "number", default: 0, min: -3.14, max: 3.14, step: 0.01, description: "パターンの回転（ラジアン）。" },
     { id: "centerX", label: "centerX", kind: "number", default: 0, min: -0.5, max: 0.5, step: 0.01, description: "中心の X オフセット（画面中央が 0）。" },
@@ -69,8 +71,10 @@ export const KaleidoscopeNode: NodeTypeDef = {
   disposeState: (state: NodeState) => (state as KaleidoState).dispose(),
   evaluate(ctx) {
     const s = ctx.state as KaleidoState | undefined;
+    if (!s) return {};
+    if (!isEffectEnabled(ctx.param)) return bypassOutput(ctx.input, s.black); // #134 無効時パススルー
     const env = ctx.env;
-    if (!s || !env) return {};
+    if (!env) return {};
     const u = s.surface.material.uniforms;
     u.tDiffuse!.value = (ctx.input("in") as THREE.Texture | undefined) ?? s.black;
     u.uSegments!.value = Math.max(2, Math.round(Number(ctx.param("segments") ?? 6)));
