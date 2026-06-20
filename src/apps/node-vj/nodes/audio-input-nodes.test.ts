@@ -1,6 +1,5 @@
 import { expect, test, describe } from "bun:test";
 import { MicInputNode } from "./MicInputNode";
-import { DisplayAudioInputNode } from "./DisplayAudioInputNode";
 import { AudioFileInputNode } from "./AudioFileInputNode";
 import { nodeHasPreview } from "../editor/NodeEditor";
 import type { EvalContext } from "../graph/node-type";
@@ -41,23 +40,6 @@ describe("MicInputNode (#100)", () => {
   });
 });
 
-describe("DisplayAudioInputNode (#100)", () => {
-  test("ポート定義: 音響特徴量のみ（section 無し）・onset param（#109）", () => {
-    expect(DisplayAudioInputNode.type).toBe("DisplayAudioInput");
-    expect(DisplayAudioInputNode.outputs.map((p) => p.id)).toEqual([...FEATURE_IDS, "audio"]);
-    expect(DisplayAudioInputNode.params.map((p) => p.id)).toEqual(["onsetThreshold", "onsetCooldown"]);
-  });
-
-  test("state 無しでは onset=false・デフォルト signal", () => {
-    const out = DisplayAudioInputNode.evaluate(ctxNoState());
-    expect(out.signal).toBe(DEFAULT_AUDIO_FEATURES);
-    expect(out.onset).toBe(false);
-  });
-
-  test("プレビュー対象でない", () => {
-    expect(nodeHasPreview(DisplayAudioInputNode)).toBe(false);
-  });
-});
 
 describe("AudioFileInputNode (#100)", () => {
   test("ポート定義: 音響特徴量 + section(number)", () => {

@@ -3,7 +3,7 @@ import {
   OnsetTracker, ONSET_PARAMS, DEFAULT_ONSET_THRESHOLD, DEFAULT_ONSET_COOLDOWN,
 } from "./audio-feature-logic";
 import { MicInputNode } from "./MicInputNode";
-import { DisplayAudioInputNode } from "./DisplayAudioInputNode";
+import { DisplayInputNode } from "./DisplayInputNode";
 import { AudioFileInputNode } from "./AudioFileInputNode";
 
 const THR = DEFAULT_ONSET_THRESHOLD;
@@ -45,7 +45,7 @@ describe("OnsetTracker チューニング (#109)", () => {
 
 describe("audio ノードの onset param (#109)", () => {
   test("3 ノードが onsetThreshold/onsetCooldown param を持つ", () => {
-    for (const node of [MicInputNode, DisplayAudioInputNode, AudioFileInputNode]) {
+    for (const node of [MicInputNode, DisplayInputNode, AudioFileInputNode]) {
       const ids = node.params.map((p) => p.id);
       expect(ids).toContain("onsetThreshold");
       expect(ids).toContain("onsetCooldown");
