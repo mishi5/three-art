@@ -9,6 +9,7 @@ import { NodeEditor } from "./editor/NodeEditor";
 import { buildGraphIoBar } from "./editor/graph-io-bar";
 import { GraphStore, localStorageAdapter } from "./graph/graph-store";
 import { History } from "./graph/history";
+import { previewSize } from "./preview-size";
 import type { PlaybackControl } from "./nodes/playback";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "../../core/types";
 
@@ -40,28 +41,37 @@ addConnection(graph, registry, { id: "c4", from: { node: "rain", port: "texture"
 // プレビュー（PiP）ランタイム
 const runtime = new GraphRuntime(previewCanvas, registry, graph);
 
-// プレビュー拡大トグル: 小 PiP(320×180) ⇄ 大(ビューポート ~85%)。
-// クリック（移動量小）で切替、ドラッグは OrbitControls の回転に使う。
+// プレビュー拡大トグル: 小 PiP(320×180) ⇄ 全画面（#136）。
+// クリック（移動量小）で切替、ドラッグは OrbitControls の回転に使う。Esc で全画面解除。
 const preview = previewCanvas;
 let previewLarge = false;
 function applyPreviewSize(): void {
-  const w = previewLarge ? Math.round(window.innerWidth * 0.85) : 320;
-  const h = previewLarge ? Math.round(window.innerHeight * 0.85) : 180;
+  const { w, h } = previewSize(previewLarge, window.innerWidth, window.innerHeight);
   preview.style.width = w + "px";
   preview.style.height = h + "px";
+  if (previewLarge) {
+    // 全画面: 画面全体を占有して最前面に。
+    Object.assign(preview.style, { left: "0", top: "0", right: "auto", bottom: "auto", border: "none", zIndex: "200" });
+  } else {
+    // 小窓: 右下 PiP に戻す（node-vj.html の既定と同じ）。
+    Object.assign(preview.style, { left: "auto", top: "auto", right: "12px", bottom: "56px", border: "1px solid rgba(255,255,255,0.25)", zIndex: "120" });
+  }
   runtime.setSize(w, h);
 }
 applyPreviewSize();
+function setPreviewLarge(large: boolean): void {
+  if (previewLarge === large) return;
+  previewLarge = large;
+  applyPreviewSize();
+}
 {
   let downX = 0, downY = 0;
   preview.addEventListener("pointerdown", (e) => { downX = e.clientX; downY = e.clientY; });
   preview.addEventListener("pointerup", (e) => {
-    if (Math.hypot(e.clientX - downX, e.clientY - downY) < 5) {
-      previewLarge = !previewLarge;
-      applyPreviewSize();
-    }
+    if (Math.hypot(e.clientX - downX, e.clientY - downY) < 5) setPreviewLarge(!previewLarge);
   });
 }
+window.addEventListener("keydown", (e) => { if (e.key === "Escape") setPreviewLarge(false); });
 window.addEventListener("resize", applyPreviewSize);
 // 入力ノード未実装のため合成 FFT で雨を落とす（audio 入力ノードは #61）。
 const fft = new Float32Array(64).map((_, i) => 0.3 + 0.2 * Math.sin(i * 0.5));
