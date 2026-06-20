@@ -1,5 +1,7 @@
 import { expect, test, describe } from "bun:test";
-import { PointShapeNode, shapeCount, latticeN, MAX_COUNT } from "./PointShapeNode";
+import * as THREE from "three";
+import { PointShapeNode, shapeCount, latticeN, MAX_COUNT, packPoseUniforms } from "./PointShapeNode";
+import { NUM_JOINTS, type PoseFrame } from "../../../core/types";
 import type { EvalContext } from "../graph/node-type";
 
 function ctxNoState(over: Partial<EvalContext> = {}): EvalContext {
@@ -13,10 +15,10 @@ function ctxNoState(over: Partial<EvalContext> = {}): EvalContext {
 }
 
 describe("PointShape mode param (#104)", () => {
-  test("mode enum に cube/sphere/lattice", () => {
+  test("mode enum に cube/sphere/lattice/bones", () => {
     const mode = PointShapeNode.params.find((p) => p.id === "mode");
     expect(mode?.kind).toBe("enum");
-    expect(mode?.options).toEqual(["cube", "sphere", "lattice"]);
+    expect(mode?.options).toEqual(["cube", "sphere", "lattice", "bones"]);
     expect(mode?.default).toBe("cube");
   });
 
@@ -49,5 +51,57 @@ describe("shapeCount / latticeN (#104)", () => {
 describe("PointShape evaluate no-op (#104)", () => {
   test("state/env 無しは空オブジェクト", () => {
     expect(PointShapeNode.evaluate(ctxNoState())).toEqual({});
+  });
+});
+
+describe("PointShape bones モード (#120)", () => {
+  test("pose 入力ポートを持つ（任意・骨格追従用）", () => {
+    expect(PointShapeNode.inputs.find((p) => p.id === "pose")?.type).toBe("pose");
+  });
+
+  test("param は全 mode 共通のまま（bones で増えない）", () => {
+    const ids = PointShapeNode.params.map((p) => p.id);
+    expect(ids).toEqual(["mode", "count", "radius", "noiseAmount", "noiseScale"]);
+  });
+
+  test("shapeCount(bones) は cube と同様に count をそのまま使い、クランプも効く", () => {
+    expect(shapeCount("bones", 4000)).toBe(4000);
+    expect(shapeCount("bones", 0)).toBe(1);
+    expect(shapeCount("bones", 999999)).toBe(MAX_COUNT);
+  });
+});
+
+describe("packPoseUniforms (#120)", () => {
+  function makeTargets() {
+    const joints = Array.from({ length: NUM_JOINTS }, () => new THREE.Vector3(9, 9, 9));
+    const visibility = new Array<number>(NUM_JOINTS).fill(9);
+    const center = new THREE.Vector3(9, 9, 9);
+    return { joints, visibility, center };
+  }
+
+  test("pose から joints / visibility / center を詰める", () => {
+    const joints = new Float32Array(NUM_JOINTS * 3);
+    const visibility = new Float32Array(NUM_JOINTS);
+    for (let j = 0; j < NUM_JOINTS; j++) {
+      joints[j * 3] = j;
+      joints[j * 3 + 1] = j + 0.1;
+      joints[j * 3 + 2] = j + 0.2;
+      visibility[j] = j / NUM_JOINTS;
+    }
+    const pose: PoseFrame = { joints, visibility, center: new Float32Array([1, 2, 3]) };
+    const t = makeTargets();
+    packPoseUniforms(pose, t.joints, t.visibility, t.center);
+
+    expect(t.joints[5]!.x).toBeCloseTo(5);
+    expect(t.joints[5]!.y).toBeCloseTo(5.1);
+    expect(t.joints[5]!.z).toBeCloseTo(5.2);
+    expect(t.visibility[5]).toBeCloseTo(5 / NUM_JOINTS);
+    expect(t.center.toArray()).toEqual([1, 2, 3]);
+  });
+
+  test("pose 未接続（undefined）は全 visibility を 0 にして粒子を不可視化", () => {
+    const t = makeTargets();
+    packPoseUniforms(undefined, t.joints, t.visibility, t.center);
+    expect(t.visibility.every((v) => v === 0)).toBe(true);
   });
 });
