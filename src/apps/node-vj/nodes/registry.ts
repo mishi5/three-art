@@ -27,6 +27,7 @@ import { BlendNode } from "./BlendNode";
 import { BlurNode } from "./BlurNode";
 import { KaleidoscopeNode } from "./KaleidoscopeNode";
 import { FractalNode } from "./FractalNode";
+import { DistortNode } from "./DistortNode";
 import { FlashNode } from "./FlashNode";
 import { TextureTransformNode } from "./TextureTransformNode";
 import { EdgeVisualNode } from "./EdgeVisualNode";
@@ -73,6 +74,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(BlurNode);
   r.register(KaleidoscopeNode);
   r.register(FractalNode);
+  r.register(DistortNode);
   r.register(FlashNode);
   r.register(TextureTransformNode);
   // output
