@@ -1,7 +1,7 @@
 import { expect, test, describe } from "bun:test";
 import {
   NODE_WIDTH, TITLE_H, ROW_H, nodeHeight, inputPortPos, outputPortPos,
-  portIndex, nodeRect,
+  portIndex, nodeRect, hasRandomRow, randomRowRect,
 } from "./layout";
 import type { NodeTypeDef } from "../graph/node-type";
 import type { NodeInstance } from "../graph/graph-doc";
@@ -42,5 +42,20 @@ describe("editor layout", () => {
   test("nodeRect は position と幅高さ", () => {
     const r = nodeRect(node, def);
     expect(r).toEqual({ x: 100, y: 50, w: NODE_WIDTH, h: nodeHeight(def) });
+  });
+
+  test("randomButton 持ちは行が1つ増え、ボタン行は params 直下に置かれる（#150）", () => {
+    const rnd: NodeTypeDef = {
+      type: "R", inputs: [], outputs: [{ id: "o", label: "o", type: "number" }],
+      params: [{ id: "value", label: "v", kind: "number", default: 1 }],
+      randomButton: { paramId: "value" }, evaluate: () => ({}),
+    };
+    expect(hasRandomRow(rnd)).toBe(true);
+    expect(hasRandomRow(def)).toBe(false);
+    // portRows=1（出力1）, params=1 → +1 行
+    expect(nodeHeight(rnd)).toBe(TITLE_H + 1 * ROW_H + 1 * ROW_H + ROW_H + 8);
+    const rr = randomRowRect(node, rnd)!;
+    expect(rr).toEqual({ x: 100, y: 50 + TITLE_H + 1 * ROW_H + 1 * ROW_H, w: NODE_WIDTH, h: ROW_H });
+    expect(randomRowRect(node, def)).toBeNull();
   });
 });

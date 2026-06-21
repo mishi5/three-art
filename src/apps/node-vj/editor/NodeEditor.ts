@@ -11,8 +11,9 @@ import {
   NODE_WIDTH, TITLE_H, ROW_H, PORT_R, nodeRect,
   inputPortPos, outputPortPos, paramRowY, paramPortPos, resolveInputPortPos,
   previewButtonRect, previewWindowRect, hasFileRow, fileRowRect, fileRowLabel,
-  transportRowRect, transportLayout, seekRatioAt, formatTime,
+  transportRowRect, transportLayout, seekRatioAt, formatTime, randomRowRect,
 } from "./layout";
+import { randomInRange } from "./random-value";
 import { hitTest } from "./hit-test";
 import { tooltipForHit, tooltipBox, wrapLines, type TooltipContent } from "./tooltip";
 import { screenToWorld, worldToScreen, zoomAt } from "./viewport";
@@ -287,6 +288,18 @@ export class NodeEditor {
             this.playback?.seek(hit.node.id, seekRatioAt(w.x, seek) * pb.duration);
             this.drag = { kind: "seek", nodeId: hit.node.id, seek, duration: pb.duration };
           }
+          return;
+        }
+      }
+      // #150: 🎲ランダムボタン行クリックで value を min/max 範囲のランダム値に再ロール。
+      if (def?.randomButton) {
+        const rr = randomRowRect(hit.node, def);
+        if (rr && w.x >= rr.x && w.x <= rr.x + rr.w && w.y >= rr.y && w.y <= rr.y + rr.h) {
+          this.history.record(this.graph);
+          const n = hit.node;
+          const min = Number(n.params.min ?? 0);
+          const max = Number(n.params.max ?? 1);
+          n.params[def.randomButton.paramId] = Math.round(randomInRange(min, max, Math.random()) * 1000) / 1000;
           return;
         }
       }
@@ -934,6 +947,17 @@ export class NodeEditor {
       // 現在時刻
       ctx.fillStyle = "#9ab"; ctx.textAlign = "right"; ctx.font = "10px system-ui";
       ctx.fillText(formatTime(cur), tr.x + tr.w - 6, tr.y + tr.h / 2);
+      ctx.textAlign = "left";
+    }
+    // #150: 🎲ランダムボタン行。
+    if (def.randomButton) {
+      const rr = randomRowRect(node, def)!;
+      ctx.fillStyle = "#2a2433";
+      roundRect(ctx, rr.x + 6, rr.y + 2, rr.w - 12, rr.h - 4, 4);
+      ctx.fill();
+      ctx.strokeStyle = "#5a4a66"; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = "#cbe"; ctx.textAlign = "center"; ctx.font = "11px system-ui";
+      ctx.fillText("🎲 ランダム", rr.x + rr.w / 2, rr.y + rr.h / 2);
       ctx.textAlign = "left";
     }
   }
