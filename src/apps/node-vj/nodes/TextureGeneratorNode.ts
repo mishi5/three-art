@@ -4,12 +4,12 @@ import { ShaderSurface, NDC_VERTEX } from "../graph/shader-surface";
 
 const DEG = Math.PI / 180;
 
-type TexGenMode = "solid" | "linear" | "radial";
-const MODE_INT: Record<TexGenMode, number> = { solid: 0, linear: 1, radial: 2 };
+type TextureGenMode = "solid" | "linear" | "radial";
+const MODE_INT: Record<TextureGenMode, number> = { solid: 0, linear: 1, radial: 2 };
 
 /** mode 文字列を shader 用の int に。未知は 1（linear）。 */
-export function texGenModeInt(mode: string): number {
-  return MODE_INT[mode as TexGenMode] ?? 1;
+export function textureGenModeInt(mode: string): number {
+  return MODE_INT[mode as TextureGenMode] ?? 1;
 }
 
 // 入力なしで単色/グラデーション texture を生成する。ASCII のみ。
@@ -34,14 +34,14 @@ void main() {
 }
 `;
 
-interface TexGenState {
+interface TextureGenState {
   surface: ShaderSurface;
 }
 
 /** 単色/グラデーションの texture を生成するソースノード（#153）。入力を持たず texture のみ出力。 */
-export const TexGeneratorNode: NodeTypeDef = {
-  type: "TexGenerator",
-  category: "generator",
+export const TextureGeneratorNode: NodeTypeDef = {
+  type: "TextureGenerator",
+  category: "visual",
   description: "入力なしで単色/グラデーション（線形・放射状）の texture を生成するソース。色(RGB)・角度は他ノードから駆動できる。",
   inputs: [],
   outputs: [{ id: "texture", label: "tex", type: "texture", description: "生成した単色/グラデーションのテクスチャ。" }],
@@ -55,7 +55,7 @@ export const TexGeneratorNode: NodeTypeDef = {
     { id: "b2", label: "color2 B", kind: "number", default: 0.50, min: 0, max: 1, step: 0.01, description: "色2の B。" },
     { id: "angle", label: "angle", kind: "number", default: 0, min: 0, max: 360, step: 1, description: "線形グラデの角度（度）。" },
   ],
-  createState(): TexGenState {
+  createState(): TextureGenState {
     const surface = new ShaderSurface(new THREE.ShaderMaterial({
       vertexShader: NDC_VERTEX,
       fragmentShader: FRAG,
@@ -70,14 +70,14 @@ export const TexGeneratorNode: NodeTypeDef = {
     return { surface };
   },
   disposeState(state: NodeState): void {
-    (state as TexGenState).surface.dispose();
+    (state as TextureGenState).surface.dispose();
   },
   evaluate(ctx) {
-    const s = ctx.state as TexGenState | undefined;
+    const s = ctx.state as TextureGenState | undefined;
     const env = ctx.env;
     if (!s || !env) return {};
     const u = s.surface.material.uniforms;
-    u.uMode!.value = texGenModeInt(String(ctx.param("mode") ?? "linear"));
+    u.uMode!.value = textureGenModeInt(String(ctx.param("mode") ?? "linear"));
     (u.uColor1!.value as THREE.Color).setRGB(
       Number(ctx.param("r1") ?? 0.05), Number(ctx.param("g1") ?? 0.1), Number(ctx.param("b1") ?? 0.3),
     );
