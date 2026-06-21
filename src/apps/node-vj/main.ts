@@ -136,6 +136,8 @@ const outBtn = document.createElement("button");
 outBtn.style.cssText = "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;";
 function syncOutBtn(): void {
   outBtn.textContent = output.isOpen() ? "🖥 出力ウィンドウを閉じる" : "🖥 出力ウィンドウ";
+  // #148: 出力ウィンドウ表示中は本体が隠れても描画を回し続ける（全画面で固まらないように）。
+  runtime.setKeepAliveWhileHidden(output.isOpen());
 }
 output.onClose = syncOutBtn;
 outBtn.addEventListener("click", () => {

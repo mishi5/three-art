@@ -30,5 +30,17 @@
 ## 成果物
 - `output-window.ts`（新規）・`main.ts`（ボタン）・テスト。
 
+## 追記: 全画面で描画が止まる不具合の修正
+- 症状: 出力ウィンドウを全画面にすると 1〜2 秒後に描画が固まる。
+- 原因: 描画ループは本体ウィンドウの `requestAnimationFrame` 駆動。全画面の出力ウィンドウが
+  本体を覆う → 本体が hidden になり rAF が背面スロットルされ、ソース canvas が更新されず
+  captureStream も固まる。
+- 修正: `graph/background-ticker.ts`（新規）の Worker タイマー（背面でもスロットルされない）で
+  tick を駆動するフォールバックを追加。`GraphRuntime.setKeepAliveWhileHidden(on)` を設け、
+  出力ウィンドウ表示中だけ有効化。`visibilitychange` で hidden になったら Worker 駆動、
+  可視に戻れば rAF に戻す（二重評価しないようガード）。`main.ts` の出力トグルから連動。
+- テスト: `background-ticker.test.ts`（Worker ソース）。hidden 化は headless で再現できないため
+  実全画面での描画継続は手動確認に委ねる。
+
 ## スコープ外
 - OBS 配信/録画・NDI/Spout 等（別途）。Multi-Screen 自動配置（別 Issue 可）。
