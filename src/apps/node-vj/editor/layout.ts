@@ -22,9 +22,15 @@ export function hasFileRow(def: NodeTypeDef): boolean {
 /** fileInput 持ちノードが追加する行数（file 選択行＋transport 行）。 */
 const FILE_ROWS = 2;
 
+/** #150: ノード上にランダム化ボタン行を出すか（randomButton を持つノード）。 */
+export function hasRandomRow(def: NodeTypeDef): boolean {
+  return !!def.randomButton;
+}
+
 export function nodeHeight(def: NodeTypeDef): number {
   const fileRows = hasFileRow(def) ? FILE_ROWS * ROW_H : 0;
-  return TITLE_H + portRows(def) * ROW_H + def.params.length * ROW_H + fileRows + PADDING;
+  const randomRow = hasRandomRow(def) ? ROW_H : 0;
+  return TITLE_H + portRows(def) * ROW_H + def.params.length * ROW_H + randomRow + fileRows + PADDING;
 }
 
 export function nodePos(node: NodeInstance): { x: number; y: number } {
@@ -103,6 +109,17 @@ export function transportRowRect(
   if (!hasFileRow(def)) return null;
   const p = nodePos(node);
   return { x: p.x, y: p.y + nodeHeight(def) - ROW_H, w: NODE_WIDTH, h: ROW_H };
+}
+
+/**
+ * #150: ランダム化ボタン行の領域（params 直下・randomButton 無しは null）。
+ */
+export function randomRowRect(
+  node: NodeInstance, def: NodeTypeDef,
+): { x: number; y: number; w: number; h: number } | null {
+  if (!hasRandomRow(def)) return null;
+  const p = nodePos(node);
+  return { x: p.x, y: p.y + TITLE_H + portRows(def) * ROW_H + def.params.length * ROW_H, w: NODE_WIDTH, h: ROW_H };
 }
 
 /** #99: ファイル行のラベル。未選択（空/undefined/null）は「ファイル未選択」。 */

@@ -80,6 +80,11 @@ export interface NodeTypeDef {
    * fileName: string|null を持つ前提。
    */
   fileInput?: { accept: string };
+  /**
+   * #150: ノード上に値をランダム化するボタンを出す目印。クリックで paramId の param を
+   * 同ノードの min/max param 範囲のランダム値に再ロールする（Number 用）。
+   */
+  randomButton?: { paramId: string };
   /** visual/sink ノードの初期化（THREE オブジェクト生成・scene 追加等）。1 度だけ呼ばれる。 */
   createState?(env: NodeEnv): NodeState;
   /**

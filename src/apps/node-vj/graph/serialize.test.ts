@@ -7,7 +7,7 @@ const r = createDefaultRegistry();
 
 function sampleGraph(): GraphDoc {
   const g = createGraph();
-  addNode(g, { id: "n1", type: "Number", params: { value: 2.5 }, position: { x: 10, y: 20 } });
+  addNode(g, { id: "n1", type: "Number", params: { value: 2.5, min: 0, max: 1 }, position: { x: 10, y: 20 } });
   addNode(g, { id: "m", type: "Multiply", params: { a: 1, b: 3 }, position: { x: 200, y: 50 } });
   addNode(g, { id: "rv", type: "RainVisual", params: { baseSpeed: 0.5, count: 1000, ampGain: 1, length: 0.06, areaWidth: 2, areaHeight: 2.4 }, position: { x: 400, y: 30 } });
   addConnection(g, r, { id: "c1", from: { node: "n1", port: "out" }, to: { node: "m", port: "a" } });
