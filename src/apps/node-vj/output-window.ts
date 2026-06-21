@@ -2,8 +2,12 @@
 // 方式 B: 出力 canvas の captureStream() を出力ウィンドウの <video> に流す（WebGL でも安定）。
 // 出力ウィンドウは UI を持たず映像のみ全画面（object-fit: contain でアスペクト比維持）。
 
-/** captureStream のフレームレート（エンコード負荷とのバランスで 30fps）。 */
-export const OUTPUT_CAPTURE_FPS = 30;
+/** captureStream のフレームレート。 */
+export const OUTPUT_CAPTURE_FPS = 60;
+
+/** 出力ウィンドウ表示中のレンダリング解像度（PiP 表示サイズに依らず高解像度で描く）。 */
+export const OUTPUT_RENDER_W = 1920;
+export const OUTPUT_RENDER_H = 1080;
 
 /**
  * 出力ウィンドウの HTML。黒背景・余白なしで video を全画面表示し、

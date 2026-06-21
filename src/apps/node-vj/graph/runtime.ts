@@ -83,6 +83,18 @@ export class GraphRuntime {
     this.camera.updateProjectionMatrix();
   }
 
+  /**
+   * #148: 表示 CSS サイズを変えずに「描画解像度（drawing buffer）」だけ設定する。
+   * 出力ウィンドウ表示中は PiP の見た目サイズに依らず高解像度で描き、captureStream を鮮明にする。
+   * updateStyle=false で canvas の style を触らない（CSS は呼び出し側が制御）。
+   */
+  setRenderSize(w: number, h: number, pixelRatio: number): void {
+    this.renderer.setPixelRatio(pixelRatio);
+    this.renderer.setSize(w, h, false);
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+  }
+
   /** #127/#128: 共有 AudioContext を遅延生成して返す。 */
   private getAudioContext(): AudioContext {
     return (this.audioCtx ??= new AudioContext());
@@ -146,9 +158,8 @@ export class GraphRuntime {
       this.blitter.blit(this.renderer, tex as THREE.Texture, i > 0);
     });
     // #77: ノードプレビュー小窓の更新（間引きあり）。
-    // #148: 出力ウィンドウ表示中は readPixels の GPU ストールが captureStream と競合してカクつくため、
-    // 小窓更新をスキップして出力ミラーを優先する（出力を閉じれば通常どおり更新）。
-    if (this.frameCount++ % PREVIEW_INTERVAL === 0 && !this.keepAliveWhileHidden) this.updatePreviews();
+    // #148: 本体 hidden の背面駆動中だけは小窓が不可視で readPixels の GPU ストールだけ残るのでスキップ。
+    if (this.frameCount++ % PREVIEW_INTERVAL === 0 && !this.bgTicker?.running) this.updatePreviews();
   }
 
   /** preview ON のノードの texture を小 RT へ縮小転写→読み戻し→2D canvas 化する。 */

@@ -10,7 +10,7 @@ import { buildGraphIoBar } from "./editor/graph-io-bar";
 import { GraphStore, localStorageAdapter } from "./graph/graph-store";
 import { History } from "./graph/history";
 import { previewSize } from "./preview-size";
-import { OutputWindow } from "./output-window";
+import { OutputWindow, OUTPUT_RENDER_W, OUTPUT_RENDER_H } from "./output-window";
 import type { PlaybackControl } from "./nodes/playback";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "../../core/types";
 
@@ -42,6 +42,10 @@ addConnection(graph, registry, { id: "c4", from: { node: "rain", port: "texture"
 // プレビュー（PiP）ランタイム
 const runtime = new GraphRuntime(previewCanvas, registry, graph);
 
+// #148: 出力ウィンドウ（プロジェクタ/セカンドディスプレイへのミラー）。
+// applyPreviewSize が出力状態で描画解像度を切り替えるため、ここで生成しておく。
+const output = new OutputWindow();
+
 // プレビュー拡大トグル: 小 PiP(320×180) ⇄ 全画面（#136）。
 // クリック（移動量小）で切替、ドラッグは OrbitControls の回転に使う。Esc で全画面解除。
 const preview = previewCanvas;
@@ -57,7 +61,13 @@ function applyPreviewSize(): void {
     // 小窓: 右下 PiP に戻す（node-vj.html の既定と同じ）。
     Object.assign(preview.style, { left: "auto", top: "auto", right: "12px", bottom: "56px", border: "1px solid rgba(255,255,255,0.25)", zIndex: "120" });
   }
-  runtime.setSize(w, h);
+  // #148: 出力ウィンドウ表示中は PiP の見た目サイズに依らず高解像度で描き、出力を鮮明にする
+  //（PiP は CSS で縮小表示＝同じ映像の縮小ビュー）。通常は表示サイズ×dpr で描く。
+  if (output.isOpen()) {
+    runtime.setRenderSize(OUTPUT_RENDER_W, OUTPUT_RENDER_H, 1);
+  } else {
+    runtime.setRenderSize(w, h, Math.min(window.devicePixelRatio, 2));
+  }
 }
 applyPreviewSize();
 function setPreviewLarge(large: boolean): void {
@@ -130,14 +140,14 @@ startBtn.addEventListener("click", () => {
 });
 bar.appendChild(startBtn);
 
-// #148: Screen 出力を別ウィンドウ（プロジェクタ/セカンドディスプレイ）へミラーする。
-const output = new OutputWindow();
+// #148: Screen 出力を別ウィンドウ（プロジェクタ/セカンドディスプレイ）へミラーするトグル。
 const outBtn = document.createElement("button");
 outBtn.style.cssText = "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;";
 function syncOutBtn(): void {
   outBtn.textContent = output.isOpen() ? "🖥 出力ウィンドウを閉じる" : "🖥 出力ウィンドウ";
   // #148: 出力ウィンドウ表示中は本体が隠れても描画を回し続ける（全画面で固まらないように）。
   runtime.setKeepAliveWhileHidden(output.isOpen());
+  applyPreviewSize();   // 出力状態に応じて描画解像度（高解像度⇄表示サイズ）を切り替える
 }
 output.onClose = syncOutBtn;
 outBtn.addEventListener("click", () => {
