@@ -146,7 +146,8 @@ export class GraphRuntime {
       this.blitter.blit(this.renderer, tex as THREE.Texture, i > 0);
     });
     // #77: ノードプレビュー小窓の更新（間引きあり）。
-    if (this.frameCount++ % PREVIEW_INTERVAL === 0) this.updatePreviews();
+    // #148: 背面駆動中（本体 hidden）は小窓が見えず、readPixels の GPU ストールだけが残るのでスキップ。
+    if (this.frameCount++ % PREVIEW_INTERVAL === 0 && !this.bgTicker?.running) this.updatePreviews();
   }
 
   /** preview ON のノードの texture を小 RT へ縮小転写→読み戻し→2D canvas 化する。 */
