@@ -24,6 +24,7 @@ import { PointTransformNode } from "./PointTransformNode";
 import { EnvelopeNode } from "./EnvelopeNode";
 import { FlipFlopNode } from "./FlipFlopNode";
 import { BlendNode } from "./BlendNode";
+import { KeyNode } from "./KeyNode";
 import { BlurNode } from "./BlurNode";
 import { KaleidoscopeNode } from "./KaleidoscopeNode";
 import { FractalNode } from "./FractalNode";
@@ -70,6 +71,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(ParticleRenderNode);
   r.register(RainVisualNode);
   r.register(BlendNode);
+  r.register(KeyNode);
   r.register(EdgeVisualNode);
   // effect（texture→texture）
   r.register(BlurNode);
