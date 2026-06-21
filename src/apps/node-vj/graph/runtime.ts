@@ -10,6 +10,10 @@ import type { NodeEnv, NodeRegistry, NodeState, NodeTypeDef } from "./node-type"
 import { pickScreenTextures } from "./texture-screen";
 import { TextureBlitter } from "./blit";
 import { PREVIEW_W, PREVIEW_H } from "./preview";
+import { BackgroundTicker } from "./background-ticker";
+
+/** 背面駆動 ticker の fps（#148: 出力ウィンドウ全画面で本体が隠れても回し続ける）。 */
+const BG_TICK_FPS = 60;
 
 /** プレビュー読み戻しの間引き（N フレームに 1 回。readback ストール軽減）。 */
 const PREVIEW_INTERVAL = 3;
@@ -33,6 +37,10 @@ export class GraphRuntime {
   private previewPixels = new Uint8Array(PREVIEW_W * PREVIEW_H * 4);
   private previewCanvases = new Map<string, HTMLCanvasElement>();
   private frameCount = 0;
+  // #148: 本体が hidden の間も描画を回すための Worker 駆動 ticker（出力ウィンドウ表示中のみ）。
+  private keepAliveWhileHidden = false;
+  private bgTicker: BackgroundTicker | null = null;
+  private visHandler: (() => void) | null = null;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -71,6 +79,18 @@ export class GraphRuntime {
 
   setSize(w: number, h: number): void {
     this.renderer.setSize(w, h);
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+  }
+
+  /**
+   * #148: 表示 CSS サイズを変えずに「描画解像度（drawing buffer）」だけ設定する。
+   * 出力ウィンドウ表示中は PiP の見た目サイズに依らず高解像度で描き、captureStream を鮮明にする。
+   * updateStyle=false で canvas の style を触らない（CSS は呼び出し側が制御）。
+   */
+  setRenderSize(w: number, h: number, pixelRatio: number): void {
+    this.renderer.setPixelRatio(pixelRatio);
+    this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }
@@ -138,7 +158,8 @@ export class GraphRuntime {
       this.blitter.blit(this.renderer, tex as THREE.Texture, i > 0);
     });
     // #77: ノードプレビュー小窓の更新（間引きあり）。
-    if (this.frameCount++ % PREVIEW_INTERVAL === 0) this.updatePreviews();
+    // #148: 本体 hidden の背面駆動中だけは小窓が不可視で readPixels の GPU ストールだけ残るのでスキップ。
+    if (this.frameCount++ % PREVIEW_INTERVAL === 0 && !this.bgTicker?.running) this.updatePreviews();
   }
 
   /** preview ON のノードの texture を小 RT へ縮小転写→読み戻し→2D canvas 化する。 */
@@ -204,16 +225,47 @@ export class GraphRuntime {
     return this.previewCanvases.get(nodeId);
   }
 
+  /** これまでに評価したフレーム数（診断/テスト用）。 */
+  get frames(): number {
+    return this.frameCount;
+  }
+
+  /**
+   * #148: 出力ウィンドウ表示中など、本体が隠れても描画を回し続けるか。
+   * on のとき document.hidden になると Worker タイマーで tick を駆動する
+   * （rAF は背面スロットルで止まるため）。off で通常の rAF のみ。
+   */
+  setKeepAliveWhileHidden(on: boolean): void {
+    this.keepAliveWhileHidden = on;
+    this.updateBackgroundDriver();
+  }
+
+  /** 現在の可視状態と keepAlive 設定に応じて Worker 駆動の開始/停止を切り替える。 */
+  private updateBackgroundDriver(): void {
+    const needBg = this.keepAliveWhileHidden && typeof document !== "undefined" && document.hidden;
+    if (needBg) {
+      if (!this.bgTicker) this.bgTicker = new BackgroundTicker(BG_TICK_FPS, () => this.tick(performance.now()));
+      this.bgTicker.start();
+    } else {
+      this.bgTicker?.stop();
+    }
+  }
+
   start(): void {
     const loop = (ms: number): void => {
       this.rafId = requestAnimationFrame(loop);
-      this.tick(ms);
+      // 背面駆動が動いている間は二重評価しない（可視に戻れば rAF が主になる）。
+      if (!this.bgTicker?.running) this.tick(ms);
     };
     this.rafId = requestAnimationFrame(loop);
+    this.visHandler = () => this.updateBackgroundDriver();
+    document.addEventListener("visibilitychange", this.visHandler);
   }
 
   stop(): void {
     if (this.rafId !== null) cancelAnimationFrame(this.rafId);
     this.rafId = null;
+    this.bgTicker?.stop();
+    if (this.visHandler) { document.removeEventListener("visibilitychange", this.visHandler); this.visHandler = null; }
   }
 }
