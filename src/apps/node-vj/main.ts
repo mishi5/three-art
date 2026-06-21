@@ -10,6 +10,7 @@ import { buildGraphIoBar } from "./editor/graph-io-bar";
 import { GraphStore, localStorageAdapter } from "./graph/graph-store";
 import { History } from "./graph/history";
 import { previewSize } from "./preview-size";
+import { OutputWindow } from "./output-window";
 import type { PlaybackControl } from "./nodes/playback";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "../../core/types";
 
@@ -128,6 +129,23 @@ startBtn.addEventListener("click", () => {
   }
 });
 bar.appendChild(startBtn);
+
+// #148: Screen 出力を別ウィンドウ（プロジェクタ/セカンドディスプレイ）へミラーする。
+const output = new OutputWindow();
+const outBtn = document.createElement("button");
+outBtn.style.cssText = "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;";
+function syncOutBtn(): void {
+  outBtn.textContent = output.isOpen() ? "🖥 出力ウィンドウを閉じる" : "🖥 出力ウィンドウ";
+}
+output.onClose = syncOutBtn;
+outBtn.addEventListener("click", () => {
+  if (output.isOpen()) output.close();
+  else output.open(previewCanvas);   // previewCanvas = renderer の出力 canvas
+  syncOutBtn();
+});
+syncOutBtn();
+bar.appendChild(outBtn);
+
 document.body.appendChild(bar);
 
 (window as unknown as { nodeVj: unknown }).nodeVj = { graph, registry, runtime, editor };
