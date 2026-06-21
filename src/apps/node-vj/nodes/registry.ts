@@ -13,6 +13,7 @@ import { MicInputNode } from "./MicInputNode";
 import { DisplayInputNode } from "./DisplayInputNode";
 import { AudioFileInputNode } from "./AudioFileInputNode";
 import { ImageFileInputNode } from "./ImageFileInputNode";
+import { TexGeneratorNode } from "./TexGeneratorNode";
 import { RainVisualNode } from "./RainVisualNode";
 import { PointCloudVisualNode } from "./PointCloudVisualNode";
 import { PointShapeNode } from "./PointShapeNode";
@@ -45,6 +46,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(AudioFileInputNode);
   r.register(ImageFileInputNode);
   r.register(PointShapeNode);
+  r.register(TexGeneratorNode);
   // process
   r.register(MultiplyNode);
   r.register(AddNode);
