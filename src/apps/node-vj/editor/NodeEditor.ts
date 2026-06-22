@@ -91,6 +91,8 @@ export class NodeEditor {
   private submenu: HTMLDivElement | null = null;
   /** 出力ポート横のライブ値表示（デバッグ用）。既定 OFF、ツールバーで切替。 */
   private showOutputValues = false;
+  /** #154: アセットパネルから canvas へ D&D されたときのコールバック（world 座標）。任意。 */
+  onDropAsset?: (assetId: string, worldX: number, worldY: number) => void;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -127,6 +129,9 @@ export class NodeEditor {
     canvas.addEventListener("contextmenu", this.onContextMenu);
     // #92: ホイール/ピンチでズーム（passive:false で preventDefault するため）
     canvas.addEventListener("wheel", this.onWheel, { passive: false });
+    // #154: アセットパネルからの D&D 受け口（dataTransfer に asset id があれば world 座標で通知）。
+    canvas.addEventListener("dragover", this.onDragOver);
+    canvas.addEventListener("drop", this.onDrop);
     this.toolbar = this.buildToolbar();
     this.loop();
   }
@@ -208,6 +213,20 @@ export class NodeEditor {
     this.offset = r.offset;
     this.scale = r.scale;
     this.hover = null; // ズーム中はツールチップを消す
+  };
+
+  /** #154: asset id を運ぶ D&D のみ受け入れる（ドロップ可否を示すため preventDefault）。 */
+  private onDragOver = (e: DragEvent): void => {
+    if (e.dataTransfer?.types.includes("application/x-node-vj-asset")) e.preventDefault();
+  };
+
+  /** #154: ドロップ位置（world 座標）と asset id を onDropAsset へ通知する。 */
+  private onDrop = (e: DragEvent): void => {
+    const id = e.dataTransfer?.getData("application/x-node-vj-asset");
+    if (!id) return;
+    e.preventDefault();
+    const w = screenToWorld(e.clientX, e.clientY, this.offset, this.scale);
+    this.onDropAsset?.(id, w.x, w.y);
   };
 
   /** #114: カーソル下のノード/param/ポートの説明を引き、ホバー状態を更新する。 */
@@ -981,6 +1000,8 @@ export class NodeEditor {
     window.removeEventListener("keyup", this.onKeyUp);
     this.canvas.removeEventListener("contextmenu", this.onContextMenu);
     this.canvas.removeEventListener("wheel", this.onWheel);
+    this.canvas.removeEventListener("dragover", this.onDragOver);
+    this.canvas.removeEventListener("drop", this.onDrop);
     this.closeContextMenu();
     this.toolbar.remove();
   }
