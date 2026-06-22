@@ -190,6 +190,8 @@ export const VideoFileInputNode: NodeTypeDef = {
     { id: "loop", label: "loop", kind: "enum", default: "on", options: ["on", "off"], description: "ループ再生の ON/OFF。" },
     { id: "extractAudio", label: "extractAudio", kind: "enum", default: "off", options: ["off", "on"], description: "動画音声の抽出 ON/OFF。ON で音響特徴量(signal)と実音声(audio)を出力（発音は Audio 出力ノードへ繋いだとき）。既定 OFF=無音・映像のみ。" },
     ...ONSET_PARAMS,
+    { id: "assetId", label: "asset", kind: "string", default: "", noInput: true,
+      description: "割り当てられたアセットの id（アセットライブラリ管理・UI 非表示）。" },
   ],
   createState: (env) => new VideoFileInputRuntime(env.audioContext),
   disposeState: (state: NodeState) => (state as VideoFileInputRuntime).dispose(),

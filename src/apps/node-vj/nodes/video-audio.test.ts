@@ -29,7 +29,7 @@ describe("VideoFileInputNode 音声特徴量出力 (#116)", () => {
 
   test("params: loop / extractAudio(off,on 既定 off) / onset しきい値・cooldown", () => {
     expect(VideoFileInputNode.params.map((p) => p.id)).toEqual([
-      "loop", "extractAudio", "onsetThreshold", "onsetCooldown",
+      "loop", "extractAudio", "onsetThreshold", "onsetCooldown", "assetId",
     ]);
     const ex = VideoFileInputNode.params.find((p) => p.id === "extractAudio");
     expect(ex?.kind).toBe("enum");

@@ -89,6 +89,14 @@ describe("serializeGraph / deserializeGraph", () => {
     expect(graph.nodes[0]!.preview).toBe(true);
   });
 
+  test("#154 assetId param が round-trip で保持される", () => {
+    const g = createGraph();
+    addNode(g, { id: "img", type: "ImageFileInput", params: { assetId: "abc123" }, position: { x: 10, y: 20 } });
+    const { graph } = deserializeGraph(serializeGraph(g), r);
+    const img = graph.nodes.find((n) => n.id === "img");
+    expect(img?.params.assetId).toBe("abc123");
+  });
+
   test("version 不一致は throw", () => {
     expect(() => deserializeGraph("version: 99\nnodes: []\nconnections: []", r)).toThrow();
   });
