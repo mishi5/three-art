@@ -817,14 +817,14 @@ git -C /Users/shun/dev/three-art/.worktrees/154-asset-library commit -m "$(print
 
 **Interfaces:**
 - Consumes: `AssetLibrary`, `AssetMeta`, `assetDropTarget`, `collectAssetRefs`, `generateThumbnail`, `opfsBinaryStore`, `indexedDbMetaStore`
-- Produces: `buildAssetPanel(library: AssetLibrary, opts?: { initialOpen?: boolean }): HTMLElement`（戻り値はパネルのルート要素。内部に開閉トグルを内包する）
+- Produces: `buildAssetPanel(library: AssetLibrary): HTMLElement`（戻り値はパネルのルート要素。内部に開閉トグルを内包する。初期は表示状態）
 
 > DOM/OPFS/IndexedDB/DnD はユニットテストしない。ここはロジック層（Task 1–8）を配線するだけ。動作は Playwright スモーク + 手動で確認する。
 
 - [ ] **Step 1: asset-panel.ts を実装（開閉トグル付きサイドパネル）**
 
 `graph-io-bar.ts` のスタイルに倣い、画面端（左 or 右）の固定サイドパネルを作る。**表示／非表示を切り替えられること**:
-- 常時表示の小さな**トグルボタン**（例: 📦 アセット）を画面隅に固定。クリックでパネル本体の `display`（`flex`⇄`none`）を切り替える。`open` 状態をモジュール内変数で保持（初期値は `opts.initialOpen ?? true`）。開閉状態は localStorage（キー `node-vj.asset-panel.open`）にも保存し、リロード後も維持する。
+- 常時表示の小さな**トグルボタン**（例: 📦 アセット）を画面隅に固定。クリックでパネル本体の `display`（`flex`⇄`none`）を切り替える。`open` 状態はモジュール内変数で保持（初期は表示＝true・**永続化しない**）。
 - パネル本体（一覧コンテナ + 追加ボタン + 使用量表示）。ヘッダに「アセット」見出しと閉じる（×）ボタンを置き、× でも非表示にできる。
 - 一覧: 各アセットを `div(draggable=true)` で並べる。サムネ（`thumbnail` Blob を ObjectURL 化、無ければ種別アイコン 🎬/🖼/🎵）+ ファイル名 + サイズ + 削除ボタン。
 - `dragstart` で `e.dataTransfer.setData("application/x-node-vj-asset", meta.id)`。
@@ -866,7 +866,7 @@ const library = new AssetLibrary({
   meta: indexedDbMetaStore(),
   makeThumbnail: generateThumbnail,
 });
-buildAssetPanel(library, {});
+buildAssetPanel(library);
 
 // canvas drop → ファイル行ノードへ割当
 editor.onDropAsset = async (assetId, x, y) => {
