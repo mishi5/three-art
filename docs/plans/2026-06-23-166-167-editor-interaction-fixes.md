@@ -21,15 +21,18 @@
 
 ## #167 Space+ドラッグのパンが残る
 
-### 根本原因（Playwright で確認）
-パン判定は `pointerdown` 時の `this.spaceDown` 依存。`spaceDown` の設定/解除を `e.key === " "` で判定していたが、**日本語 IME 有効時、スペースキーの `keyup` は `e.key` が `" "` でなく `"Process"` 等になる**ため、`onKeyUp` の `if (e.key === " ")` が外れて `spaceDown` がリセットされず `true` のまま残る。結果、以降の素ドラッグもパンになる。
-- 再現確認: `keyup` を `{key:'Process', code:'Space'}` で投げると現行コードは `spaceDown` を解除できない（ROOT_CAUSE_CONFIRMED）。通常 `keyup({key:' '})` なら解除される。
-- 注: 単純な実キー操作（IME なし）では keyup が `" "` で届くため再現しない。これが「特定環境で必ず起きる」理由。
+### 真の根本原因（Playwright で機構を確認 / CAUSE_B_CONFIRMED）
+`onMove` は `this.drag` がセットされていれば**ボタン押下の有無を確認せずに**パン/矩形選択を続ける。
+macOS トラックパッドで「ドラッグ中の指を止めて離す」と clean な `pointerup` が来ず、`this.drag`（kind: pan）が残る。その後にボタン非押下（`buttons === 0`）の `pointermove` が届くと、残った drag によってパンが継続する。これがユーザ報告の「スペースを離した後、素ドラッグでパンが残る」の正体。`spaceDown` は無関係（keyup で false になっていても起きる）。
+- 確認: space+drag 後に `buttons:0` の `pointermove` を dispatch すると `offset` が動く（修正前）→ 修正後は `drag` が解除され動かない。
+- 単純な実マウス操作（clean な `pointerup` が必ず出る）や Playwright の `mouse.up()` では再現しない。これが「特定環境＝トラックパッドで必ず起きる」理由。
 
 ### 修正
-- `onKey` / `onKeyUp` の Space 判定を `e.key === " "` から **`e.code === "Space"`**（物理キー・IME/レイアウト非依存）に変更。
-- 併せて `window` の `blur` でも `spaceDown` をリセット（フォーカス喪失時の取りこぼし対策・defense in depth）。
+- `onMove` 冒頭で **ドラッグ中に `e.buttons === 0` の move が来たら `pointerup` 取りこぼしとみなし `onUp(e)` でドラッグを終了**する（空移動でパン/矩形選択が継続しない）。
 
-### 確認（Playwright）
-- IME 風 `keyup({key:'Process', code:'Space'})` で `spaceDown` が `false` に戻る（FIX_OK）。
-- 実キー操作のフルジェスチャ（space+drag→解除→素drag）で 2 回目はパンしない。
+### 併せて入れた defense in depth（別経路の取りこぼし対策・本件の主因ではない）
+- `onKey`/`onKeyUp` の Space 判定を `e.key === " "` → **`e.code === "Space"`**（IME 有効時 keyup の `e.key` が `"Process"` 等になり取りこぼす経路の対策）。
+- `window` の `blur` で `spaceDown` をリセット。
+
+### 確認（Playwright・ALL_OK）
+- `buttons:0` の stray move で drag 解除・パンしない / 通常 space+drag→素drag は矩形 / IME 風 keyup で spaceDown 解除 / #166 メニュートグル。

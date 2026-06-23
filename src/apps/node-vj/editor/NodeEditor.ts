@@ -356,6 +356,13 @@ export class NodeEditor {
   private onMove = (e: PointerEvent): void => {
     this.cursor = this.toWorld(e);
     this.pointer = { x: e.clientX, y: e.clientY };
+    // #167: ドラッグ中のはずなのにボタンが押されていない move が来たら pointerup を取りこぼしている
+    // （macOS トラックパッドで指を止めて離すと pointerup が来ず、以後の指移動でパンが続く）。
+    // ここで up とみなしてドラッグを終了し、空移動でパン/矩形選択が継続しないようにする。
+    if (this.drag && e.buttons === 0) {
+      this.onUp(e);
+      return;
+    }
     if (!this.drag) {
       this.updateHover();
       return;
