@@ -18,6 +18,8 @@ export interface NodeEnv {
    * 繋げないため、音声入力/Mix/Output は必ずこの ctx を使う。runtime が遅延生成して配る。
    */
   audioContext: AudioContext;
+  /** #152: 参照先シーンの合成テクスチャを引く（SceneInput 用。ランタイムが毎フレーム用意）。 */
+  sceneTexture?(sceneId: string): unknown;
 }
 
 /** ノードのフレーム間永続状態（visual モジュールのインスタンス等）。 */
@@ -82,6 +84,8 @@ export interface NodeTypeDef {
    * fileName: string|null を持つ前提。
    */
   fileInput?: { accept: string };
+  /** #152: ノードに「シーン選択行」を出す目印（SceneInput）。params.sceneId に参照先シーン id を持つ。 */
+  sceneInput?: boolean;
   /**
    * #150: ノード上に値をランダム化するボタンを出す目印。クリックで paramId の param を
    * 同ノードの min/max param 範囲のランダム値に再ロールする（Number 用）。
