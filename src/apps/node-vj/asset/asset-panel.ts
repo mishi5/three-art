@@ -19,7 +19,21 @@ export function formatBytes(bytes: number): string {
   return `${v.toFixed(1)} ${units[i]}`;
 }
 
-const KIND_ICON: Record<AssetKind, string> = { image: "🖼", video: "🎬", audio: "🎵" };
+// 絵文字をやめ、線アイコン（currentColor の SVG）で統一する。
+const SVG = (body: string): string =>
+  `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
+  `stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+const ICON = {
+  // サイドパネル（左にバー付きの矩形）。折畳レール／再展開に使う。
+  sidebar: SVG('<rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/>'),
+  // 折りたたみ（左向き二重シェブロン）。
+  collapse: SVG('<polyline points="13 6 7 12 13 18"/><polyline points="18 6 12 12 18 18"/>'),
+  image: SVG('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.6"/><polyline points="4 18 9 13 13 16 17 12 20 15"/>'),
+  video: SVG('<rect x="3" y="5" width="18" height="14" rx="2"/><polygon points="10 9 16 12 10 15 10 9"/>'),
+  audio: SVG('<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>'),
+  trash: SVG('<polyline points="4 7 20 7"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/>'),
+} as const;
+const KIND_ICON: Record<AssetKind, string> = { image: ICON.image, video: ICON.video, audio: ICON.audio };
 
 const PANEL_BG = "rgba(20,20,26,0.96)";
 const BTN_CSS =
@@ -44,17 +58,18 @@ function toast(message: string, isError = false): void {
  * 初期は表示・開閉状態はメモリ保持のみ（永続化しない）。
  */
 export function buildAssetPanel(library: AssetLibrary): HTMLElement {
-  let open = true;
+  // 既定は折りたたみ（閉じた状態）。開閉状態はメモリ保持のみ・永続化しない。
+  let open = false;
   // 一覧描画で作った ObjectURL を再描画時に解放するため保持する。
   let objectUrls: string[] = [];
 
-  // --- 折畳時に左端へ出す再展開タブ（»）---
+  // --- 折畳時に左端へ出す再展開タブ（サイドパネルアイコン）---
   const rail = document.createElement("button");
-  rail.textContent = "📦";
+  rail.innerHTML = ICON.sidebar;
   rail.title = "アセットパネルを開く";
   rail.style.cssText =
     BTN_CSS + `position:fixed;left:0;top:${PANE_TOP}px;z-index:156;border-radius:0 6px 6px 0;` +
-    "display:none;padding:8px 6px;";
+    `display:${open ? "none" : "flex"};align-items:center;justify-content:center;padding:8px 7px;`;
   document.body.appendChild(rail);
 
   // --- ペイン本体（左ドック・全高）---
@@ -73,9 +88,9 @@ export function buildAssetPanel(library: AssetLibrary): HTMLElement {
   title.textContent = "アセット";
   title.style.cssText = "font-weight:600;";
   const collapseBtn = document.createElement("button");
-  collapseBtn.textContent = "«";
+  collapseBtn.innerHTML = ICON.collapse;
   collapseBtn.title = "パネルを閉じる";
-  collapseBtn.style.cssText = BTN_CSS + "padding:0 8px;line-height:20px;";
+  collapseBtn.style.cssText = BTN_CSS + "display:flex;align-items:center;justify-content:center;padding:3px 6px;";
   header.appendChild(title);
   header.appendChild(collapseBtn);
   pane.appendChild(header);
@@ -107,7 +122,7 @@ export function buildAssetPanel(library: AssetLibrary): HTMLElement {
   function setOpen(next: boolean): void {
     open = next;
     pane.style.display = panelDisplay(open);
-    rail.style.display = open ? "none" : "block";
+    rail.style.display = open ? "none" : "flex";
   }
   collapseBtn.addEventListener("click", () => setOpen(false));
   rail.addEventListener("click", () => setOpen(true));
@@ -166,7 +181,8 @@ export function buildAssetPanel(library: AssetLibrary): HTMLElement {
       img.style.cssText = "max-width:100%;max-height:100%;display:block;";
       thumb.appendChild(img);
     } else {
-      thumb.textContent = KIND_ICON[meta.kind];
+      thumb.innerHTML = KIND_ICON[meta.kind];
+      thumb.style.color = "#9ab";
     }
     row.appendChild(thumb);
 
@@ -185,8 +201,9 @@ export function buildAssetPanel(library: AssetLibrary): HTMLElement {
 
     // 削除
     const del = document.createElement("button");
-    del.textContent = "🗑";
-    del.style.cssText = BTN_CSS + "flex:0 0 auto;padding:2px 6px;";
+    del.innerHTML = ICON.trash;
+    del.title = "削除";
+    del.style.cssText = BTN_CSS + "flex:0 0 auto;display:flex;align-items:center;justify-content:center;padding:4px 5px;";
     del.addEventListener("click", (e) => {
       e.stopPropagation();
       void library.remove(meta.id);
