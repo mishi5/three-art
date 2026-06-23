@@ -460,7 +460,9 @@ export class NodeEditor {
   private onKey = (e: KeyboardEvent): void => {
     const t = e.target as HTMLElement | null;
     if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;
-    if (e.key === " ") this.spaceDown = true;
+    // #167: 物理キーで判定する。IME 有効時は keyup の e.key が " " でなく "Process" 等になり
+    // e.key === " " では keyup を取りこぼして spaceDown が残る（日本語環境で多発）。e.code は不変。
+    if (e.code === "Space") this.spaceDown = true;
     // #92: "0" でズームを 100% に戻す（画面中心を固定）。
     if (e.key === "0" && !e.metaKey && !e.ctrlKey) {
       const r = zoomAt(window.innerWidth / 2, window.innerHeight / 2, this.offset, this.scale, 1 / this.scale);
@@ -502,7 +504,8 @@ export class NodeEditor {
   };
 
   private onKeyUp = (e: KeyboardEvent): void => {
-    if (e.key === " ") this.spaceDown = false;
+    // #167: e.code で判定（IME 経由の keyup は e.key が " " にならず取りこぼすため）。
+    if (e.code === "Space") this.spaceDown = false;
   };
 
   /** #167: ウィンドウ blur で Space 押下状態を解除する（keyup を取りこぼしてもパンが残らないように）。 */

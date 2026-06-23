@@ -21,11 +21,15 @@
 
 ## #167 Space+ドラッグのパンが残る
 
-### 原因
-パン判定は `pointerdown` 時の `this.spaceDown` 依存。`spaceDown` は `keyup` で `false` に戻すが、ドラッグ中のフォーカス移動・ウィンドウ blur 等で space の `keyup` を取りこぼすと `true` のまま残り、以降の素ドラッグもパンになる。
+### 根本原因（Playwright で確認）
+パン判定は `pointerdown` 時の `this.spaceDown` 依存。`spaceDown` の設定/解除を `e.key === " "` で判定していたが、**日本語 IME 有効時、スペースキーの `keyup` は `e.key` が `" "` でなく `"Process"` 等になる**ため、`onKeyUp` の `if (e.key === " ")` が外れて `spaceDown` がリセットされず `true` のまま残る。結果、以降の素ドラッグもパンになる。
+- 再現確認: `keyup` を `{key:'Process', code:'Space'}` で投げると現行コードは `spaceDown` を解除できない（ROOT_CAUSE_CONFIRMED）。通常 `keyup({key:' '})` なら解除される。
+- 注: 単純な実キー操作（IME なし）では keyup が `" "` で届くため再現しない。これが「特定環境で必ず起きる」理由。
 
 ### 修正
-- `window` の `blur` で `spaceDown = false` にリセットする（`onBlur` を追加、`dispose` で解除）。
+- `onKey` / `onKeyUp` の Space 判定を `e.key === " "` から **`e.code === "Space"`**（物理キー・IME/レイアウト非依存）に変更。
+- 併せて `window` の `blur` でも `spaceDown` をリセット（フォーカス喪失時の取りこぼし対策・defense in depth）。
 
 ### 確認（Playwright）
-`keydown(' ')` で `spaceDown=true` → `window` blur で `spaceDown=false`。
+- IME 風 `keyup({key:'Process', code:'Space'})` で `spaceDown` が `false` に戻る（FIX_OK）。
+- 実キー操作のフルジェスチャ（space+drag→解除→素drag）で 2 回目はパンしない。
