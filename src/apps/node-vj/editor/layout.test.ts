@@ -2,6 +2,7 @@ import { expect, test, describe } from "bun:test";
 import {
   NODE_WIDTH, TITLE_H, ROW_H, nodeHeight, inputPortPos, outputPortPos,
   portIndex, nodeRect, hasRandomRow, randomRowRect,
+  hasSceneRow, sceneRowRect, sceneRowLabel,
 } from "./layout";
 import type { NodeTypeDef } from "../graph/node-type";
 import type { NodeInstance } from "../graph/graph-doc";
@@ -57,5 +58,23 @@ describe("editor layout", () => {
     const rr = randomRowRect(node, rnd)!;
     expect(rr).toEqual({ x: 100, y: 50 + TITLE_H + 1 * ROW_H + 1 * ROW_H, w: NODE_WIDTH, h: ROW_H });
     expect(randomRowRect(node, def)).toBeNull();
+  });
+
+  test("#152 sceneInput ノードは scene 行を持ち高さが 1 行ぶん増える", () => {
+    const sceneDef: NodeTypeDef = {
+      type: "S", inputs: [], outputs: [{ id: "texture", label: "t", type: "texture" }], params: [], sceneInput: true,
+    } as unknown as NodeTypeDef;
+    expect(hasSceneRow(sceneDef)).toBe(true);
+    expect(hasSceneRow(def)).toBe(false);
+    const sn: NodeInstance = { id: "n", type: "S", params: {}, position: { x: 10, y: 20 } };
+    // portRows = max(0 signal入力, 1 出力) = 1、params=0 → scene 行は params 直下
+    const r = sceneRowRect(sn, sceneDef)!;
+    expect(r).toEqual({ x: 10, y: 20 + TITLE_H + 1 * ROW_H, w: NODE_WIDTH, h: ROW_H });
+    expect(sceneRowRect(sn, def)).toBeNull();
+  });
+
+  test("#152 sceneRowLabel 未選択表示", () => {
+    expect(sceneRowLabel(null)).toBe("(シーン未選択)");
+    expect(sceneRowLabel("Intro")).toBe("Intro");
   });
 });

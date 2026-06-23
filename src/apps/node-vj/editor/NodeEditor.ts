@@ -12,6 +12,7 @@ import {
   inputPortPos, outputPortPos, paramRowY, paramPortPos, resolveInputPortPos,
   previewButtonRect, previewWindowRect, hasFileRow, fileRowRect, fileRowLabel,
   transportRowRect, transportLayout, seekRatioAt, formatTime, randomRowRect,
+  hasSceneRow, sceneRowRect, sceneRowLabel,
 } from "./layout";
 import { randomInRange } from "./random-value";
 import { hitTest } from "./hit-test";
@@ -116,6 +117,12 @@ export class NodeEditor {
       get: (nodeId: string) => { playing: boolean; current: number; duration: number } | null;
       toggle: (nodeId: string) => void;
       seek: (nodeId: string, t: number) => void;
+    },
+    /** #152: SceneInput のシーン選択（行クリックでドロップダウン）。任意。 */
+    private sceneSelect?: {
+      options: (nodeId: string) => { id: string; name: string }[]; // 循環候補は除外済み
+      current: (nodeId: string) => string | null;                  // 表示名（未選択 null）
+      choose: (nodeId: string, sceneId: string) => void;
     },
   ) {
     const c = canvas.getContext("2d");
@@ -320,6 +327,14 @@ export class NodeEditor {
             this.playback?.seek(hit.node.id, seekRatioAt(w.x, seek) * pb.duration);
             this.drag = { kind: "seek", nodeId: hit.node.id, seek, duration: pb.duration };
           }
+          return;
+        }
+      }
+      // #152: シーン選択行クリックで参照シーンのドロップダウンを開く。
+      if (def?.sceneInput) {
+        const sr = sceneRowRect(hit.node, def);
+        if (sr && w.x >= sr.x && w.x <= sr.x + sr.w && w.y >= sr.y && w.y <= sr.y + sr.h) {
+          this.openSceneMenu(hit.node.id, sr);
           return;
         }
       }
@@ -573,6 +588,16 @@ export class NodeEditor {
     el.textContent = text;
     el.style.cssText = "color:#666;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;padding:4px 8px 2px;";
     menu.appendChild(el);
+  }
+
+  /** #152: SceneInput のシーン選択ドロップダウン（循環候補は除外済みの options）。 */
+  private openSceneMenu(nodeId: string, rowWorld: { x: number; y: number; w: number; h: number }): void {
+    const opts = this.sceneSelect?.options(nodeId) ?? [];
+    const s = worldToScreen(rowWorld.x, rowWorld.y + rowWorld.h, this.offset, this.scale);
+    const menu = this.buildMenu(s.x, s.y);
+    this.addMenuLabel(menu, "シーンを選択");
+    if (opts.length === 0) { this.addMenuLabel(menu, "(選べるシーンなし)"); return; }
+    for (const o of opts) this.addMenuItem(menu, o.name, () => this.sceneSelect?.choose(nodeId, o.id));
   }
 
   private addMenuItem(menu: HTMLElement, text: string, onClick: () => void): void {
@@ -1016,6 +1041,17 @@ export class NodeEditor {
       ctx.fillStyle = "#9ab"; ctx.textAlign = "right"; ctx.font = "10px system-ui";
       ctx.fillText(formatTime(cur), tr.x + tr.w - 6, tr.y + tr.h / 2);
       ctx.textAlign = "left";
+    }
+    // #152: シーン選択行（クリックで参照シーンのドロップダウン）。
+    if (hasSceneRow(def)) {
+      const sr = sceneRowRect(node, def)!;
+      const name = this.sceneSelect?.current(node.id) ?? null;
+      ctx.fillStyle = name ? "#243042" : "#262630";
+      roundRect(ctx, sr.x + 6, sr.y + 2, sr.w - 12, sr.h - 4, 4);
+      ctx.fill();
+      ctx.strokeStyle = "#4a5566"; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = "#9ab"; ctx.textAlign = "left"; ctx.font = "11px system-ui";
+      ctx.fillText(ellipsizeEnd(ctx, sceneRowLabel(name), sr.w - 24), sr.x + 12, sr.y + sr.h / 2);
     }
     // #150: 🎲ランダムボタン行。
     if (def.randomButton) {

@@ -37,6 +37,7 @@ import { AudioMixNode } from "./AudioMixNode";
 import { AudioDelayNode } from "./AudioDelayNode";
 import { AudioOutputNode } from "./AudioOutputNode";
 import { ScreenNode } from "./ScreenNode";
+import { SceneInputNode } from "./SceneInputNode";
 
 /** 既定ノードを登録したレジストリを返す。 */
 export function createDefaultRegistry(): NodeRegistry {
@@ -53,6 +54,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(AudioFileInputNode);
   r.register(ImageFileInputNode);
   r.register(PointShapeNode);
+  r.register(SceneInputNode);
   // process
   r.register(MultiplyNode);
   r.register(AddNode);
