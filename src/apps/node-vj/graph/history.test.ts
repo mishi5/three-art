@@ -76,4 +76,32 @@ describe("History", () => {
     expect(h.undo(g1())).toBeNull();
     expect(h.redo(g1())).toBeNull();
   });
+
+  test("#151 シーン別トラックで履歴が独立し、切替でクリアされない", () => {
+    const h = new History();
+    const gv = (v: number): GraphDoc => {
+      const g = createGraph();
+      addNode(g, { id: "n", type: "Number", params: { value: v } });
+      return g;
+    };
+    h.useScene("A");
+    h.record(gv(1));
+    expect(h.canUndo).toBe(true);
+    h.useScene("B");
+    expect(h.canUndo).toBe(false); // B は空
+    h.record(gv(2));
+    h.useScene("A");
+    expect(h.canUndo).toBe(true);  // A は保持（クリアされない）
+    const snap = h.undo(gv(99));
+    expect(snap?.nodes[0]!.params.value).toBe(1);
+  });
+
+  test("#151 removeScene でトラック破棄", () => {
+    const h = new History();
+    h.useScene("A");
+    h.record(g1());
+    h.removeScene("A");
+    h.useScene("A");
+    expect(h.canUndo).toBe(false); // 破棄後は空
+  });
 });

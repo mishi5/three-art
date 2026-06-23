@@ -3,7 +3,7 @@
 // 既定グラフ: Number→Multiply←Number → RainVisual.baseSpeed、RainVisual.tex → Screen。
 // #98: 画面に出すには Screen への接続が必須（自動表示フォールバックは廃止）。
 import { createDefaultRegistry } from "./nodes/registry";
-import { addConnection, addNode, createGraph } from "./graph/graph-doc";
+import { addConnection, addNode, createGraph, replaceGraph } from "./graph/graph-doc";
 import { GraphRuntime } from "./graph/runtime";
 import { NodeEditor } from "./editor/NodeEditor";
 import { buildGraphIoBar } from "./editor/graph-io-bar";
@@ -17,9 +17,13 @@ import { AssetLibrary } from "./asset/asset-library";
 import { opfsBinaryStore } from "./asset/binary-store";
 import { indexedDbMetaStore } from "./asset/meta-store";
 import { generateThumbnail } from "./asset/thumbnail";
-import { buildAssetPanel } from "./asset/asset-panel";
+import { assetPanelDef } from "./asset/asset-panel";
 import { assetDropTarget, nodeTypeForKind } from "./asset/asset-drop";
 import { collectAssetRefs } from "./asset/asset-refs";
+import { SceneStore } from "./scene/scene-store";
+import { SceneManager, singleSceneSet } from "./scene/scene-manager";
+import { scenePanelDef, type ScenePanelActions } from "./scene/scene-panel";
+import { buildSideDock } from "./editor/side-dock";
 
 const editorCanvas = document.getElementById("editor");
 const previewCanvas = document.getElementById("preview");
@@ -173,8 +177,74 @@ async function restoreAssets(): Promise<void> {
   }
 }
 
-// #154: アセットパネル（左サイド・開閉トグル）を表示する。
-buildAssetPanel(library);
+// #151: シーン管理。SceneStore から復元、無ければ既定グラフを唯一のシーンとして初期化。
+const sceneStore = new SceneStore(localStorage);
+const genSceneId = (): string => `scene-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+const savedSceneSet = sceneStore.load();
+const sceneManager = new SceneManager(
+  { store: sceneStore, genId: genSceneId },
+  savedSceneSet ?? singleSceneSet(structuredClone(graph), genSceneId(), "Scene 1"),
+);
+if (savedSceneSet) {
+  // 復元: アクティブシーンの内容を共有グラフへ反映し、アセットを復元。
+  const act = sceneManager.active();
+  replaceGraph(graph, structuredClone(act.graph));
+  history.useScene(act.id);
+  void restoreAssets();
+} else {
+  history.useScene(sceneManager.activeId());
+}
+sceneManager.persist(); // 初回（未保存）も含め現在の集合を localStorage に確定させる
+
+/** 編集中の共有グラフを現アクティブシーンへ書き戻す（切替/保存前に呼ぶ）。 */
+function snapshotActiveScene(): void {
+  sceneManager.updateActiveGraph(graph);
+}
+
+/** 新アクティブシーンの内容を共有グラフへ反映し、履歴トラック切替・state 再同期・アセット復元する。 */
+function reflectActiveScene(): void {
+  const act = sceneManager.active();
+  replaceGraph(graph, structuredClone(act.graph));
+  history.useScene(act.id);
+  runtime.resumeAudio();   // user gesture 由来の切替で共有 AudioContext を起こす
+  runtime.ensureStates();  // 旧シーンの state を破棄し新シーンを生成（即時ハードカット）
+  void restoreAssets();    // 新シーンの assetId をライブラリから復元
+}
+
+const sceneActions: ScenePanelActions = {
+  list: () => sceneManager.list(),
+  activeId: () => sceneManager.activeId(),
+  switchTo: (id) => {
+    if (id === sceneManager.activeId()) return;
+    snapshotActiveScene();       // 現シーンの編集を保存
+    sceneManager.setActive(id);
+    reflectActiveScene();
+  },
+  add: () => {
+    snapshotActiveScene();
+    sceneManager.add();          // 空シーンを作り active に
+    reflectActiveScene();
+  },
+  duplicate: (id) => {
+    snapshotActiveScene();
+    sceneManager.duplicate(id);  // 複製を active に
+    reflectActiveScene();
+  },
+  remove: (id) => {
+    const wasActive = id === sceneManager.activeId();
+    history.removeScene(id);
+    sceneManager.remove(id);     // 最後の1つは消えない・active が変わりうる
+    if (wasActive && sceneManager.activeId() !== id) reflectActiveScene();
+  },
+  rename: (id, name) => sceneManager.rename(id, name),
+  onChange: (cb) => sceneManager.onChange(cb),
+};
+// #151: VSCode 風サイドドック（最左アイコン列で アセット/シーン を切替）。
+buildSideDock([assetPanelDef(library), scenePanelDef(sceneActions)]);
+
+// 自動永続化: 編集の取りこぼし防止に定期 + ページ離脱時にアクティブシーンへ書き戻して保存。
+setInterval(() => snapshotActiveScene(), 5000);
+window.addEventListener("beforeunload", () => snapshotActiveScene());
 
 // グラフ保存/読込バー（#65）。読込は replaceGraph で同一参照のまま反映される。
 // #154: 読込完了後に restoreAssets でアセットを自動復元する。
