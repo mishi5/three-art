@@ -26,7 +26,8 @@ export const AudioOutputNode: NodeTypeDef = {
   createState(env: NodeEnv): AudioOutputState {
     const ctx = env.audioContext;
     const gain = ctx.createGain();
-    gain.connect(ctx.destination);
+    // #172: 参照先シーンとして評価される場合は destination へ繋がない（音は SceneInput.audio 経由で親が発音）。
+    if (!env.referencedScene) gain.connect(ctx.destination);
     return { ctx, gain, connected: null };
   },
   disposeState(state: NodeState): void {
@@ -46,6 +47,8 @@ export const AudioOutputNode: NodeTypeDef = {
     }
     const mute = ctx.param("mute") === "on";
     st.gain.gain.value = mute ? 0 : Number(ctx.param("volume") ?? 1);
+    // #172: 参照先シーン文脈では gain をシーンの音声出力としてランタイムへ通知する。
+    ctx.env?.captureSceneAudio?.(st.gain);
     return {};
   },
 };
