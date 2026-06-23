@@ -30,7 +30,8 @@
 > つまり主因は「Space を離してもパンが終わらない」こと。`spaceDown` の取りこぼし（IME）でも、`buttons===0` の検知でもない（指を離しても buttons は 1 のまま＝`buttons===0` ガードは発火しない）。
 
 ### 修正（主因）
-- pan drag に `bySpace`（Space 始動か）を持たせ、**`onKeyUp` で Space 解除時に `bySpace` のパンを即終了**（`this.drag = null`）。buttons / pointerup の状態に依存せず、Space を離した瞬間にパンが止まる。
+- pan drag に `bySpace`（Space 始動か）を持たせ、**`onMove` で Space 始動パンは「その時点で `spaceDown` か」を見て都度パンする**。Space を離している間はパンせず、基準（ox/oy/startX/startY）を更新し続けて再押下時にジャンプしない。
+- ※当初 `onKeyUp` で `drag = null`（即終了）にしたが、トラックパッドは指を離しても `pointerup` を落とすため、同じ指のまま再パンしようとしても新規 `pointerdown` が来ず**無反応**になった（ユーザ報告）。drag は捨てず「Space 押下中のみパン」に変更して解消。
 
 ### 併せて入れた defense in depth（別経路の保険・本件の主因ではない）
 - `onMove`: ドラッグ中に `e.buttons === 0` の move が来たら `onUp(e)` で終了（通常マウスで pointerup を落とした場合の保険）。

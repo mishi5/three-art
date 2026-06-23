@@ -383,8 +383,16 @@ export class NodeEditor {
         if (node) node.position = { x: this.cursor.x - a.dx, y: this.cursor.y - a.dy };
       }
     } else if (this.drag.kind === "pan") {
-      this.offset.x = this.drag.ox + (e.clientX - this.drag.startX);
-      this.offset.y = this.drag.oy + (e.clientY - this.drag.startY);
+      // #167: Space 始動パンは Space を離している間は動かさない（trackpad は指を離しても
+      // buttons:1 のまま・pointerup を落とすため、Space の押下状態でパンの ON/OFF を決める）。
+      // 停止中も基準を更新し続け、Space 再押下時にジャンプせず続きからパンできるようにする。
+      if (this.drag.bySpace && !this.spaceDown) {
+        this.drag.startX = e.clientX; this.drag.startY = e.clientY;
+        this.drag.ox = this.offset.x; this.drag.oy = this.offset.y;
+      } else {
+        this.offset.x = this.drag.ox + (e.clientX - this.drag.startX);
+        this.offset.y = this.drag.oy + (e.clientY - this.drag.startY);
+      }
     } else if (this.drag.kind === "param") {
       this.dragParam(this.drag);
     } else if (this.drag.kind === "seek") {
@@ -515,13 +523,9 @@ export class NodeEditor {
 
   private onKeyUp = (e: KeyboardEvent): void => {
     // #167: e.code で判定（IME 経由の keyup は e.key が " " にならず取りこぼすため）。
-    if (e.code === "Space") {
-      this.spaceDown = false;
-      // Space 始動のパン中に Space を離したら即終了する。
-      // macOS トラックパッドは指を離しても pointermove の buttons が 1 のまま・pointerup も来ないため、
-      // buttons や pointerup に頼らず Space の解除でパンを止める（これが残留パンの主因）。
-      if (this.drag?.kind === "pan" && this.drag.bySpace) this.drag = null;
-    }
+    // #167: Space 始動パンは drag を保持したまま「Space を押している間だけ」動かす（onMove で判定）。
+    // drag を捨てるとトラックパッドで pointerup が来ない場合に再パンが始められず無反応になるため。
+    if (e.code === "Space") this.spaceDown = false;
   };
 
   /** #167: ウィンドウ blur で Space 押下状態を解除する（keyup を取りこぼしてもパンが残らないように）。 */
