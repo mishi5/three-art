@@ -196,6 +196,7 @@ if (savedSceneSet) {
 } else {
   history.useScene(sceneManager.activeId());
 }
+sceneManager.persist(); // 初回（未保存）も含め現在の集合を localStorage に確定させる
 
 /** 編集中の共有グラフを現アクティブシーンへ書き戻す（切替/保存前に呼ぶ）。 */
 function snapshotActiveScene(): void {

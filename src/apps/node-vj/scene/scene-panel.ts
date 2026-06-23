@@ -36,14 +36,14 @@ export function buildScenePanel(actions: ScenePanelActions): HTMLElement {
   const rail = document.createElement("button");
   rail.innerHTML = SCENES_ICON;
   rail.title = "シーンパネルを開く";
-  rail.style.cssText = BTN_CSS + `position:fixed;left:0;top:${RAIL_TOP}px;z-index:156;border-radius:0 6px 6px 0;` +
+  rail.style.cssText = BTN_CSS + `position:fixed;left:0;top:${RAIL_TOP}px;z-index:157;border-radius:0 6px 6px 0;` +
     `display:${open ? "none" : "flex"};align-items:center;justify-content:center;padding:8px 7px;`;
   document.body.appendChild(rail);
 
   const pane = document.createElement("div");
   pane.style.cssText =
     `position:fixed;left:0;top:${PANE_TOP}px;bottom:48px;width:230px;` +
-    `display:${panelDisplay(open)};flex-direction:column;gap:6px;z-index:155;` +
+    `display:${panelDisplay(open)};flex-direction:column;gap:6px;z-index:157;` +
     `background:${PANEL_BG};border-right:1px solid #444;border-top:1px solid #444;` +
     `border-radius:0 6px 6px 0;padding:8px;box-sizing:border-box;font:12px system-ui;color:#ddd;` +
     `box-shadow:2px 0 16px rgba(0,0,0,0.4);`;

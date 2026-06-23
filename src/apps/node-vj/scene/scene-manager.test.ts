@@ -48,6 +48,13 @@ describe("SceneManager", () => {
     expect(m.activeId()).toBe(s.id);
     expect(m.list().length).toBe(1);
   });
+  test("persist で現在の集合を保存する（初期化直後の保存用）", () => {
+    const { m, store } = mgr();
+    expect(store.load()).toBeNull(); // 構築だけでは未保存
+    m.persist();
+    expect(store.load()?.scenes.length).toBe(1);
+    expect(store.load()?.activeId).toBe("s0");
+  });
   test("rename / updateActiveGraph / onChange / 永続化", () => {
     const { m, store } = mgr();
     let fired = 0;

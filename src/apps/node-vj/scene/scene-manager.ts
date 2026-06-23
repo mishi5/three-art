@@ -71,6 +71,9 @@ export class SceneManager {
     this.commit();
   }
 
+  /** 現在の集合を保存する（初期化直後など、変更を伴わない保存用）。 */
+  persist(): void { this.store.save(this.toSet()); }
+
   onChange(cb: () => void): () => void { this.listeners.add(cb); return () => { this.listeners.delete(cb); }; }
 
   private byId(id: string): Scene {
