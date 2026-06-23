@@ -227,6 +227,16 @@ function wireSceneProvider(): void {
 }
 wireSceneProvider();
 
+// #172: 参照先シーンの音声/動画入力を assetId 経由で復元し、解析・再生を走らせる（音声駆動の映像も動く）。
+runtime.setSceneAssetRestorer((node, state) => {
+  const assetId = (node.params as Record<string, unknown>).assetId;
+  if (typeof assetId !== "string" || !assetId) return;
+  void library.getFile(assetId).then((f) => {
+    if (f) void (state as FileLoadable).loadFile?.(f)?.catch((e) => console.warn(`[node-vj] scene asset restore failed ${node.id}:`, e));
+  }).catch((e) => console.warn(`[node-vj] scene getFile failed ${assetId}:`, e));
+});
+runtime.resumeAudio(); // 参照先音声の start のため AudioContext を起こす（後続の操作でも resume される）
+
 /** 編集中の共有グラフを現アクティブシーンへ書き戻す（切替/保存前に呼ぶ）。 */
 function snapshotActiveScene(): void {
   sceneManager.updateActiveGraph(graph);

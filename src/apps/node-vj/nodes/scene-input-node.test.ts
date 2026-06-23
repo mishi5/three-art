@@ -19,12 +19,23 @@ describe("SceneInputNode", () => {
   test("texture 出力・sceneInput フラグ・sceneId は hidden", () => {
     expect(SceneInputNode.type).toBe("SceneInput");
     expect(SceneInputNode.sceneInput).toBe(true);
-    expect(SceneInputNode.outputs.map((p) => p.id)).toEqual(["texture"]);
+    expect(SceneInputNode.outputs.map((p) => p.id)).toEqual(["texture", "audio"]);
     expect(SceneInputNode.params.find((p) => p.id === "sceneId")?.hidden).toBe(true);
   });
   test("evaluate は env.sceneTexture(sceneId) を texture に返す", () => {
     const fake = {};
     expect(SceneInputNode.evaluate(ctx("B", fake)).texture).toBe(fake);
     expect(SceneInputNode.evaluate(ctx("", fake)).texture).toBeUndefined();
+  });
+  test("#172 evaluate は env.sceneAudio を audio(AudioSignal) で返す", () => {
+    const fakeNode = {} as AudioNode;
+    const c = {
+      timeSec: 0, input: () => undefined,
+      param: (id: string) => (id === "sceneId" ? "B" : undefined),
+      node: { id: "n", type: "SceneInput", params: { sceneId: "B" } },
+      env: { sceneTexture: () => null, sceneAudio: (id: string) => (id === "B" ? fakeNode : null) },
+    } as never;
+    const out = SceneInputNode.evaluate(c);
+    expect((out.audio as { node: AudioNode }).node).toBe(fakeNode);
   });
 });
