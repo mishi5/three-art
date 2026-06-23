@@ -89,6 +89,8 @@ export class NodeEditor {
   private contextMenu: HTMLDivElement | null = null;
   /** #103: 開いているフライアウトサブメニュー（カテゴリ → 型一覧）。 */
   private submenu: HTMLDivElement | null = null;
+  /** #166: 現在のメニューを開いたトグルボタン。再押下クローズの判定に使う（右クリックメニューは null）。 */
+  private menuAnchor: HTMLElement | null = null;
   /** 出力ポート横のライブ値表示（デバッグ用）。既定 OFF、ツールバーで切替。 */
   private showOutputValues = false;
   /** #154: アセットパネルから canvas へ D&D されたときのコールバック（world 座標）。任意。 */
@@ -125,6 +127,8 @@ export class NodeEditor {
     window.addEventListener("pointerup", this.onUp);
     window.addEventListener("keydown", this.onKey);
     window.addEventListener("keyup", this.onKeyUp);
+    // #167: フォーカスが外れたら Space 押下状態をリセット（keyup 取りこぼしでパンが残る不具合の防止）。
+    window.addEventListener("blur", this.onBlur);
     // 右ドラッグパンのためコンテキストメニューを抑止
     canvas.addEventListener("contextmenu", this.onContextMenu);
     // #92: ホイール/ピンチでズーム（passive:false で preventDefault するため）
@@ -501,6 +505,11 @@ export class NodeEditor {
     if (e.key === " ") this.spaceDown = false;
   };
 
+  /** #167: ウィンドウ blur で Space 押下状態を解除する（keyup を取りこぼしてもパンが残らないように）。 */
+  private onBlur = (): void => {
+    this.spaceDown = false;
+  };
+
   private onContextMenu = (e: Event): void => {
     e.preventDefault(); // ネイティブメニューは出さない（独自メニューを onUp で出す）
   };
@@ -598,6 +607,8 @@ export class NodeEditor {
     if (this.contextMenu) { this.closeContextMenu(); return; } // 同じボタン再押下で閉じる
     const r = anchor.getBoundingClientRect();
     const menu = this.buildMenu(r.left, r.bottom + 4);
+    // #166: このボタン上の pointerdown では closeOnOutside で閉じず、click のトグルに委ねる。
+    this.menuAnchor = anchor;
     for (const type of group.types) {
       this.addMenuItem(menu, "+ " + type, () => this.addNodeOfType(type));
     }
@@ -623,7 +634,9 @@ export class NodeEditor {
   private closeOnOutside = (e: PointerEvent): void => {
     const t = e.target as Node;
     const inMenu = this.contextMenu?.contains(t) || this.submenu?.contains(t);
-    if (!inMenu) this.closeContextMenu();
+    // #166: トグルボタン自身の上では閉じない（click のトグルが閉じる役を担うため・二重発火で再オープンするのを防ぐ）。
+    const onAnchor = this.menuAnchor?.contains(t) ?? false;
+    if (!inMenu && !onAnchor) this.closeContextMenu();
   };
 
   private closeSubmenu(): void {
@@ -638,6 +651,7 @@ export class NodeEditor {
     window.removeEventListener("pointerdown", this.closeOnOutside, true);
     this.contextMenu.remove();
     this.contextMenu = null;
+    this.menuAnchor = null;
   }
 
   /**
@@ -1005,6 +1019,7 @@ export class NodeEditor {
     window.removeEventListener("pointerup", this.onUp);
     window.removeEventListener("keydown", this.onKey);
     window.removeEventListener("keyup", this.onKeyUp);
+    window.removeEventListener("blur", this.onBlur);
     this.canvas.removeEventListener("contextmenu", this.onContextMenu);
     this.canvas.removeEventListener("wheel", this.onWheel);
     this.canvas.removeEventListener("dragover", this.onDragOver);
