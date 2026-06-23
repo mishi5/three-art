@@ -51,7 +51,8 @@ type Drag =
   // 選択グループの一括移動。anchors は各ノードの「カーソル→ノード位置」オフセット。
   | { kind: "group"; anchors: Map<string, { dx: number; dy: number }>; moved: boolean }
   | { kind: "wire"; fromNode: string; fromPort: string; type: PortType }
-  | { kind: "pan"; startX: number; startY: number; ox: number; oy: number }
+  // #167: bySpace=true は Space 押下で始めたパン。Space を離したら（buttons の状態に依らず）終了する。
+  | { kind: "pan"; startX: number; startY: number; ox: number; oy: number; bySpace: boolean }
   // 空白ドラッグの矩形選択（#83）。start は world 座標。
   | { kind: "rect"; startX: number; startY: number }
   // param 行のスライダドラッグ候補。moved=false のまま up したらクリック（数値入力）扱い。
@@ -89,6 +90,8 @@ export class NodeEditor {
   private contextMenu: HTMLDivElement | null = null;
   /** #103: 開いているフライアウトサブメニュー（カテゴリ → 型一覧）。 */
   private submenu: HTMLDivElement | null = null;
+  /** #166: 現在のメニューを開いたトグルボタン。再押下クローズの判定に使う（右クリックメニューは null）。 */
+  private menuAnchor: HTMLElement | null = null;
   /** 出力ポート横のライブ値表示（デバッグ用）。既定 OFF、ツールバーで切替。 */
   private showOutputValues = false;
   /** #154: アセットパネルから canvas へ D&D されたときのコールバック（world 座標）。任意。 */
@@ -125,6 +128,8 @@ export class NodeEditor {
     window.addEventListener("pointerup", this.onUp);
     window.addEventListener("keydown", this.onKey);
     window.addEventListener("keyup", this.onKeyUp);
+    // #167: フォーカスが外れたら Space 押下状態をリセット（keyup 取りこぼしでパンが残る不具合の防止）。
+    window.addEventListener("blur", this.onBlur);
     // 右ドラッグパンのためコンテキストメニューを抑止
     canvas.addEventListener("contextmenu", this.onContextMenu);
     // #92: ホイール/ピンチでズーム（passive:false で preventDefault するため）
@@ -254,7 +259,9 @@ export class NodeEditor {
     const w = this.toWorld(e);
     // パン: Space+左ドラッグ / 中ボタン / 右ボタン（#83 で空白左ドラッグは矩形選択に変更）。
     if (e.button !== 0 || this.spaceDown) {
-      this.drag = { kind: "pan", startX: e.clientX, startY: e.clientY, ox: this.offset.x, oy: this.offset.y };
+      // Space 押下で始めたパンは、Space を離した時点で終了させる（#167）。
+      const bySpace = e.button === 0 && this.spaceDown;
+      this.drag = { kind: "pan", startX: e.clientX, startY: e.clientY, ox: this.offset.x, oy: this.offset.y, bySpace };
       return;
     }
     // #80: 遮蔽つき統一ヒットテスト。最前面ノードがイベントを所有する。
@@ -352,6 +359,13 @@ export class NodeEditor {
   private onMove = (e: PointerEvent): void => {
     this.cursor = this.toWorld(e);
     this.pointer = { x: e.clientX, y: e.clientY };
+    // #167: ドラッグ中のはずなのにボタンが押されていない move が来たら pointerup を取りこぼしている
+    // （macOS トラックパッドで指を止めて離すと pointerup が来ず、以後の指移動でパンが続く）。
+    // ここで up とみなしてドラッグを終了し、空移動でパン/矩形選択が継続しないようにする。
+    if (this.drag && e.buttons === 0) {
+      this.onUp(e);
+      return;
+    }
     if (!this.drag) {
       this.updateHover();
       return;
@@ -369,8 +383,21 @@ export class NodeEditor {
         if (node) node.position = { x: this.cursor.x - a.dx, y: this.cursor.y - a.dy };
       }
     } else if (this.drag.kind === "pan") {
-      this.offset.x = this.drag.ox + (e.clientX - this.drag.startX);
-      this.offset.y = this.drag.oy + (e.clientY - this.drag.startY);
+      // #167: Space 始動パンは「今 Space を押しているか」で挙動を切り替える。
+      // trackpad は指を離しても buttons:1 のまま・pointerup を落とすため、pointerdown 時に
+      // パン/矩形を固定すると stale な状態が残る。Space を離したら矩形選択へ即切替する。
+      if (this.drag.bySpace && !this.spaceDown) {
+        this.drag = { kind: "rect", startX: this.cursor.x, startY: this.cursor.y };
+      } else {
+        this.offset.x = this.drag.ox + (e.clientX - this.drag.startX);
+        this.offset.y = this.drag.oy + (e.clientY - this.drag.startY);
+      }
+    } else if (this.drag.kind === "rect") {
+      // #167: 矩形選択中に Space を押したらパンへ切替（現在地を基準にジャンプなく開始）。
+      if (this.spaceDown) {
+        this.drag = { kind: "pan", startX: e.clientX, startY: e.clientY, ox: this.offset.x, oy: this.offset.y, bySpace: true };
+      }
+      // それ以外は cursor 更新のみ（矩形は描画/確定時に start→cursor で算出）。
     } else if (this.drag.kind === "param") {
       this.dragParam(this.drag);
     } else if (this.drag.kind === "seek") {
@@ -456,7 +483,9 @@ export class NodeEditor {
   private onKey = (e: KeyboardEvent): void => {
     const t = e.target as HTMLElement | null;
     if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;
-    if (e.key === " ") this.spaceDown = true;
+    // #167: 物理キーで判定する。IME 有効時は keyup の e.key が " " でなく "Process" 等になり
+    // e.key === " " では keyup を取りこぼして spaceDown が残る（日本語環境で多発）。e.code は不変。
+    if (e.code === "Space") this.spaceDown = true;
     // #92: "0" でズームを 100% に戻す（画面中心を固定）。
     if (e.key === "0" && !e.metaKey && !e.ctrlKey) {
       const r = zoomAt(window.innerWidth / 2, window.innerHeight / 2, this.offset, this.scale, 1 / this.scale);
@@ -498,7 +527,15 @@ export class NodeEditor {
   };
 
   private onKeyUp = (e: KeyboardEvent): void => {
-    if (e.key === " ") this.spaceDown = false;
+    // #167: e.code で判定（IME 経由の keyup は e.key が " " にならず取りこぼすため）。
+    // #167: Space 始動パンは drag を保持したまま「Space を押している間だけ」動かす（onMove で判定）。
+    // drag を捨てるとトラックパッドで pointerup が来ない場合に再パンが始められず無反応になるため。
+    if (e.code === "Space") this.spaceDown = false;
+  };
+
+  /** #167: ウィンドウ blur で Space 押下状態を解除する（keyup を取りこぼしてもパンが残らないように）。 */
+  private onBlur = (): void => {
+    this.spaceDown = false;
   };
 
   private onContextMenu = (e: Event): void => {
@@ -598,6 +635,8 @@ export class NodeEditor {
     if (this.contextMenu) { this.closeContextMenu(); return; } // 同じボタン再押下で閉じる
     const r = anchor.getBoundingClientRect();
     const menu = this.buildMenu(r.left, r.bottom + 4);
+    // #166: このボタン上の pointerdown では closeOnOutside で閉じず、click のトグルに委ねる。
+    this.menuAnchor = anchor;
     for (const type of group.types) {
       this.addMenuItem(menu, "+ " + type, () => this.addNodeOfType(type));
     }
@@ -623,7 +662,9 @@ export class NodeEditor {
   private closeOnOutside = (e: PointerEvent): void => {
     const t = e.target as Node;
     const inMenu = this.contextMenu?.contains(t) || this.submenu?.contains(t);
-    if (!inMenu) this.closeContextMenu();
+    // #166: トグルボタン自身の上では閉じない（click のトグルが閉じる役を担うため・二重発火で再オープンするのを防ぐ）。
+    const onAnchor = this.menuAnchor?.contains(t) ?? false;
+    if (!inMenu && !onAnchor) this.closeContextMenu();
   };
 
   private closeSubmenu(): void {
@@ -638,6 +679,7 @@ export class NodeEditor {
     window.removeEventListener("pointerdown", this.closeOnOutside, true);
     this.contextMenu.remove();
     this.contextMenu = null;
+    this.menuAnchor = null;
   }
 
   /**
@@ -1005,6 +1047,7 @@ export class NodeEditor {
     window.removeEventListener("pointerup", this.onUp);
     window.removeEventListener("keydown", this.onKey);
     window.removeEventListener("keyup", this.onKeyUp);
+    window.removeEventListener("blur", this.onBlur);
     this.canvas.removeEventListener("contextmenu", this.onContextMenu);
     this.canvas.removeEventListener("wheel", this.onWheel);
     this.canvas.removeEventListener("dragover", this.onDragOver);
