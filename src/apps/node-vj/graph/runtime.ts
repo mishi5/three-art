@@ -8,6 +8,7 @@ import { evaluate } from "./evaluator";
 import type { GraphDoc } from "./graph-doc";
 import type { NodeEnv, NodeRegistry, NodeState, NodeTypeDef } from "./node-type";
 import { pickScreenTextures } from "./texture-screen";
+import { collectSceneRefs, sceneRenderOrder } from "../scene/scene-refs";
 import { TextureBlitter } from "./blit";
 import { PREVIEW_W, PREVIEW_H } from "./preview";
 import { BackgroundTicker } from "./background-ticker";
@@ -41,6 +42,11 @@ export class GraphRuntime {
   private keepAliveWhileHidden = false;
   private bgTicker: BackgroundTicker | null = null;
   private visHandler: (() => void) | null = null;
+  // #152: シーンをノード化する参照解決。アクティブ以外のシーンを専用 state/RT で事前評価する。
+  private sceneProvider: ((id: string) => GraphDoc | null) | null = null;
+  private activeSceneId = "";
+  private sceneRes = new Map<string, { states: Map<string, NodeState>; defs: Map<string, NodeTypeDef>; rt: THREE.WebGLRenderTarget }>();
+  private sceneTextureCache = new Map<string, THREE.Texture>();
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -61,6 +67,12 @@ export class GraphRuntime {
 
   setGraph(graph: GraphDoc): void {
     this.graph = graph;
+  }
+
+  /** #152: シーン id → GraphDoc を引く provider と現在のアクティブシーン id を設定する。 */
+  setSceneProvider(provider: (id: string) => GraphDoc | null, activeSceneId: string): void {
+    this.sceneProvider = provider;
+    this.activeSceneId = activeSceneId;
   }
 
   /** ノードの永続状態を取得する（入力ノードの start() を user gesture から呼ぶ用）。 */
@@ -119,6 +131,7 @@ export class GraphRuntime {
       renderer: this.renderer,
       camera: this.camera,
       audioContext: this.getAudioContext(),
+      sceneTexture: (id) => this.sceneTextureCache.get(id) ?? null,
     };
   }
 
@@ -145,12 +158,96 @@ export class GraphRuntime {
     }
   }
 
+  /**
+   * #152: アクティブグラフから参照される全シーンを依存順に評価し、
+   * 各シーンを専用 RT へ合成して sceneTextureCache に積む。アクティブ自身は対象外。
+   */
+  private renderReferencedScenes(timeSec: number): void {
+    const provider = this.sceneProvider;
+    if (!provider) return;
+    const order = this.collectSceneOrder();
+    const alive = new Set(order);
+    // 参照されなくなったシーンのリソースを破棄
+    for (const [id, res] of [...this.sceneRes.entries()]) {
+      if (!alive.has(id)) {
+        const env = this.env();
+        for (const [nid, st] of res.states) res.defs.get(nid)?.disposeState?.(st, env);
+        res.rt.dispose();
+        this.sceneRes.delete(id);
+        this.sceneTextureCache.delete(id);
+      }
+    }
+    for (const id of order) {
+      const graph = provider(id);
+      if (!graph) continue;
+      const res = this.ensureSceneRes(id);
+      this.syncStatesFor(graph, res);
+      const outputs = evaluate(graph, this.registry, {
+        timeSec, env: this.env(), state: (nid) => res.states.get(nid),
+      });
+      const textures = pickScreenTextures(graph, this.registry, outputs);
+      const w = this.renderer.domElement.width;
+      const h = this.renderer.domElement.height;
+      if (res.rt.width !== w || res.rt.height !== h) res.rt.setSize(w, h);
+      const prev = this.renderer.getRenderTarget();
+      this.renderer.setRenderTarget(res.rt);
+      this.renderer.clear();
+      textures.forEach((tex, i) => this.blitter.blit(this.renderer, tex as THREE.Texture, i > 0));
+      this.renderer.setRenderTarget(prev);
+      this.sceneTextureCache.set(id, res.rt.texture);
+    }
+  }
+
+  /** アクティブグラフ＋provider から到達する参照先シーンを依存順（leaf 先）で返す。 */
+  private collectSceneOrder(): string[] {
+    const provider = this.sceneProvider;
+    if (!provider) return [];
+    const graphOf = (id: string): GraphDoc | null => (id === this.activeSceneId ? this.graph : provider(id));
+    const scenes: { id: string; graph: GraphDoc }[] = [{ id: this.activeSceneId, graph: this.graph }];
+    const seen = new Set<string>([this.activeSceneId]);
+    const stack = [...collectSceneRefs(this.graph, this.registry)];
+    while (stack.length) {
+      const id = stack.pop()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const g = graphOf(id);
+      if (!g) continue;
+      scenes.push({ id, graph: g });
+      for (const ref of collectSceneRefs(g, this.registry)) stack.push(ref);
+    }
+    return sceneRenderOrder(this.activeSceneId, scenes, this.registry);
+  }
+
+  private ensureSceneRes(id: string): { states: Map<string, NodeState>; defs: Map<string, NodeTypeDef>; rt: THREE.WebGLRenderTarget } {
+    let res = this.sceneRes.get(id);
+    if (!res) {
+      res = { states: new Map(), defs: new Map(), rt: new THREE.WebGLRenderTarget(2, 2, { depthBuffer: true }) };
+      this.sceneRes.set(id, res);
+    }
+    return res;
+  }
+
+  /** 指定 graph 専用の state マップを同期する（syncStates のシーン版）。 */
+  private syncStatesFor(graph: GraphDoc, res: { states: Map<string, NodeState>; defs: Map<string, NodeTypeDef> }): void {
+    const env = this.env();
+    const aliveIds = new Set(graph.nodes.map((n) => n.id));
+    for (const [id, st] of [...res.states.entries()]) {
+      if (!aliveIds.has(id)) { res.defs.get(id)?.disposeState?.(st, env); res.states.delete(id); res.defs.delete(id); }
+    }
+    for (const node of graph.nodes) {
+      const def = this.registry.get(node.type);
+      if (def?.createState && !res.states.has(node.id)) { res.states.set(node.id, def.createState(env)); res.defs.set(node.id, def); }
+    }
+  }
+
   /** 1 フレーム評価して描画する。 */
   tick(nowMs: number): void {
     if (this.startMs === null) this.startMs = nowMs;
     const timeSec = (nowMs - this.startMs) / 1000;
     this.syncStates();
     this.controls.update();
+    // #152: アクティブグラフが参照する他シーンを依存順に事前評価し、各シーンを専用 RT へ合成。
+    this.renderReferencedScenes(timeSec);
     // 評価: visual は各自の RT へ描画して texture を返す（canvas は触らない）。
     this.lastOutputs = evaluate(this.graph, this.registry, {
       timeSec,
