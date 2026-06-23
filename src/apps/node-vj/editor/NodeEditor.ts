@@ -51,7 +51,8 @@ type Drag =
   // 選択グループの一括移動。anchors は各ノードの「カーソル→ノード位置」オフセット。
   | { kind: "group"; anchors: Map<string, { dx: number; dy: number }>; moved: boolean }
   | { kind: "wire"; fromNode: string; fromPort: string; type: PortType }
-  | { kind: "pan"; startX: number; startY: number; ox: number; oy: number }
+  // #167: bySpace=true は Space 押下で始めたパン。Space を離したら（buttons の状態に依らず）終了する。
+  | { kind: "pan"; startX: number; startY: number; ox: number; oy: number; bySpace: boolean }
   // 空白ドラッグの矩形選択（#83）。start は world 座標。
   | { kind: "rect"; startX: number; startY: number }
   // param 行のスライダドラッグ候補。moved=false のまま up したらクリック（数値入力）扱い。
@@ -258,7 +259,9 @@ export class NodeEditor {
     const w = this.toWorld(e);
     // パン: Space+左ドラッグ / 中ボタン / 右ボタン（#83 で空白左ドラッグは矩形選択に変更）。
     if (e.button !== 0 || this.spaceDown) {
-      this.drag = { kind: "pan", startX: e.clientX, startY: e.clientY, ox: this.offset.x, oy: this.offset.y };
+      // Space 押下で始めたパンは、Space を離した時点で終了させる（#167）。
+      const bySpace = e.button === 0 && this.spaceDown;
+      this.drag = { kind: "pan", startX: e.clientX, startY: e.clientY, ox: this.offset.x, oy: this.offset.y, bySpace };
       return;
     }
     // #80: 遮蔽つき統一ヒットテスト。最前面ノードがイベントを所有する。
@@ -512,7 +515,13 @@ export class NodeEditor {
 
   private onKeyUp = (e: KeyboardEvent): void => {
     // #167: e.code で判定（IME 経由の keyup は e.key が " " にならず取りこぼすため）。
-    if (e.code === "Space") this.spaceDown = false;
+    if (e.code === "Space") {
+      this.spaceDown = false;
+      // Space 始動のパン中に Space を離したら即終了する。
+      // macOS トラックパッドは指を離しても pointermove の buttons が 1 のまま・pointerup も来ないため、
+      // buttons や pointerup に頼らず Space の解除でパンを止める（これが残留パンの主因）。
+      if (this.drag?.kind === "pan" && this.drag.bySpace) this.drag = null;
+    }
   };
 
   /** #167: ウィンドウ blur で Space 押下状態を解除する（keyup を取りこぼしてもパンが残らないように）。 */
