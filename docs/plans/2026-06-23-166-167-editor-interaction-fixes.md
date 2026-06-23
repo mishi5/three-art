@@ -29,9 +29,19 @@
 
 > つまり主因は「Space を離してもパンが終わらない」こと。`spaceDown` の取りこぼし（IME）でも、`buttons===0` の検知でもない（指を離しても buttons は 1 のまま＝`buttons===0` ガードは発火しない）。
 
-### 修正（主因）
-- pan drag に `bySpace`（Space 始動か）を持たせ、**`onMove` で Space 始動パンは「その時点で `spaceDown` か」を見て都度パンする**。Space を離している間はパンせず、基準（ox/oy/startX/startY）を更新し続けて再押下時にジャンプしない。
-- ※当初 `onKeyUp` で `drag = null`（即終了）にしたが、トラックパッドは指を離しても `pointerup` を落とすため、同じ指のまま再パンしようとしても新規 `pointerdown` が来ず**無反応**になった（ユーザ報告）。drag は捨てず「Space 押下中のみパン」に変更して解消。
+### 修正（主因・最終形）
+背景ドラッグの「パン/矩形選択」を **pointerdown 時に固定せず、`onMove` で毎フレーム `spaceDown` により切り替える**。
+- pan drag に `bySpace`（Space 始動か）を持たせる。
+- `onMove`: bySpace パン中に `spaceDown` が false なら **その場で矩形選択 (`rect`) へ切替**（現在地を起点）。矩形選択中に `spaceDown` が true なら **パンへ切替**（現在地基準でジャンプなし）。
+- これで pointerup の取りこぼし（trackpad で buttons:1 が残る）に左右されず、「Space 離す→そのまま矩形選択」「Space 再押下→パン再開」「離して新規ドラッグ→矩形選択」がすべて即反応する。
+
+### 試行錯誤の記録（同じ轍を踏まないため）
+1. `blur` リセット → 効かず（フォーカスは外れていない）。
+2. `e.code === "Space"`（IME 経由 keyup 取りこぼし）→ 本件主因でなく効かず（実機ログで keyup は届いていた）。
+3. `onMove` で `buttons === 0` 終了 → 効かず（trackpad は指を離しても buttons:1 のまま）。
+4. `onKeyUp` で pan drag を `null` 終了 → 残留パンは消えたが、同じ指のまま再パンできず**無反応**（pointerup 欠落で新規 pointerdown が来ない）。
+5. drag 保持＋Space 押下中のみパン（停止中は基準更新）→ 残留・再開は解決したが、パン後の**矩形選択が数回効かない**（stale pan が居座る）。
+6. 上記「move ごとに spaceDown でパン/矩形を切替」→ 解決。実機イベントログ採取が突破口だった。
 
 ### 併せて入れた defense in depth（別経路の保険・本件の主因ではない）
 - `onMove`: ドラッグ中に `e.buttons === 0` の move が来たら `onUp(e)` で終了（通常マウスで pointerup を落とした場合の保険）。

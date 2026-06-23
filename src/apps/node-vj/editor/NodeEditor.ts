@@ -383,16 +383,21 @@ export class NodeEditor {
         if (node) node.position = { x: this.cursor.x - a.dx, y: this.cursor.y - a.dy };
       }
     } else if (this.drag.kind === "pan") {
-      // #167: Space 始動パンは Space を離している間は動かさない（trackpad は指を離しても
-      // buttons:1 のまま・pointerup を落とすため、Space の押下状態でパンの ON/OFF を決める）。
-      // 停止中も基準を更新し続け、Space 再押下時にジャンプせず続きからパンできるようにする。
+      // #167: Space 始動パンは「今 Space を押しているか」で挙動を切り替える。
+      // trackpad は指を離しても buttons:1 のまま・pointerup を落とすため、pointerdown 時に
+      // パン/矩形を固定すると stale な状態が残る。Space を離したら矩形選択へ即切替する。
       if (this.drag.bySpace && !this.spaceDown) {
-        this.drag.startX = e.clientX; this.drag.startY = e.clientY;
-        this.drag.ox = this.offset.x; this.drag.oy = this.offset.y;
+        this.drag = { kind: "rect", startX: this.cursor.x, startY: this.cursor.y };
       } else {
         this.offset.x = this.drag.ox + (e.clientX - this.drag.startX);
         this.offset.y = this.drag.oy + (e.clientY - this.drag.startY);
       }
+    } else if (this.drag.kind === "rect") {
+      // #167: 矩形選択中に Space を押したらパンへ切替（現在地を基準にジャンプなく開始）。
+      if (this.spaceDown) {
+        this.drag = { kind: "pan", startX: e.clientX, startY: e.clientY, ox: this.offset.x, oy: this.offset.y, bySpace: true };
+      }
+      // それ以外は cursor 更新のみ（矩形は描画/確定時に start→cursor で算出）。
     } else if (this.drag.kind === "param") {
       this.dragParam(this.drag);
     } else if (this.drag.kind === "seek") {
