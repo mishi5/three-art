@@ -20,6 +20,12 @@ export interface NodeEnv {
   audioContext: AudioContext;
   /** #152: 参照先シーンの合成テクスチャを引く（SceneInput 用。ランタイムが毎フレーム用意）。 */
   sceneTexture?(sceneId: string): unknown;
+  /** #172: 参照先シーンとして評価中か（AudioOutput が destination 非接続にする等）。 */
+  referencedScene?: boolean;
+  /** #172: 参照先シーンの音声出力ノードをランタイムへ通知する。 */
+  captureSceneAudio?(node: AudioNode): void;
+  /** #172: 参照先シーンの音声出力（マージ gain）を引く（SceneInput 用）。 */
+  sceneAudio?(sceneId: string): AudioNode | null;
 }
 
 /** ノードのフレーム間永続状態（visual モジュールのインスタンス等）。 */
