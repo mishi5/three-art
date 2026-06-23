@@ -13,6 +13,13 @@ import { previewSize } from "./preview-size";
 import { OutputWindow, OUTPUT_RENDER_W, OUTPUT_RENDER_H } from "./output-window";
 import type { PlaybackControl } from "./nodes/playback";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "../../core/types";
+import { AssetLibrary } from "./asset/asset-library";
+import { opfsBinaryStore } from "./asset/binary-store";
+import { indexedDbMetaStore } from "./asset/meta-store";
+import { generateThumbnail } from "./asset/thumbnail";
+import { buildAssetPanel } from "./asset/asset-panel";
+import { assetDropTarget, nodeTypeForKind } from "./asset/asset-drop";
+import { collectAssetRefs } from "./asset/asset-refs";
 
 const editorCanvas = document.getElementById("editor");
 const previewCanvas = document.getElementById("preview");
@@ -90,6 +97,22 @@ const audio: AudioFeatures = { ...DEFAULT_AUDIO_FEATURES, fft };
 runtime.setAudio(audio);
 runtime.start();
 
+// #154: アセットライブラリ（OPFS バイナリ + IndexedDB メタ）。サムネは DOM で生成。
+const library = new AssetLibrary({
+  binary: opfsBinaryStore(),
+  meta: indexedDbMetaStore(),
+  makeThumbnail: generateThumbnail,
+});
+
+/** #154: ファイルをライブラリへ取り込み、得た assetId をノード params に記録する。 */
+function recordAsset(nodeId: string, file: File): void {
+  library.add(file).then((m) => {
+    if (!m) return;
+    const n = graph.nodes.find((x) => x.id === nodeId);
+    if (n) n.params.assetId = m.id;
+  }).catch((e) => console.warn(`[node-vj] library.add failed for ${nodeId}:`, e));
+}
+
 // ノードエディタ（全画面）。出力ポートのライブ値は runtime の直近評価結果から引く。
 const history = new History();
 type FileLoadable = { loadFile?: (f: File) => Promise<void> };
@@ -103,6 +126,7 @@ const editor = new NodeEditor(
     runtime.resumeAudio(); // #128: ファイル読込（user gesture）で共有 AudioContext を起こす
     const s = runtime.getState(id) as FileLoadable | undefined;
     s?.loadFile?.(file).catch((e) => console.warn(`[node-vj] loadFile failed for ${id}:`, e));
+    recordAsset(id, file); // #154: 直接選択もライブラリに取り込み assetId を記録
   },
   (id) => (runtime.getState(id) as Named | undefined)?.fileName ?? null,
   // #99: ノードごとの再生コントロール（PlaybackControl を持つノードのみ機能）。
@@ -117,8 +141,44 @@ const editor = new NodeEditor(
   },
 );
 
+// #154: canvas へドロップされたアセットを読み込む。
+// ファイル入力ノード本体に重なれば割当、空白なら種別に応じてノードを生成して割当。
+function loadAssetIntoNode(nodeId: string, assetId: string, file: File): void {
+  const s = runtime.getState(nodeId) as FileLoadable | undefined;
+  void s?.loadFile?.(file).catch((e) => console.warn(`[node-vj] loadFile failed for ${nodeId}:`, e));
+  const n = graph.nodes.find((x2) => x2.id === nodeId);
+  if (n) n.params.assetId = assetId; // 保存対象に記録
+}
+editor.onDropAsset = (assetId, x, y) => {
+  runtime.resumeAudio(); // #128: 読込（user gesture）で共有 AudioContext を起こす
+  Promise.all([library.getFile(assetId), library.get(assetId)]).then(([file, meta]) => {
+    if (!file || !meta) return;
+    let nodeId = assetDropTarget(graph, registry, x, y);
+    if (!nodeId) {
+      // 空白ドロップ: 種別に応じたファイル入力ノードを drop 位置に生成する。
+      nodeId = editor.addNodeOfType(nodeTypeForKind(meta.kind), { x, y });
+      runtime.ensureStates(); // 生成直後に loadFile したいので state を即時生成
+    }
+    loadAssetIntoNode(nodeId, assetId, file);
+  }).catch((e) => console.warn(`[node-vj] drop asset failed ${assetId}:`, e));
+};
+
+/** #154: グラフ読込後、params.assetId を持つノードへライブラリからファイルを復元する。 */
+async function restoreAssets(): Promise<void> {
+  for (const ref of collectAssetRefs(graph)) {
+    const file = await library.getFile(ref.assetId);
+    if (!file) { console.warn(`[node-vj] asset not found: ${ref.assetId}`); continue; }
+    const s = runtime.getState(ref.nodeId) as FileLoadable | undefined;
+    await s?.loadFile?.(file).catch((e) => console.warn(`[node-vj] restore failed ${ref.nodeId}:`, e));
+  }
+}
+
+// #154: アセットパネル（左サイド・開閉トグル）を表示する。
+buildAssetPanel(library);
+
 // グラフ保存/読込バー（#65）。読込は replaceGraph で同一参照のまま反映される。
-buildGraphIoBar(graph, registry, new GraphStore(localStorageAdapter()), history);
+// #154: 読込完了後に restoreAssets でアセットを自動復元する。
+buildGraphIoBar(graph, registry, new GraphStore(localStorageAdapter()), history, () => { void restoreAssets(); });
 
 // 入力起動コントロール（mic/camera/display は user gesture 必須のためボタンから start）。
 // #99: ファイル選択はノード上の「ファイル行」クリックに移行（共有ファイル input は撤去）。

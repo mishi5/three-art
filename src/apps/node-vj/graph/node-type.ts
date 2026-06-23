@@ -44,6 +44,8 @@ export interface ParamDef {
   options?: string[];
   /** true なら数値 param でも入力ポートを作らない（Number.value のような固定値ソース用）。 */
   noInput?: boolean;
+  /** #154: true ならノード UI に param 行を描かない（保存はする・assetId のような内部値用）。 */
+  hidden?: boolean;
   /** #114: マウスオーバー時に出すツールチップ説明（任意）。 */
   description?: string;
 }

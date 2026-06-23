@@ -48,8 +48,9 @@ export function hitTest(
 
     const insideRect = wx >= r.x && wx <= r.x + r.w && wy >= r.y && wy <= r.y + r.h;
     if (insideRect) {
-      // param 行（ドット以外の領域）
+      // param 行（ドット以外の領域）。#154: hidden param は行を持たないので除外。
       for (let pi = 0; pi < def.params.length; pi++) {
+        if (def.params[pi]!.hidden) continue;
         if (Math.abs(wy - paramRowY(node, def, pi)) <= ROW_H / 2) {
           return { kind: "param", node, paramIndex: pi };
         }
@@ -78,7 +79,7 @@ function portAt(node: NodeInstance, def: NodeTypeDef, wx: number, wy: number): H
     }
   }
   for (let i = 0; i < def.params.length; i++) {
-    if (!isConnectableParam(def.params[i]!)) continue;
+    if (def.params[i]!.hidden || !isConnectableParam(def.params[i]!)) continue;
     const p = paramPortPos(node, def, i);
     if (dist2(wx, wy, p.x, p.y) <= HIT_R2) {
       return { kind: "port", node, port: def.params[i]!.id, portKind: "input", type: "number" };

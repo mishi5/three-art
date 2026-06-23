@@ -68,6 +68,14 @@ export class GraphRuntime {
     return this.states.get(nodeId);
   }
 
+  /**
+   * #154: 次フレームを待たずに state を即時生成・破棄する。
+   * ノードを動的追加した直後に getState→loadFile したいとき（アセット D&D 生成）に使う。
+   */
+  ensureStates(): void {
+    this.syncStates();
+  }
+
   /** 直近フレームの評価結果（ノードの出力ポート値）。エディタのライブ表示用。 */
   getOutputs(nodeId: string): Record<string, unknown> | undefined {
     return this.lastOutputs.get(nodeId);

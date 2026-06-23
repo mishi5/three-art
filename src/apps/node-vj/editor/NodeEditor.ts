@@ -91,6 +91,8 @@ export class NodeEditor {
   private submenu: HTMLDivElement | null = null;
   /** 出力ポート横のライブ値表示（デバッグ用）。既定 OFF、ツールバーで切替。 */
   private showOutputValues = false;
+  /** #154: アセットパネルから canvas へ D&D されたときのコールバック（world 座標）。任意。 */
+  onDropAsset?: (assetId: string, worldX: number, worldY: number) => void;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -127,6 +129,9 @@ export class NodeEditor {
     canvas.addEventListener("contextmenu", this.onContextMenu);
     // #92: ホイール/ピンチでズーム（passive:false で preventDefault するため）
     canvas.addEventListener("wheel", this.onWheel, { passive: false });
+    // #154: アセットパネルからの D&D 受け口（dataTransfer に asset id があれば world 座標で通知）。
+    canvas.addEventListener("dragover", this.onDragOver);
+    canvas.addEventListener("drop", this.onDrop);
     this.toolbar = this.buildToolbar();
     this.loop();
   }
@@ -174,7 +179,7 @@ export class NodeEditor {
     return bar;
   }
 
-  addNodeOfType(type: string, worldPos?: { x: number; y: number }): void {
+  addNodeOfType(type: string, worldPos?: { x: number; y: number }): string {
     const def = this.registry.require(type);
     // #92/#103: world 座標へ配置。worldPos 指定（右クリック）はその位置、未指定は画面左上付近。
     const jitter = Math.round((idCounter % 5) * 24);
@@ -188,6 +193,7 @@ export class NodeEditor {
     this.history.record(this.graph);
     addNode(this.graph, node);
     this.selectedIds = new Set([node.id]);
+    return node.id;
   }
 
   // --- pointer 座標 → world 座標（#92: ズーム反映）---
@@ -210,8 +216,27 @@ export class NodeEditor {
     this.hover = null; // ズーム中はツールチップを消す
   };
 
+  /** #154: asset id を運ぶ D&D のみ受け入れる（ドロップ可否を示すため preventDefault）。 */
+  private onDragOver = (e: DragEvent): void => {
+    if (e.dataTransfer?.types.includes("application/x-node-vj-asset")) e.preventDefault();
+  };
+
+  /** #154: ドロップ位置（world 座標）と asset id を onDropAsset へ通知する。 */
+  private onDrop = (e: DragEvent): void => {
+    const id = e.dataTransfer?.getData("application/x-node-vj-asset");
+    if (!id) return;
+    e.preventDefault();
+    const w = screenToWorld(e.clientX, e.clientY, this.offset, this.scale);
+    this.onDropAsset?.(id, w.x, w.y);
+  };
+
   /** #114: カーソル下のノード/param/ポートの説明を引き、ホバー状態を更新する。 */
   private updateHover(): void {
+    // #154: ポインタ直下の最前面要素が canvas でない（パネル等のオーバーレイ上）ならホバーを出さない。
+    if (typeof document !== "undefined" && document.elementFromPoint) {
+      const top = document.elementFromPoint(this.pointer.x, this.pointer.y);
+      if (top && top !== this.canvas) { this.hover = null; return; }
+    }
     const hit = hitTest(this.graph.nodes, this.registry, this.cursor.x, this.cursor.y);
     const content = tooltipForHit(hit, this.registry);
     if (!content) {
@@ -865,8 +890,9 @@ export class NodeEditor {
       }
     });
     ctx.textAlign = "left";
-    // params（数値 param は左辺に接続ドット）
+    // params（数値 param は左辺に接続ドット）。#154: hidden param（assetId 等）は描かない。
     def.params.forEach((p, i) => {
+      if (p.hidden) return;
       const y = paramRowY(node, def, i);
       ctx.fillStyle = "#222";
       ctx.fillRect(r.x + 6, y - ROW_H / 2 + 2, r.w - 12, ROW_H - 4);
@@ -981,6 +1007,8 @@ export class NodeEditor {
     window.removeEventListener("keyup", this.onKeyUp);
     this.canvas.removeEventListener("contextmenu", this.onContextMenu);
     this.canvas.removeEventListener("wheel", this.onWheel);
+    this.canvas.removeEventListener("dragover", this.onDragOver);
+    this.canvas.removeEventListener("drop", this.onDrop);
     this.closeContextMenu();
     this.toolbar.remove();
   }

@@ -26,6 +26,8 @@ export function buildGraphIoBar(
   registry: NodeRegistry,
   store: GraphStore,
   history: History,
+  /** #154: グラフ読込完了後に呼ぶ（アセットの自動復元フック）。任意。 */
+  onLoad?: () => void,
 ): HTMLDivElement {
   const bar = document.createElement("div");
   // ノード追加ツールバー（上段）はノード増加で複数行に折り返すため、衝突を避けて
@@ -62,6 +64,7 @@ export function buildGraphIoBar(
       // 読込はワークスペースの置き換えなので履歴をクリアする（#90）
       history.clear();
       for (const w of warnings) console.warn(`[graph-io] ${w}`);
+      onLoad?.();
       toast(warnings.length ? `${sourceLabel}: 読込（警告 ${warnings.length} 件）` : `${sourceLabel}: 読込完了`);
     } catch (e) {
       console.warn("[graph-io] load failed:", e);
