@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "../../../core/types";
 import { evaluate } from "./evaluator";
-import type { GraphDoc } from "./graph-doc";
+import type { GraphDoc, NodeInstance } from "./graph-doc";
 import type { NodeEnv, NodeRegistry, NodeState, NodeTypeDef } from "./node-type";
 import { pickScreenTextures } from "./texture-screen";
 import { collectSceneRefs, sceneRenderOrder } from "../scene/scene-refs";
@@ -45,8 +45,11 @@ export class GraphRuntime {
   // #152: シーンをノード化する参照解決。アクティブ以外のシーンを専用 state/RT で事前評価する。
   private sceneProvider: ((id: string) => GraphDoc | null) | null = null;
   private activeSceneId = "";
-  private sceneRes = new Map<string, { states: Map<string, NodeState>; defs: Map<string, NodeTypeDef>; rt: THREE.WebGLRenderTarget }>();
+  private sceneRes = new Map<string, { states: Map<string, NodeState>; defs: Map<string, NodeTypeDef>; rt: THREE.WebGLRenderTarget; audioMerge: GainNode; audioConnected: Set<AudioNode> }>();
   private sceneTextureCache = new Map<string, THREE.Texture>();
+  // #172: 参照先シーンの音声（マージ gain）キャッシュと、参照先 state のアセット復元フック。
+  private sceneAudioCache = new Map<string, AudioNode>();
+  private sceneAssetRestorer: ((node: NodeInstance, state: NodeState) => void) | null = null;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -73,6 +76,11 @@ export class GraphRuntime {
   setSceneProvider(provider: (id: string) => GraphDoc | null, activeSceneId: string): void {
     this.sceneProvider = provider;
     this.activeSceneId = activeSceneId;
+  }
+
+  /** #172: 参照先シーンの state 生成時にアセット（assetId）を復元する関数を設定する。 */
+  setSceneAssetRestorer(fn: (node: NodeInstance, state: NodeState) => void): void {
+    this.sceneAssetRestorer = fn;
   }
 
   /** ノードの永続状態を取得する（入力ノードの start() を user gesture から呼ぶ用）。 */
@@ -132,6 +140,23 @@ export class GraphRuntime {
       camera: this.camera,
       audioContext: this.getAudioContext(),
       sceneTexture: (id) => this.sceneTextureCache.get(id) ?? null,
+      sceneAudio: (id) => this.sceneAudioCache.get(id) ?? null,
+    };
+  }
+
+  /** #172: 参照先シーン評価用の env（destination 非接続・音声捕捉つき）。 */
+  private sceneEnv(sceneId: string): NodeEnv {
+    const res = this.ensureSceneRes(sceneId);
+    return {
+      ...this.env(),
+      referencedScene: true,
+      captureSceneAudio: (node) => {
+        if (!res.audioConnected.has(node)) {
+          try { node.connect(res.audioMerge); } catch { /* ignore */ }
+          res.audioConnected.add(node);
+        }
+        this.sceneAudioCache.set(sceneId, res.audioMerge);
+      },
     };
   }
 
@@ -173,17 +198,20 @@ export class GraphRuntime {
         const env = this.env();
         for (const [nid, st] of res.states) res.defs.get(nid)?.disposeState?.(st, env);
         res.rt.dispose();
+        try { res.audioMerge.disconnect(); } catch { /* ignore */ }
         this.sceneRes.delete(id);
         this.sceneTextureCache.delete(id);
+        this.sceneAudioCache.delete(id);
       }
     }
     for (const id of order) {
       const graph = provider(id);
       if (!graph) continue;
       const res = this.ensureSceneRes(id);
-      this.syncStatesFor(graph, res);
+      const env = this.sceneEnv(id);
+      this.syncStatesFor(graph, res, env);
       const outputs = evaluate(graph, this.registry, {
-        timeSec, env: this.env(), state: (nid) => res.states.get(nid),
+        timeSec, env, state: (nid) => res.states.get(nid),
       });
       const textures = pickScreenTextures(graph, this.registry, outputs);
       const w = this.renderer.domElement.width;
@@ -218,25 +246,38 @@ export class GraphRuntime {
     return sceneRenderOrder(this.activeSceneId, scenes, this.registry);
   }
 
-  private ensureSceneRes(id: string): { states: Map<string, NodeState>; defs: Map<string, NodeTypeDef>; rt: THREE.WebGLRenderTarget } {
+  private ensureSceneRes(id: string): { states: Map<string, NodeState>; defs: Map<string, NodeTypeDef>; rt: THREE.WebGLRenderTarget; audioMerge: GainNode; audioConnected: Set<AudioNode> } {
     let res = this.sceneRes.get(id);
     if (!res) {
-      res = { states: new Map(), defs: new Map(), rt: new THREE.WebGLRenderTarget(2, 2, { depthBuffer: true }) };
+      res = {
+        states: new Map(), defs: new Map(),
+        rt: new THREE.WebGLRenderTarget(2, 2, { depthBuffer: true }),
+        audioMerge: this.getAudioContext().createGain(),
+        audioConnected: new Set(),
+      };
       this.sceneRes.set(id, res);
     }
     return res;
   }
 
-  /** 指定 graph 専用の state マップを同期する（syncStates のシーン版）。 */
-  private syncStatesFor(graph: GraphDoc, res: { states: Map<string, NodeState>; defs: Map<string, NodeTypeDef> }): void {
-    const env = this.env();
+  /** 指定 graph 専用の state マップを同期する（syncStates のシーン版）。env は参照先用（sceneEnv）。 */
+  private syncStatesFor(graph: GraphDoc, res: { states: Map<string, NodeState>; defs: Map<string, NodeTypeDef> }, env: NodeEnv): void {
     const aliveIds = new Set(graph.nodes.map((n) => n.id));
     for (const [id, st] of [...res.states.entries()]) {
       if (!aliveIds.has(id)) { res.defs.get(id)?.disposeState?.(st, env); res.states.delete(id); res.defs.delete(id); }
     }
     for (const node of graph.nodes) {
       const def = this.registry.get(node.type);
-      if (def?.createState && !res.states.has(node.id)) { res.states.set(node.id, def.createState(env)); res.defs.set(node.id, def); }
+      if (def?.createState && !res.states.has(node.id)) {
+        const st = def.createState(env);
+        res.states.set(node.id, st);
+        res.defs.set(node.id, def);
+        // #172: 参照先シーンの音声/動画入力をアセットから復元して解析・再生を走らせる。
+        if (def.fileInput && this.sceneAssetRestorer) {
+          const assetId = (node.params as Record<string, unknown>).assetId;
+          if (typeof assetId === "string" && assetId !== "") this.sceneAssetRestorer(node, st);
+        }
+      }
     }
   }
 
