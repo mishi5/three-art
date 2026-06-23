@@ -17,12 +17,13 @@ import { AssetLibrary } from "./asset/asset-library";
 import { opfsBinaryStore } from "./asset/binary-store";
 import { indexedDbMetaStore } from "./asset/meta-store";
 import { generateThumbnail } from "./asset/thumbnail";
-import { buildAssetPanel } from "./asset/asset-panel";
+import { assetPanelDef } from "./asset/asset-panel";
 import { assetDropTarget, nodeTypeForKind } from "./asset/asset-drop";
 import { collectAssetRefs } from "./asset/asset-refs";
 import { SceneStore } from "./scene/scene-store";
 import { SceneManager, singleSceneSet } from "./scene/scene-manager";
-import { buildScenePanel, type ScenePanelActions } from "./scene/scene-panel";
+import { scenePanelDef, type ScenePanelActions } from "./scene/scene-panel";
+import { buildSideDock } from "./editor/side-dock";
 
 const editorCanvas = document.getElementById("editor");
 const previewCanvas = document.getElementById("preview");
@@ -176,9 +177,6 @@ async function restoreAssets(): Promise<void> {
   }
 }
 
-// #154: アセットパネル（左サイド・開閉トグル）を表示する。
-buildAssetPanel(library);
-
 // #151: シーン管理。SceneStore から復元、無ければ既定グラフを唯一のシーンとして初期化。
 const sceneStore = new SceneStore(localStorage);
 const genSceneId = (): string => `scene-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -241,7 +239,8 @@ const sceneActions: ScenePanelActions = {
   rename: (id, name) => sceneManager.rename(id, name),
   onChange: (cb) => sceneManager.onChange(cb),
 };
-buildScenePanel(sceneActions);
+// #151: VSCode 風サイドドック（最左アイコン列で アセット/シーン を切替）。
+buildSideDock([assetPanelDef(library), scenePanelDef(sceneActions)]);
 
 // 自動永続化: 編集の取りこぼし防止に定期 + ページ離脱時にアクティブシーンへ書き戻して保存。
 setInterval(() => snapshotActiveScene(), 5000);
