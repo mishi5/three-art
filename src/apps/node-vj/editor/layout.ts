@@ -27,6 +27,11 @@ export function hasRandomRow(def: NodeTypeDef): boolean {
   return !!def.randomButton;
 }
 
+/** #152: SceneInput のシーン選択行を出すか。 */
+export function hasSceneRow(def: NodeTypeDef): boolean {
+  return !!def.sceneInput;
+}
+
 /** #154: ノード UI に行を描く param の数（hidden を除く）。末尾の hidden param 行は詰める。 */
 export function visibleParamCount(def: NodeTypeDef): number {
   return def.params.reduce((n, p) => (p.hidden ? n : n + 1), 0);
@@ -35,7 +40,8 @@ export function visibleParamCount(def: NodeTypeDef): number {
 export function nodeHeight(def: NodeTypeDef): number {
   const fileRows = hasFileRow(def) ? FILE_ROWS * ROW_H : 0;
   const randomRow = hasRandomRow(def) ? ROW_H : 0;
-  return TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H + randomRow + fileRows + PADDING;
+  const sceneRow = hasSceneRow(def) ? ROW_H : 0;
+  return TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H + randomRow + fileRows + sceneRow + PADDING;
 }
 
 export function nodePos(node: NodeInstance): { x: number; y: number } {
@@ -130,6 +136,20 @@ export function randomRowRect(
 /** #99: ファイル行のラベル。未選択（空/undefined/null）は「ファイル未選択」。 */
 export function fileRowLabel(name: string | null | undefined): string {
   return name ? name : "ファイル未選択";
+}
+
+/** #152: シーン選択行の領域（params 直下・sceneInput 無しは null）。 */
+export function sceneRowRect(
+  node: NodeInstance, def: NodeTypeDef,
+): { x: number; y: number; w: number; h: number } | null {
+  if (!hasSceneRow(def)) return null;
+  const p = nodePos(node);
+  return { x: p.x, y: p.y + TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H, w: NODE_WIDTH, h: ROW_H };
+}
+
+/** #152: シーン選択行のラベル。未選択は「(シーン未選択)」。 */
+export function sceneRowLabel(name: string | null | undefined): string {
+  return name ? name : "(シーン未選択)";
 }
 
 /** transport 行を再生ボタンとシークバーに分割する（時刻表示ぶんを右に確保）。 */
