@@ -22,6 +22,7 @@ import { assetDropTarget, nodeTypeForKind } from "./asset/asset-drop";
 import { collectAssetRefs } from "./asset/asset-refs";
 import { SceneStore } from "./scene/scene-store";
 import { SceneManager, singleSceneSet } from "./scene/scene-manager";
+import { wouldCreateSceneCycle } from "./scene/scene-refs";
 import { scenePanelDef, type ScenePanelActions } from "./scene/scene-panel";
 import { buildSideDock } from "./editor/side-dock";
 
@@ -143,6 +144,27 @@ const editor = new NodeEditor(
     toggle: (id) => (runtime.getState(id) as Partial<PlaybackControl> | undefined)?.togglePlay?.(),
     seek: (id, t) => (runtime.getState(id) as Partial<PlaybackControl> | undefined)?.seek?.(t),
   },
+  // #152: SceneInput のシーン選択（循環候補は除外したドロップダウン）。
+  {
+    options: () => {
+      const activeId = sceneManager.activeId();
+      const scenes = sceneManager.list();
+      return scenes
+        .filter((s) => s.id !== activeId)
+        .filter((s) => !wouldCreateSceneCycle(scenes, registry, activeId, s.id))
+        .map((s) => ({ id: s.id, name: s.name }));
+    },
+    current: (nodeId) => {
+      const n = graph.nodes.find((x) => x.id === nodeId);
+      const sid = (n?.params as Record<string, unknown> | undefined)?.sceneId;
+      if (typeof sid !== "string" || !sid) return null;
+      return sceneManager.list().find((s) => s.id === sid)?.name ?? "(不明なシーン)";
+    },
+    choose: (nodeId, sceneId) => {
+      const n = graph.nodes.find((x) => x.id === nodeId);
+      if (n) { history.record(graph); n.params.sceneId = sceneId; }
+    },
+  },
 );
 
 // #154: canvas へドロップされたアセットを読み込む。
@@ -196,6 +218,15 @@ if (savedSceneSet) {
 }
 sceneManager.persist(); // 初回（未保存）も含め現在の集合を localStorage に確定させる
 
+// #152: SceneInput の参照解決。アクティブ以外は sceneManager の GraphDoc を、アクティブは編集中の共有 graph を使う。
+function wireSceneProvider(): void {
+  runtime.setSceneProvider(
+    (id) => sceneManager.list().find((s) => s.id === id)?.graph ?? null,
+    sceneManager.activeId(),
+  );
+}
+wireSceneProvider();
+
 /** 編集中の共有グラフを現アクティブシーンへ書き戻す（切替/保存前に呼ぶ）。 */
 function snapshotActiveScene(): void {
   sceneManager.updateActiveGraph(graph);
@@ -208,6 +239,7 @@ function reflectActiveScene(): void {
   history.useScene(act.id);
   runtime.resumeAudio();   // user gesture 由来の切替で共有 AudioContext を起こす
   runtime.ensureStates();  // 旧シーンの state を破棄し新シーンを生成（即時ハードカット）
+  wireSceneProvider();     // #152: 新しいアクティブシーン id を runtime に反映
   void restoreAssets();    // 新シーンの assetId をライブラリから復元
 }
 
