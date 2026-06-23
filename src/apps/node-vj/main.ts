@@ -18,7 +18,7 @@ import { opfsBinaryStore } from "./asset/binary-store";
 import { indexedDbMetaStore } from "./asset/meta-store";
 import { generateThumbnail } from "./asset/thumbnail";
 import { buildAssetPanel } from "./asset/asset-panel";
-import { assetDropTarget } from "./asset/asset-drop";
+import { assetDropTarget, nodeTypeForKind } from "./asset/asset-drop";
 import { collectAssetRefs } from "./asset/asset-refs";
 
 const editorCanvas = document.getElementById("editor");
@@ -141,18 +141,26 @@ const editor = new NodeEditor(
   },
 );
 
-// #154: canvas へドロップされたアセットを、ファイル行ノードへ割り当てて読み込ませる。
+// #154: canvas へドロップされたアセットを読み込む。
+// ファイル入力ノード本体に重なれば割当、空白なら種別に応じてノードを生成して割当。
+function loadAssetIntoNode(nodeId: string, assetId: string, file: File): void {
+  const s = runtime.getState(nodeId) as FileLoadable | undefined;
+  void s?.loadFile?.(file).catch((e) => console.warn(`[node-vj] loadFile failed for ${nodeId}:`, e));
+  const n = graph.nodes.find((x2) => x2.id === nodeId);
+  if (n) n.params.assetId = assetId; // 保存対象に記録
+}
 editor.onDropAsset = (assetId, x, y) => {
-  const nodeId = assetDropTarget(graph, registry, x, y);
-  if (!nodeId) return;
   runtime.resumeAudio(); // #128: 読込（user gesture）で共有 AudioContext を起こす
-  library.getFile(assetId).then((file) => {
-    if (!file) return;
-    const s = runtime.getState(nodeId) as FileLoadable | undefined;
-    void s?.loadFile?.(file).catch((e) => console.warn(`[node-vj] loadFile failed for ${nodeId}:`, e));
-    const n = graph.nodes.find((x2) => x2.id === nodeId);
-    if (n) n.params.assetId = assetId; // 保存対象に記録
-  }).catch((e) => console.warn(`[node-vj] getFile failed for ${assetId}:`, e));
+  Promise.all([library.getFile(assetId), library.get(assetId)]).then(([file, meta]) => {
+    if (!file || !meta) return;
+    let nodeId = assetDropTarget(graph, registry, x, y);
+    if (!nodeId) {
+      // 空白ドロップ: 種別に応じたファイル入力ノードを drop 位置に生成する。
+      nodeId = editor.addNodeOfType(nodeTypeForKind(meta.kind), { x, y });
+      runtime.ensureStates(); // 生成直後に loadFile したいので state を即時生成
+    }
+    loadAssetIntoNode(nodeId, assetId, file);
+  }).catch((e) => console.warn(`[node-vj] drop asset failed ${assetId}:`, e));
 };
 
 /** #154: グラフ読込後、params.assetId を持つノードへライブラリからファイルを復元する。 */

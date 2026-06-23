@@ -26,6 +26,19 @@ describe("AssetLibrary", () => {
     const f = await l.getFile(m!.id);
     expect(await f!.arrayBuffer()).toEqual(new Uint8Array([1, 2, 3]).buffer);
   });
+  test("getFile は元のファイル名・mime で復元する（id ではない）", async () => {
+    const l = lib();
+    const m = await l.add(file("photo.png", "image/png", [1, 2, 3]));
+    const f = await l.getFile(m!.id);
+    expect(f!.name).toBe("photo.png");
+    expect(f!.type).toBe("image/png");
+  });
+  test("get で meta を引ける（kind 判定用）", async () => {
+    const l = lib();
+    const m = await l.add(file("clip.mp4", "video/mp4", [4, 5, 6]));
+    expect((await l.get(m!.id))?.kind).toBe("video");
+    expect(await l.get("none")).toBeNull();
+  });
   test("同一内容は重複排除（id 一致・件数 1）", async () => {
     const l = lib();
     const a = await l.add(file("a.png", "image/png", [1, 2, 3]));

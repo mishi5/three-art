@@ -1,10 +1,10 @@
-// #154: アセットライブラリのサイドパネル UI（DOM・手動 / Playwright 確認）。
+// #154: アセットライブラリの左サイドペイン UI（DOM・手動 / Playwright 確認）。
 // ロジック層（AssetLibrary 等）の配線のみ。純関数 panelDisplay / formatBytes はテスト対象。
 import type { AssetLibrary } from "./asset-library";
 import type { AssetMeta } from "./meta-store";
 import type { AssetKind } from "./asset-kind";
 
-/** 開閉状態 → パネル本体の display 値（純関数）。 */
+/** 開閉状態 → ペイン本体の display 値（純関数）。 */
 export function panelDisplay(open: boolean): "flex" | "none" {
   return open ? "flex" : "none";
 }
@@ -24,6 +24,8 @@ const KIND_ICON: Record<AssetKind, string> = { image: "🖼", video: "🎬", aud
 const PANEL_BG = "rgba(20,20,26,0.96)";
 const BTN_CSS =
   "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;font:12px system-ui;";
+// ツールバー（top:8・折返し）の下に置き、上部メニューを隠さない。
+const PANE_TOP = 44;
 
 function toast(message: string, isError = false): void {
   const div = document.createElement("div");
@@ -37,72 +39,78 @@ function toast(message: string, isError = false): void {
 }
 
 /**
- * アセットパネルを構築して body へ追加する。戻り値はパネル本体のルート要素。
- * 画面左に固定し、隅のトグルボタン（📦）で表示/非表示を切り替える（初期は表示・永続化しない）。
+ * アセットの左サイドペインを構築して body へ追加する。戻り値はペイン本体のルート要素。
+ * 画面左に固定（ツールバーの下）し、ヘッダの « トグルで折りたたみ、折畳時は左端の » タブで再展開する。
+ * 初期は表示・開閉状態はメモリ保持のみ（永続化しない）。
  */
 export function buildAssetPanel(library: AssetLibrary): HTMLElement {
   let open = true;
   // 一覧描画で作った ObjectURL を再描画時に解放するため保持する。
   let objectUrls: string[] = [];
 
-  // --- トグルボタン（常時表示・画面左上）---
-  const toggle = document.createElement("button");
-  toggle.textContent = "📦 アセット";
-  toggle.style.cssText =
-    BTN_CSS + "position:fixed;left:8px;top:8px;z-index:160;";
-  document.body.appendChild(toggle);
+  // --- 折畳時に左端へ出す再展開タブ（»）---
+  const rail = document.createElement("button");
+  rail.textContent = "📦";
+  rail.title = "アセットパネルを開く";
+  rail.style.cssText =
+    BTN_CSS + `position:fixed;left:0;top:${PANE_TOP}px;z-index:156;border-radius:0 6px 6px 0;` +
+    "display:none;padding:8px 6px;";
+  document.body.appendChild(rail);
 
-  // --- パネル本体（画面左の固定サイドパネル）---
-  const panel = document.createElement("div");
-  panel.style.cssText =
-    `position:fixed;left:8px;top:40px;width:230px;max-height:calc(100vh - 120px);` +
+  // --- ペイン本体（左ドック・全高）---
+  const pane = document.createElement("div");
+  pane.style.cssText =
+    `position:fixed;left:0;top:${PANE_TOP}px;bottom:48px;width:240px;` +
     `display:${panelDisplay(open)};flex-direction:column;gap:6px;z-index:155;` +
-    `background:${PANEL_BG};border:1px solid #444;border-radius:6px;padding:8px;` +
-    `font:12px system-ui;color:#ddd;box-shadow:0 4px 16px rgba(0,0,0,0.4);`;
+    `background:${PANEL_BG};border-right:1px solid #444;border-top:1px solid #444;` +
+    `border-radius:0 6px 6px 0;padding:8px;box-sizing:border-box;` +
+    `font:12px system-ui;color:#ddd;box-shadow:2px 0 16px rgba(0,0,0,0.4);`;
 
-  // ヘッダ（見出し + 閉じる）
+  // ヘッダ（見出し + 折りたたみ «）
   const header = document.createElement("div");
-  header.style.cssText = "display:flex;align-items:center;justify-content:space-between;";
+  header.style.cssText = "display:flex;align-items:center;justify-content:space-between;flex:0 0 auto;";
   const title = document.createElement("span");
   title.textContent = "アセット";
   title.style.cssText = "font-weight:600;";
-  const closeBtn = document.createElement("button");
-  closeBtn.textContent = "×";
-  closeBtn.style.cssText = BTN_CSS + "padding:0 6px;line-height:18px;";
+  const collapseBtn = document.createElement("button");
+  collapseBtn.textContent = "«";
+  collapseBtn.title = "パネルを閉じる";
+  collapseBtn.style.cssText = BTN_CSS + "padding:0 8px;line-height:20px;";
   header.appendChild(title);
-  header.appendChild(closeBtn);
-  panel.appendChild(header);
+  header.appendChild(collapseBtn);
+  pane.appendChild(header);
 
   // 一覧コンテナ（スクロール）
   const listEl = document.createElement("div");
-  listEl.style.cssText = "display:flex;flex-direction:column;gap:4px;overflow-y:auto;flex:1;";
-  panel.appendChild(listEl);
+  listEl.style.cssText = "display:flex;flex-direction:column;gap:4px;overflow-y:auto;flex:1 1 auto;";
+  pane.appendChild(listEl);
 
   // 追加ボタン + 使用量表示
   const addLabel = document.createElement("label");
   addLabel.textContent = "＋ ファイル追加";
-  addLabel.style.cssText = BTN_CSS + "text-align:center;";
+  addLabel.style.cssText = BTN_CSS + "text-align:center;flex:0 0 auto;";
   const addInput = document.createElement("input");
   addInput.type = "file";
   addInput.multiple = true;
   addInput.accept = "image/*,video/*,audio/*";
   addInput.style.display = "none";
   addLabel.appendChild(addInput);
-  panel.appendChild(addLabel);
+  pane.appendChild(addLabel);
 
   const usageEl = document.createElement("div");
-  usageEl.style.cssText = "color:#999;font-size:11px;";
-  panel.appendChild(usageEl);
+  usageEl.style.cssText = "color:#999;font-size:11px;flex:0 0 auto;";
+  pane.appendChild(usageEl);
 
-  document.body.appendChild(panel);
+  document.body.appendChild(pane);
 
   // --- 開閉 ---
   function setOpen(next: boolean): void {
     open = next;
-    panel.style.display = panelDisplay(open);
+    pane.style.display = panelDisplay(open);
+    rail.style.display = open ? "none" : "block";
   }
-  toggle.addEventListener("click", () => setOpen(!open));
-  closeBtn.addEventListener("click", () => setOpen(false));
+  collapseBtn.addEventListener("click", () => setOpen(false));
+  rail.addEventListener("click", () => setOpen(true));
 
   // --- 使用量 ---
   async function refreshUsage(): Promise<void> {
@@ -164,7 +172,7 @@ export function buildAssetPanel(library: AssetLibrary): HTMLElement {
 
     // 名前 + サイズ
     const info = document.createElement("div");
-    info.style.cssText = "flex:1;min-width:0;";
+    info.style.cssText = "flex:1 1 auto;min-width:0;";
     const name = document.createElement("div");
     name.textContent = meta.fileName;
     name.style.cssText = "white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
@@ -213,11 +221,11 @@ export function buildAssetPanel(library: AssetLibrary): HTMLElement {
     addInput.value = "";
   });
 
-  // OS からのファイル D&D（パネル上）
-  panel.addEventListener("dragover", (e) => {
+  // OS からのファイル D&D（ペイン上）
+  pane.addEventListener("dragover", (e) => {
     if (e.dataTransfer?.types.includes("Files")) { e.preventDefault(); }
   });
-  panel.addEventListener("drop", (e) => {
+  pane.addEventListener("drop", (e) => {
     if (!e.dataTransfer?.files?.length) return;
     e.preventDefault();
     void addFiles(e.dataTransfer.files);
@@ -227,5 +235,5 @@ export function buildAssetPanel(library: AssetLibrary): HTMLElement {
   library.onChange(() => { void render(); });
   void render();
 
-  return panel;
+  return pane;
 }

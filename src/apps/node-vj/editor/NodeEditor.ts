@@ -179,7 +179,7 @@ export class NodeEditor {
     return bar;
   }
 
-  addNodeOfType(type: string, worldPos?: { x: number; y: number }): void {
+  addNodeOfType(type: string, worldPos?: { x: number; y: number }): string {
     const def = this.registry.require(type);
     // #92/#103: world 座標へ配置。worldPos 指定（右クリック）はその位置、未指定は画面左上付近。
     const jitter = Math.round((idCounter % 5) * 24);
@@ -193,6 +193,7 @@ export class NodeEditor {
     this.history.record(this.graph);
     addNode(this.graph, node);
     this.selectedIds = new Set([node.id]);
+    return node.id;
   }
 
   // --- pointer 座標 → world 座標（#92: ズーム反映）---
@@ -231,6 +232,11 @@ export class NodeEditor {
 
   /** #114: カーソル下のノード/param/ポートの説明を引き、ホバー状態を更新する。 */
   private updateHover(): void {
+    // #154: ポインタ直下の最前面要素が canvas でない（パネル等のオーバーレイ上）ならホバーを出さない。
+    if (typeof document !== "undefined" && document.elementFromPoint) {
+      const top = document.elementFromPoint(this.pointer.x, this.pointer.y);
+      if (top && top !== this.canvas) { this.hover = null; return; }
+    }
     const hit = hitTest(this.graph.nodes, this.registry, this.cursor.x, this.cursor.y);
     const content = tooltipForHit(hit, this.registry);
     if (!content) {
@@ -884,8 +890,9 @@ export class NodeEditor {
       }
     });
     ctx.textAlign = "left";
-    // params（数値 param は左辺に接続ドット）
+    // params（数値 param は左辺に接続ドット）。#154: hidden param（assetId 等）は描かない。
     def.params.forEach((p, i) => {
+      if (p.hidden) return;
       const y = paramRowY(node, def, i);
       ctx.fillStyle = "#222";
       ctx.fillRect(r.x + 6, y - ROW_H / 2 + 2, r.w - 12, ROW_H - 4);

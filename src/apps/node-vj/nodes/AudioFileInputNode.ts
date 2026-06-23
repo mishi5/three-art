@@ -122,7 +122,7 @@ export const AudioFileInputNode: NodeTypeDef = {
   params: [
     { id: "loop", label: "loop", kind: "enum", default: "on", options: ["on", "off"], description: "ループ再生の ON/OFF。" },
     ...ONSET_PARAMS,
-    { id: "assetId", label: "asset", kind: "string", default: "", noInput: true,
+    { id: "assetId", label: "asset", kind: "string", default: "", noInput: true, hidden: true,
       description: "割り当てられたアセットの id（アセットライブラリ管理・UI 非表示）。" },
   ],
   createState: (env) => new AudioFileInputRuntime(env.audioContext),

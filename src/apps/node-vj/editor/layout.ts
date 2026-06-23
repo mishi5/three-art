@@ -27,10 +27,15 @@ export function hasRandomRow(def: NodeTypeDef): boolean {
   return !!def.randomButton;
 }
 
+/** #154: ノード UI に行を描く param の数（hidden を除く）。末尾の hidden param 行は詰める。 */
+export function visibleParamCount(def: NodeTypeDef): number {
+  return def.params.reduce((n, p) => (p.hidden ? n : n + 1), 0);
+}
+
 export function nodeHeight(def: NodeTypeDef): number {
   const fileRows = hasFileRow(def) ? FILE_ROWS * ROW_H : 0;
   const randomRow = hasRandomRow(def) ? ROW_H : 0;
-  return TITLE_H + portRows(def) * ROW_H + def.params.length * ROW_H + randomRow + fileRows + PADDING;
+  return TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H + randomRow + fileRows + PADDING;
 }
 
 export function nodePos(node: NodeInstance): { x: number; y: number } {
@@ -119,7 +124,7 @@ export function randomRowRect(
 ): { x: number; y: number; w: number; h: number } | null {
   if (!hasRandomRow(def)) return null;
   const p = nodePos(node);
-  return { x: p.x, y: p.y + TITLE_H + portRows(def) * ROW_H + def.params.length * ROW_H, w: NODE_WIDTH, h: ROW_H };
+  return { x: p.x, y: p.y + TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H, w: NODE_WIDTH, h: ROW_H };
 }
 
 /** #99: ファイル行のラベル。未選択（空/undefined/null）は「ファイル未選択」。 */

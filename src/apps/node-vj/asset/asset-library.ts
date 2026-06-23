@@ -40,7 +40,16 @@ export class AssetLibrary {
   }
 
   list(): Promise<AssetMeta[]> { return this.deps.meta.list(); }
-  getFile(id: string): Promise<File | null> { return this.deps.binary.getFile(id); }
+  get(id: string): Promise<AssetMeta | null> { return this.deps.meta.get(id); }
+
+  /** バイナリ本体を返す。File 名/型は保存時のメタ（元ファイル名・mime）で復元する。 */
+  async getFile(id: string): Promise<File | null> {
+    const f = await this.deps.binary.getFile(id);
+    if (!f) return null;
+    const meta = await this.deps.meta.get(id);
+    if (!meta) return f;
+    return new File([f], meta.fileName, { type: meta.mime });
+  }
 
   onChange(cb: () => void): () => void {
     this.listeners.add(cb);

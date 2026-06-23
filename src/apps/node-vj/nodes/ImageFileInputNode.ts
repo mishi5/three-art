@@ -77,7 +77,7 @@ export const ImageFileInputNode: NodeTypeDef = {
     { id: "texture", label: "tex", type: "texture", description: "読み込んだ画像のテクスチャ（素の画像。アスペクト比は下流で扱う）。" },
   ],
   params: [
-    { id: "assetId", label: "asset", kind: "string", default: "", noInput: true,
+    { id: "assetId", label: "asset", kind: "string", default: "", noInput: true, hidden: true,
       description: "割り当てられたアセットの id（アセットライブラリ管理・UI 非表示）。" },
   ],
   createState: () => new ImageFileInputRuntime(),
