@@ -322,5 +322,5 @@ bar.appendChild(outBtn);
 
 document.body.appendChild(bar);
 
-(window as unknown as { nodeVj: unknown }).nodeVj = { graph, registry, runtime, editor };
+(window as unknown as { nodeVj: unknown }).nodeVj = { graph, registry, runtime, editor, sceneManager };
 console.log("[node-vj] editor + preview started");
