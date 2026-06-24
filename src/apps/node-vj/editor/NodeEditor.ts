@@ -51,7 +51,8 @@ const CATEGORY_COLORS: Record<string, string> = {
 type Drag =
   // 選択グループの一括移動。anchors は各ノードの「カーソル→ノード位置」オフセット。
   | { kind: "group"; anchors: Map<string, { dx: number; dy: number }>; moved: boolean }
-  | { kind: "wire"; fromNode: string; fromPort: string; type: PortType }
+  // 配線ドラッグ。#178: 入力ポートの既存エッジを掴んだ場合は regrab=true（履歴記録済み・移動なしは切断のまま）。
+  | { kind: "wire"; fromNode: string; fromPort: string; type: PortType; startX: number; startY: number; recorded?: boolean; regrab?: boolean }
   // #167: bySpace=true は Space 押下で始めたパン。Space を離したら（buttons の状態に依らず）終了する。
   | { kind: "pan"; startX: number; startY: number; ox: number; oy: number; bySpace: boolean }
   // 空白ドラッグの矩形選択（#83）。start は world 座標。
@@ -275,15 +276,24 @@ export class NodeEditor {
     const hit = hitTest(this.graph.nodes, this.registry, w.x, w.y);
     if (hit?.kind === "port") {
       if (hit.portKind === "output") {
-        this.drag = { kind: "wire", fromNode: hit.node.id, fromPort: hit.port, type: hit.type };
+        this.drag = { kind: "wire", fromNode: hit.node.id, fromPort: hit.port, type: hit.type, startX: e.clientX, startY: e.clientY };
       } else {
-        // 入力ポート: 接続済みなら切断
+        // 入力ポート: 接続済みなら、そのエッジを掴んで付け替えられるようにする（#178）。
+        // 履歴記録のうえ一旦切断し、元の出力ポートから配線ドラッグを開始。別の入力へドロップで付け替え、
+        // 動かさなければ（クリック）切断のまま（従来の「クリックで切断」を維持）。
         const existing = this.graph.connections.find(
           (c) => c.to.node === hit.node.id && c.to.port === hit.port,
         );
         if (existing) {
           this.history.record(this.graph);
           removeConnection(this.graph, existing.id);
+          const fromNode = findNode(this.graph, existing.from.node);
+          const fromDef = fromNode ? this.registry.get(fromNode.type) : undefined;
+          const outType = fromDef?.outputs.find((p) => p.id === existing.from.port)?.type ?? hit.type;
+          this.drag = {
+            kind: "wire", fromNode: existing.from.node, fromPort: existing.from.port, type: outType,
+            startX: e.clientX, startY: e.clientY, recorded: true, regrab: true,
+          };
         }
       }
       return;
@@ -466,6 +476,13 @@ export class NodeEditor {
       if (node) this.editParam(e, node, this.drag.paramIndex);
     }
     if (this.drag?.kind === "wire") {
+      const drag = this.drag;
+      const moved = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= DRAG_THRESHOLD;
+      // #178: 入力エッジを掴んだだけで動かさなかった場合はクリック＝切断のまま（再接続しない）。
+      if (drag.regrab && !moved) {
+        this.drag = null;
+        return;
+      }
       const w = this.toWorld(e);
       // 遮蔽つき判定: 手前ノードの本体に隠れた入力ポートへは接続しない。
       const target = hitTest(this.graph.nodes, this.registry, w.x, w.y);
@@ -481,15 +498,16 @@ export class NodeEditor {
           drop = { node: target.node.id, port: pd.id, type: "number" };
         }
       }
-      if (drop && isCompatible(this.drag.type, drop.type)) {
+      if (drop && isCompatible(drag.type, drop.type)) {
         const conn: Connection = {
           id: genId("c"),
-          from: { node: this.drag.fromNode, port: this.drag.fromPort },
+          from: { node: drag.fromNode, port: drag.fromPort },
           to: { node: drop.node, port: drop.port },
         };
-        this.history.record(this.graph);
+        // regrab は down で切断を記録済み（再接続は同一操作の一部）。新規ドラッグのみここで記録する。
+        if (!drag.recorded) this.history.record(this.graph);
         const res = addConnection(this.graph, this.registry, conn);
-        if (!res.ok) this.history.discardLast(); // 無効な接続は操作として積まない
+        if (!res.ok && !drag.recorded) this.history.discardLast(); // 無効な接続は操作として積まない（regrab は切断記録を残す）
       }
     }
     this.drag = null;
