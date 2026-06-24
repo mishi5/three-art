@@ -66,6 +66,11 @@ type Drag =
   | { kind: "label"; id: string; dx: number; dy: number; moved: boolean }
   | null;
 
+/** #176: ノード名をノード上端からどれだけ上に表示するか（px・world）。グループ枠もこの分だけ上へ広げる。 */
+const NODE_NAME_DY = 6;
+/** #176: ノード名の概算行高（グループ枠の上方向拡張に使う）。 */
+const NODE_NAME_H = 16;
+
 /** クリックとドラッグを分ける移動量しきい値 (px)。 */
 const DRAG_THRESHOLD = 3;
 
@@ -781,12 +786,12 @@ export class NodeEditor {
       for (const id of this.selectedIds) removeNode(this.graph, id);
       this.selectedIds = new Set();
     });
-    // #176: ノードのラベル編集。
-    this.addMenuItem(menu, node.label ? "ラベル編集" : "ラベル追加", () => {
-      this.editText((node.position?.x ?? 0) + 8, (node.position?.y ?? 0) + nodeRect(node, this.registry.require(node.type)).h + 10, node.label ?? "", (v) => {
+    // #176: ノード名の編集。表示位置（ノード上部）に近い位置でインライン編集する。
+    this.addMenuItem(menu, node.name ? "ノード名を編集" : "ノード名を設定", () => {
+      this.editText((node.position?.x ?? 0) + 2, (node.position?.y ?? 0) - NODE_NAME_DY, node.name ?? "", (v) => {
         const t = v.trim();
         this.history.record(this.graph);
-        if (t === "") delete node.label; else node.label = t;
+        if (t === "") delete node.name; else node.name = t;
       });
     });
     // #176: グループ名編集（所属グループがあるときのみ）。
@@ -932,6 +937,7 @@ export class NodeEditor {
     if (!groups) return;
     const ctx = this.ctx;
     const PAD = 12;
+    ctx.font = "12px system-ui";
     for (const gr of groups) {
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, any = false;
       for (const id of gr.nodeIds) {
@@ -939,8 +945,11 @@ export class NodeEditor {
         const def = n && this.registry.get(n.type);
         if (!n || !def) continue;
         const r = nodeRect(n, def);
-        minX = Math.min(minX, r.x); minY = Math.min(minY, r.y);
-        maxX = Math.max(maxX, r.x + r.w); maxY = Math.max(maxY, r.y + r.h);
+        // #176: ノード名はノード上部に出るため、枠がはみ出さないよう上方向と幅を名前ぶん広げる。
+        const topWithName = n.name ? r.y - NODE_NAME_DY - NODE_NAME_H : r.y;
+        const rightWithName = n.name ? Math.max(r.x + r.w, r.x + 2 + ctx.measureText(n.name).width) : r.x + r.w;
+        minX = Math.min(minX, r.x); minY = Math.min(minY, topWithName);
+        maxX = Math.max(maxX, rightWithName); maxY = Math.max(maxY, r.y + r.h);
         any = true;
       }
       if (!any) continue;
@@ -1117,12 +1126,11 @@ export class NodeEditor {
     ctx.font = "13px system-ui";
     ctx.textBaseline = "middle";
     ctx.fillText(def.type, r.x + 8, r.y + TITLE_H / 2);
-    // #176: ノードラベル（別名）をタイトル右側に薄色併記。
-    if (node.label) {
-      const tw = ctx.measureText(def.type).width;
-      ctx.fillStyle = "rgba(255,255,255,0.6)"; ctx.font = "11px system-ui";
-      ctx.fillText(ellipsizeEnd(ctx, node.label, r.w - tw - 24), r.x + 8 + tw + 8, r.y + TITLE_H / 2);
-      ctx.font = "13px system-ui";
+    // #176: ノード名はノードの上部にグループ名と同じスタイルで全文表示（タイトル内併記はしない）。
+    if (node.name) {
+      ctx.fillStyle = "rgba(180,220,255,0.9)"; ctx.font = "12px system-ui"; ctx.textBaseline = "bottom"; ctx.textAlign = "left";
+      ctx.fillText(node.name, r.x + 2, r.y - NODE_NAME_DY + 4);
+      ctx.textBaseline = "middle"; ctx.font = "13px system-ui";
     }
 
     // #77/#79: プレビュー対象ノードはタイトル右端に 👁（小窓トグル）

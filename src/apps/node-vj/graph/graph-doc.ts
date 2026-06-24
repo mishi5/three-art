@@ -11,8 +11,8 @@ export interface NodeInstance {
   position?: { x: number; y: number };
   /** #77: ノード横プレビュー小窓の ON/OFF（texture 出力を持つノードのみ意味を持つ）。 */
   preview?: boolean;
-  /** #176: ノードの注釈ラベル（別名/メモ）。 */
-  label?: string;
+  /** #176: ノード名（ユーザが付ける名前。グループ名に近い注釈。ノード上部に表示）。 */
+  name?: string;
 }
 
 /** #176: エディタ上の自由ラベル（付箋）。x/y は world 座標。 */

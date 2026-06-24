@@ -97,15 +97,15 @@ describe("serializeGraph / deserializeGraph", () => {
     expect(img?.params.assetId).toBe("abc123");
   });
 
-  test("#176 自由ラベルと node.label が round-trip（形不正は破棄）", () => {
+  test("#176 自由ラベルと node.name が round-trip（形不正は破棄）", () => {
     const g = createGraph();
-    addNode(g, { id: "n1", type: "Number", params: { value: 1 }, label: "速度" });
+    addNode(g, { id: "n1", type: "Number", params: { value: 1 }, name: "速度" });
     g.labels = [
       { id: "L1", x: 10, y: 20, text: "メモ" },
       { id: "L2", x: 0, y: 0 } as never, // text 欠落 → 破棄
     ];
     const { graph, warnings } = deserializeGraph(serializeGraph(g), r);
-    expect(graph.nodes[0]!.label).toBe("速度");
+    expect(graph.nodes[0]!.name).toBe("速度");
     expect(graph.labels?.length).toBe(1);
     expect(graph.labels![0]!.text).toBe("メモ");
     expect(warnings.some((w) => w.includes("label"))).toBe(true);

@@ -60,7 +60,7 @@ export function deserializeGraph(text: string, registry: NodeRegistry): Deserial
       node.position = { x: n.position.x, y: n.position.y };
     }
     if (typeof n.preview === "boolean") node.preview = n.preview;
-    if (typeof n.label === "string" && n.label !== "") node.label = n.label; // #176
+    if (typeof n.name === "string" && n.name !== "") node.name = n.name; // #176
     graph.nodes.push(node);
   }
 
