@@ -87,6 +87,8 @@ export class NodeEditor {
   /** #114: 現在ホバー中のツールチップ内容と開始時刻 (performance.now)。未ホバーは null。 */
   private hover: { content: TooltipContent; sinceMs: number } | null = null;
   private selectedIds = new Set<string>();
+  /** #176: 選択中の自由ラベル id（ノード選択 selectedIds とは別管理＝グループ化対象にしない）。 */
+  private selectedLabelId: string | null = null;
   /** Space 押下中は空白ドラッグをパンにする（#83 で空白ドラッグは矩形選択に変更）。 */
   private spaceDown = false;
   private rafId: number | null = null;
@@ -287,12 +289,16 @@ export class NodeEditor {
       this.drag = { kind: "pan", startX: e.clientX, startY: e.clientY, ox: this.offset.x, oy: this.offset.y, bySpace };
       return;
     }
-    // #176: 自由ラベルは最前面。クリックでドラッグ移動を開始する。
+    // #176: 自由ラベルは最前面。クリックで選択＋ドラッグ移動を開始する（ノード選択は解除）。
     const lab = this.labelAt(w.x, w.y);
     if (lab) {
+      this.selectedLabelId = lab.id;
+      this.selectedIds = new Set();
       this.drag = { kind: "label", id: lab.id, dx: w.x - lab.x, dy: w.y - lab.y, moved: false };
       return;
     }
+    // #176: ラベル以外を操作したらラベル選択は解除。
+    this.selectedLabelId = null;
     // #80: 遮蔽つき統一ヒットテスト。最前面ノードがイベントを所有する。
     const hit = hitTest(this.graph.nodes, this.registry, w.x, w.y);
     if (hit?.kind === "port") {
@@ -510,11 +516,8 @@ export class NodeEditor {
       const node = findNode(this.graph, this.drag.nodeId);
       if (node) this.editParam(e, node, this.drag.paramIndex);
     }
-    if (this.drag?.kind === "label" && !this.drag.moved) {
-      // #176: ラベルをクリック（移動なし）→ テキスト編集。
-      const lab = this.graph.labels?.find((l) => l.id === (this.drag as { id: string }).id);
-      if (lab) this.editLabel(lab);
-    }
+    // #176: ラベルのクリック（移動なし）は選択のみ（選択は onDown で設定済み）。
+    //       編集は右クリックメニュー「ラベル編集」または新規作成時に行う。
     if (this.drag?.kind === "wire") {
       const drag = this.drag;
       const moved = Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) >= DRAG_THRESHOLD;
@@ -570,6 +573,12 @@ export class NodeEditor {
       this.history.record(this.graph);
       for (const id of this.selectedIds) removeNode(this.graph, id);
       this.selectedIds = new Set();
+    }
+    // #176: ラベル選択中の Delete で当該ラベルを削除。
+    if ((e.key === "Delete" || e.key === "Backspace") && this.selectedLabelId) {
+      this.history.record(this.graph);
+      removeLabel(this.graph, this.selectedLabelId);
+      this.selectedLabelId = null;
     }
     // #90: Cmd+Z = UNDO / Shift+Cmd+Z = REDO（Cmd のみ。Ctrl 系は割り当てない）
     if (e.metaKey && e.key.toLowerCase() === "z") {
@@ -960,9 +969,14 @@ export class NodeEditor {
     for (const l of labels) {
       const text = l.text || "ラベル";
       const tw = ctx.measureText(text).width;
+      const selected = this.selectedLabelId === l.id;
+      // 当たり判定が分かるよう常に枠を描く。選択時はノード同様にハイライト。
       ctx.fillStyle = "rgba(20,20,26,0.7)";
       roundRect(ctx, l.x - 6, l.y - 16, tw + 12, 20, 4);
       ctx.fill();
+      ctx.strokeStyle = selected ? "#ffd27f" : "rgba(255,233,168,0.4)";
+      ctx.lineWidth = selected ? 2 : 1;
+      ctx.stroke();
       ctx.fillStyle = "#ffe9a8";
       ctx.fillText(text, l.x, l.y - 6);
     }
