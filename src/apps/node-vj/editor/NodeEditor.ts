@@ -192,6 +192,18 @@ export class NodeEditor {
     return bar;
   }
 
+  /**
+   * #181: 指定ノード群を描画順の最前面（graph.nodes 配列の末尾）へ移動する。
+   * 描画/ヒットは配列後方が前面。相対順序は保つ。history には積まない（z 順だけの変更）。
+   */
+  private bringNodesToFront(ids: Set<string>): void {
+    if (ids.size === 0) return;
+    const front = this.graph.nodes.filter((n) => ids.has(n.id));
+    if (front.length === 0) return;
+    const rest = this.graph.nodes.filter((n) => !ids.has(n.id));
+    this.graph.nodes = [...rest, ...front];
+  }
+
   addNodeOfType(type: string, worldPos?: { x: number; y: number }): string {
     const def = this.registry.require(type);
     // #92/#103: world 座標へ配置。worldPos 指定（右クリック）はその位置、未指定は画面左上付近。
@@ -374,6 +386,9 @@ export class NodeEditor {
         const p = n?.position ?? { x: 0, y: 0 };
         anchors.set(id, { dx: w.x - p.x, dy: w.y - p.y });
       }
+      // #181: 操作したノードを最前面（描画順＝配列末尾）へ。history には積まない
+      // （移動を始めれば group ドラッグの記録に乗る／クリックだけなら記録されない＝undo 対象外）。
+      this.bringNodesToFront(this.selectedIds);
       this.drag = { kind: "group", anchors, moved: false };
       return;
     }
