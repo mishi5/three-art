@@ -2,8 +2,8 @@
 // 座標計算は layout.ts を共有し、描画とヒット判定の整合を保つ。
 import {
   addConnection, addNode, findNode, removeConnection, removeNode, replaceGraph,
-  createGroup, removeGroup, groupOfNode,
-  type Connection, type GraphDoc, type NodeInstance,
+  createGroup, removeGroup, groupOfNode, addLabel, removeLabel,
+  type Connection, type GraphDoc, type NodeInstance, type TextLabel,
 } from "../graph/graph-doc";
 import type { NodeRegistry } from "../graph/node-type";
 import { isCompatible, type PortType } from "../graph/port-types";
@@ -62,6 +62,8 @@ type Drag =
   | { kind: "param"; nodeId: string; paramIndex: number; moved: boolean; recorded: boolean; startX: number; lastX: number }
   // #99: transport 行シークバーのドラッグ（クリック/スクラブで seek）。
   | { kind: "seek"; nodeId: string; seek: { x: number; w: number }; duration: number }
+  // #176: 自由ラベルのドラッグ移動。dx/dy はカーソル→ラベル原点のオフセット。
+  | { kind: "label"; id: string; dx: number; dy: number; moved: boolean }
   | null;
 
 /** クリックとドラッグを分ける移動量しきい値 (px)。 */
@@ -285,6 +287,12 @@ export class NodeEditor {
       this.drag = { kind: "pan", startX: e.clientX, startY: e.clientY, ox: this.offset.x, oy: this.offset.y, bySpace };
       return;
     }
+    // #176: 自由ラベルは最前面。クリックでドラッグ移動を開始する。
+    const lab = this.labelAt(w.x, w.y);
+    if (lab) {
+      this.drag = { kind: "label", id: lab.id, dx: w.x - lab.x, dy: w.y - lab.y, moved: false };
+      return;
+    }
     // #80: 遮蔽つき統一ヒットテスト。最前面ノードがイベントを所有する。
     const hit = hitTest(this.graph.nodes, this.registry, w.x, w.y);
     if (hit?.kind === "port") {
@@ -446,6 +454,14 @@ export class NodeEditor {
       this.dragParam(this.drag);
     } else if (this.drag.kind === "seek") {
       this.playback?.seek(this.drag.nodeId, seekRatioAt(this.cursor.x, this.drag.seek) * this.drag.duration);
+    } else if (this.drag.kind === "label") {
+      // #176: 自由ラベルの移動。最初に動いた時点で履歴記録。
+      const lab = this.graph.labels?.find((l) => l.id === (this.drag as { id: string }).id);
+      if (lab) {
+        if (!this.drag.moved) { this.history.record(this.graph); this.drag.moved = true; }
+        lab.x = this.cursor.x - this.drag.dx;
+        lab.y = this.cursor.y - this.drag.dy;
+      }
     }
   };
 
@@ -493,6 +509,11 @@ export class NodeEditor {
       // ドラッグなし＝クリック → 従来の数値入力/選択オーバーレイを開く。
       const node = findNode(this.graph, this.drag.nodeId);
       if (node) this.editParam(e, node, this.drag.paramIndex);
+    }
+    if (this.drag?.kind === "label" && !this.drag.moved) {
+      // #176: ラベルをクリック（移動なし）→ テキスト編集。
+      const lab = this.graph.labels?.find((l) => l.id === (this.drag as { id: string }).id);
+      if (lab) this.editLabel(lab);
     }
     if (this.drag?.kind === "wire") {
       const drag = this.drag;
@@ -612,12 +633,22 @@ export class NodeEditor {
   /** #103: 右クリック位置にコンテキストメニューを開く。ノード上ならノード操作、空白なら追加メニュー。 */
   private openContextMenu(e: PointerEvent): void {
     const w = this.toWorld(e);
+    // #176: ラベル上なら編集/削除メニュー。
+    const lab = this.labelAt(w.x, w.y);
+    if (lab) { this.showLabelMenu(e.clientX, e.clientY, lab); return; }
     const hit = hitTest(this.graph.nodes, this.registry, w.x, w.y);
     if (hit && hit.kind !== "port") {
       this.showNodeMenu(e.clientX, e.clientY, hit.node);
     } else {
       this.showAddMenu(e.clientX, e.clientY, w);
     }
+  }
+
+  /** #176: 自由ラベルの右クリックメニュー（編集/削除）。 */
+  private showLabelMenu(screenX: number, screenY: number, lab: TextLabel): void {
+    const menu = this.buildMenu(screenX, screenY);
+    this.addMenuItem(menu, "ラベル編集", () => this.editLabel(lab));
+    this.addMenuItem(menu, "ラベル削除", () => { this.history.record(this.graph); removeLabel(this.graph, lab.id); });
   }
 
   /** メニュー DOM の土台を作る（既存メニューは閉じる）。 */
@@ -701,6 +732,13 @@ export class NodeEditor {
   /** 空白右クリック: カテゴリ階層の追加メニュー（型はサブメニュー）。選んだ type を world 位置に生成。 */
   private showAddMenu(screenX: number, screenY: number, worldPos: { x: number; y: number }): void {
     const menu = this.buildMenu(screenX, screenY);
+    // #176: ラベル追加（クリック位置に空ラベルを作りインライン編集）。
+    this.addMenuItem(menu, "＋ ラベル追加", () => {
+      this.history.record(this.graph);
+      const lab = { id: genId("L"), x: worldPos.x, y: worldPos.y, text: "ラベル" };
+      addLabel(this.graph, lab);
+      this.editLabel(lab);
+    });
     this.addMenuLabel(menu, "ノードを追加");
     for (const group of groupNodesByCategory(this.registry.list())) {
       this.addCategoryRow(menu, group, worldPos);
@@ -734,6 +772,25 @@ export class NodeEditor {
       for (const id of this.selectedIds) removeNode(this.graph, id);
       this.selectedIds = new Set();
     });
+    // #176: ノードのラベル編集。
+    this.addMenuItem(menu, node.label ? "ラベル編集" : "ラベル追加", () => {
+      this.editText((node.position?.x ?? 0) + 8, (node.position?.y ?? 0) + nodeRect(node, this.registry.require(node.type)).h + 10, node.label ?? "", (v) => {
+        const t = v.trim();
+        this.history.record(this.graph);
+        if (t === "") delete node.label; else node.label = t;
+      });
+    });
+    // #176: グループ名編集（所属グループがあるときのみ）。
+    const gr = groupOfNode(this.graph, node.id);
+    if (gr) {
+      this.addMenuItem(menu, "グループ名編集", () => {
+        this.editText((node.position?.x ?? 0), (node.position?.y ?? 0) - 6, gr.name ?? "", (v) => {
+          const t = v.trim();
+          this.history.record(this.graph);
+          if (t === "") delete gr.name; else gr.name = t;
+        });
+      });
+    }
   }
 
   private closeOnOutside = (e: PointerEvent): void => {
@@ -817,6 +874,43 @@ export class NodeEditor {
     });
   }
 
+  // ===== #176: ラベル（自由ラベル / ノードラベル / グループ名）=====
+
+  /** world 座標 (wx,wy) にある自由ラベルを返す（テキスト矩形で簡易判定・後ろのものを優先）。 */
+  private labelAt(wx: number, wy: number): TextLabel | undefined {
+    const labels = this.graph.labels;
+    if (!labels) return undefined;
+    const ctx = this.ctx;
+    ctx.font = "13px system-ui";
+    for (let i = labels.length - 1; i >= 0; i--) {
+      const l = labels[i]!;
+      const w = ctx.measureText(l.text || "ラベル").width + 12;
+      const h = 20;
+      if (wx >= l.x - 6 && wx <= l.x - 6 + w && wy >= l.y - h + 4 && wy <= l.y + 4) return l;
+    }
+    return undefined;
+  }
+
+  /** 任意位置にインライン文字入力を開く（ラベル/ノードラベル/グループ名の編集に共用）。 */
+  private editText(worldX: number, worldY: number, value: string, onCommit: (v: string) => void): void {
+    const s = worldToScreen(worldX, worldY, this.offset, this.scale);
+    openParamInput({
+      screenX: s.x, screenY: s.y - 9 * this.scale, width: 160 * this.scale, fontPx: 12 * this.scale,
+      value, kind: "string",
+      onCommit: (v) => onCommit(typeof v === "string" ? v : String(v ?? "")),
+    });
+  }
+
+  /** 自由ラベルのテキストを編集する（空にすると削除）。 */
+  private editLabel(lab: TextLabel): void {
+    this.editText(lab.x, lab.y, lab.text, (v) => {
+      const t = v.trim();
+      this.history.record(this.graph);
+      if (t === "") removeLabel(this.graph, lab.id);
+      else lab.text = t;
+    });
+  }
+
   // --- 描画 ---
   private loop = (): void => {
     this.rafId = requestAnimationFrame(this.loop);
@@ -857,6 +951,23 @@ export class NodeEditor {
     }
   }
 
+  /** #176: 自由ラベルを world 空間に描く（薄い角丸背景＋テキスト）。 */
+  private drawLabels(): void {
+    const labels = this.graph.labels;
+    if (!labels) return;
+    const ctx = this.ctx;
+    ctx.font = "13px system-ui"; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+    for (const l of labels) {
+      const text = l.text || "ラベル";
+      const tw = ctx.measureText(text).width;
+      ctx.fillStyle = "rgba(20,20,26,0.7)";
+      roundRect(ctx, l.x - 6, l.y - 16, tw + 12, 20, 4);
+      ctx.fill();
+      ctx.fillStyle = "#ffe9a8";
+      ctx.fillText(text, l.x, l.y - 6);
+    }
+  }
+
   private draw(): void {
     const ctx = this.ctx;
     ctx.save();
@@ -882,6 +993,8 @@ export class NodeEditor {
     }
     // ノード
     for (const node of this.graph.nodes) this.drawNode(node);
+    // #176: 自由ラベル（ノードの上に描く）
+    this.drawLabels();
     // 矩形選択のオーバーレイ
     if (drag?.kind === "rect") {
       const r = normRect(drag.startX, drag.startY, this.cursor.x, this.cursor.y);
@@ -990,6 +1103,13 @@ export class NodeEditor {
     ctx.font = "13px system-ui";
     ctx.textBaseline = "middle";
     ctx.fillText(def.type, r.x + 8, r.y + TITLE_H / 2);
+    // #176: ノードラベル（別名）をタイトル右側に薄色併記。
+    if (node.label) {
+      const tw = ctx.measureText(def.type).width;
+      ctx.fillStyle = "rgba(255,255,255,0.6)"; ctx.font = "11px system-ui";
+      ctx.fillText(ellipsizeEnd(ctx, node.label, r.w - tw - 24), r.x + 8 + tw + 8, r.y + TITLE_H / 2);
+      ctx.font = "13px system-ui";
+    }
 
     // #77/#79: プレビュー対象ノードはタイトル右端に 👁（小窓トグル）
     if (nodeHasPreview(def)) {
