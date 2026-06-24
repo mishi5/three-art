@@ -11,6 +11,16 @@ export interface NodeInstance {
   position?: { x: number; y: number };
   /** #77: ノード横プレビュー小窓の ON/OFF（texture 出力を持つノードのみ意味を持つ）。 */
   preview?: boolean;
+  /** #176: ノード名（ユーザが付ける名前。グループ名に近い注釈。ノード上部に表示）。 */
+  name?: string;
+}
+
+/** #176: エディタ上の自由ラベル（付箋）。x/y は world 座標。 */
+export interface TextLabel {
+  id: string;
+  x: number;
+  y: number;
+  text: string;
 }
 
 export interface Connection {
@@ -32,6 +42,8 @@ export interface GraphDoc {
   connections: Connection[];
   /** #175: ノードグループ（任意）。 */
   groups?: NodeGroup[];
+  /** #176: エディタ上の自由ラベル（任意）。 */
+  labels?: TextLabel[];
 }
 
 export const GRAPH_VERSION = 1;
@@ -85,6 +97,18 @@ export function removeGroup(g: GraphDoc, groupId: string): void {
 /** #175: ノードが所属するグループを返す（無ければ undefined）。 */
 export function groupOfNode(g: GraphDoc, nodeId: string): NodeGroup | undefined {
   return g.groups?.find((gr) => gr.nodeIds.includes(nodeId));
+}
+
+/** #176: 自由ラベルを追加する。 */
+export function addLabel(g: GraphDoc, label: TextLabel): void {
+  (g.labels ??= []).push(label);
+}
+
+/** #176: 自由ラベルを削除する。 */
+export function removeLabel(g: GraphDoc, id: string): void {
+  if (!g.labels) return;
+  g.labels = g.labels.filter((l) => l.id !== id);
+  if (g.labels.length === 0) delete g.labels;
 }
 
 export function removeConnection(g: GraphDoc, connId: string): void {
@@ -174,4 +198,5 @@ export function replaceGraph(target: GraphDoc, loaded: GraphDoc): void {
   target.nodes = loaded.nodes;
   target.connections = loaded.connections;
   if (loaded.groups) target.groups = loaded.groups; else delete target.groups; // #175
+  if (loaded.labels) target.labels = loaded.labels; else delete target.labels; // #176
 }

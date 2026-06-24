@@ -3,8 +3,8 @@
 // 未知ノード・不正接続を捨てる（warnings に理由を残す）。
 import YAML from "yaml";
 import {
-  addConnection, createGraph, createGroup, GRAPH_VERSION,
-  type Connection, type GraphDoc, type NodeGroup, type NodeInstance,
+  addConnection, addLabel, createGraph, createGroup, GRAPH_VERSION,
+  type Connection, type GraphDoc, type NodeGroup, type NodeInstance, type TextLabel,
 } from "./graph-doc";
 import type { NodeRegistry } from "./node-type";
 
@@ -60,6 +60,7 @@ export function deserializeGraph(text: string, registry: NodeRegistry): Deserial
       node.position = { x: n.position.x, y: n.position.y };
     }
     if (typeof n.preview === "boolean") node.preview = n.preview;
+    if (typeof n.name === "string" && n.name !== "") node.name = n.name; // #176
     graph.nodes.push(node);
   }
 
@@ -93,6 +94,16 @@ export function deserializeGraph(text: string, registry: NodeRegistry): Deserial
     createGroup(graph, gr.id, ids, typeof gr.name === "string" ? gr.name : undefined);
     if ((graph.groups?.length ?? 0) === before) {
       warnings.push(`group ${gr.id} を捨てました（有効メンバーが 2 未満）`);
+    }
+  }
+
+  // #176: 自由ラベルを復元（形不正は破棄）。
+  for (const rawLabel of doc.labels ?? []) {
+    const l = rawLabel as Partial<TextLabel>;
+    if (typeof l.id === "string" && typeof l.x === "number" && typeof l.y === "number" && typeof l.text === "string") {
+      addLabel(graph, { id: l.id, x: l.x, y: l.y, text: l.text });
+    } else {
+      warnings.push("label を捨てました（形が不正）");
     }
   }
 
