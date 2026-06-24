@@ -19,10 +19,19 @@ export interface Connection {
   to: { node: string; port: string };
 }
 
+/** #175: ノードのグループ（まとめて選択・移動する塊）。name は #176 ラベルで活用。 */
+export interface NodeGroup {
+  id: string;
+  name?: string;
+  nodeIds: string[];
+}
+
 export interface GraphDoc {
   version: number;
   nodes: NodeInstance[];
   connections: Connection[];
+  /** #175: ノードグループ（任意）。 */
+  groups?: NodeGroup[];
 }
 
 export const GRAPH_VERSION = 1;
@@ -40,12 +49,42 @@ export function addNode(g: GraphDoc, node: NodeInstance): void {
   g.nodes.push(node);
 }
 
-/** ノードと、それに接続された全コネクションを削除する。 */
+/** ノードと、それに接続された全コネクションを削除する。#175: 所属グループからも除去し、2 未満は解散。 */
 export function removeNode(g: GraphDoc, nodeId: string): void {
   g.nodes = g.nodes.filter((n) => n.id !== nodeId);
   g.connections = g.connections.filter(
     (c) => c.from.node !== nodeId && c.to.node !== nodeId,
   );
+  if (g.groups) {
+    for (const gr of g.groups) gr.nodeIds = gr.nodeIds.filter((id) => id !== nodeId);
+    g.groups = g.groups.filter((gr) => gr.nodeIds.length >= 2);
+    if (g.groups.length === 0) delete g.groups;
+  }
+}
+
+/** #175: 指定ノード id 群でグループを作る（2 件未満は作らない。既存グループ所属ノードは新グループへ移す）。 */
+export function createGroup(g: GraphDoc, id: string, nodeIds: string[], name?: string): void {
+  const ids = [...new Set(nodeIds)].filter((nid) => findNode(g, nid));
+  if (ids.length < 2) return;
+  const set = new Set(ids);
+  const groups = g.groups ?? [];
+  // 既存グループから重複ノードを除去し、2 未満になったグループは解散。
+  for (const gr of groups) gr.nodeIds = gr.nodeIds.filter((nid) => !set.has(nid));
+  const kept = groups.filter((gr) => gr.nodeIds.length >= 2);
+  kept.push({ id, name, nodeIds: ids });
+  g.groups = kept;
+}
+
+/** #175: グループを削除する。 */
+export function removeGroup(g: GraphDoc, groupId: string): void {
+  if (!g.groups) return;
+  g.groups = g.groups.filter((gr) => gr.id !== groupId);
+  if (g.groups.length === 0) delete g.groups;
+}
+
+/** #175: ノードが所属するグループを返す（無ければ undefined）。 */
+export function groupOfNode(g: GraphDoc, nodeId: string): NodeGroup | undefined {
+  return g.groups?.find((gr) => gr.nodeIds.includes(nodeId));
 }
 
 export function removeConnection(g: GraphDoc, connId: string): void {
@@ -134,4 +173,5 @@ export function replaceGraph(target: GraphDoc, loaded: GraphDoc): void {
   target.version = loaded.version;
   target.nodes = loaded.nodes;
   target.connections = loaded.connections;
+  if (loaded.groups) target.groups = loaded.groups; else delete target.groups; // #175
 }

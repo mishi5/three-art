@@ -3,8 +3,8 @@
 // 未知ノード・不正接続を捨てる（warnings に理由を残す）。
 import YAML from "yaml";
 import {
-  addConnection, createGraph, GRAPH_VERSION,
-  type Connection, type GraphDoc, type NodeInstance,
+  addConnection, createGraph, createGroup, GRAPH_VERSION,
+  type Connection, type GraphDoc, type NodeGroup, type NodeInstance,
 } from "./graph-doc";
 import type { NodeRegistry } from "./node-type";
 
@@ -78,6 +78,21 @@ export function deserializeGraph(text: string, registry: NodeRegistry): Deserial
     });
     if (!res.ok) {
       warnings.push(`connection ${c.id} を捨てました（${res.reason}）`);
+    }
+  }
+
+  // #175: グループを復元。存在しない nodeId は除去し、createGroup（2 未満は破棄）で健全化。
+  for (const rawGroup of doc.groups ?? []) {
+    const gr = rawGroup as Partial<NodeGroup>;
+    if (typeof gr.id !== "string" || !Array.isArray(gr.nodeIds)) {
+      warnings.push("group を捨てました（形が不正）");
+      continue;
+    }
+    const ids = gr.nodeIds.filter((id): id is string => typeof id === "string");
+    const before = graph.groups?.length ?? 0;
+    createGroup(graph, gr.id, ids, typeof gr.name === "string" ? gr.name : undefined);
+    if ((graph.groups?.length ?? 0) === before) {
+      warnings.push(`group ${gr.id} を捨てました（有効メンバーが 2 未満）`);
     }
   }
 

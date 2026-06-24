@@ -97,6 +97,22 @@ describe("serializeGraph / deserializeGraph", () => {
     expect(img?.params.assetId).toBe("abc123");
   });
 
+  test("#175 groups が round-trip（存在しない nodeId は除去・2 未満は破棄）", () => {
+    const g = createGraph();
+    addNode(g, { id: "n1", type: "Number", params: { value: 1 } });
+    addNode(g, { id: "m", type: "Multiply", params: {} });
+    g.groups = [
+      { id: "g1", name: "Pair", nodeIds: ["n1", "m"] },
+      { id: "g2", nodeIds: ["n1", "ghost"] },
+    ];
+    const { graph, warnings } = deserializeGraph(serializeGraph(g), r);
+    expect(graph.groups?.length).toBe(1);
+    expect(graph.groups![0]!.id).toBe("g1");
+    expect(graph.groups![0]!.name).toBe("Pair");
+    expect(graph.groups![0]!.nodeIds.slice().sort()).toEqual(["m", "n1"]);
+    expect(warnings.some((w) => w.includes("g2"))).toBe(true);
+  });
+
   test("version 不一致は throw", () => {
     expect(() => deserializeGraph("version: 99\nnodes: []\nconnections: []", r)).toThrow();
   });

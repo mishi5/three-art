@@ -2,6 +2,7 @@
 // 座標計算は layout.ts を共有し、描画とヒット判定の整合を保つ。
 import {
   addConnection, addNode, findNode, removeConnection, removeNode, replaceGraph,
+  createGroup, removeGroup, groupOfNode,
   type Connection, type GraphDoc, type NodeInstance,
 } from "../graph/graph-doc";
 import type { NodeRegistry } from "../graph/node-type";
@@ -378,8 +379,11 @@ export class NodeEditor {
         else this.selectedIds.add(hit.node.id);
         return;
       }
-      // 未選択ノードなら単独選択に置き換え、選択済みならグループのままドラッグ
-      if (!this.selectedIds.has(hit.node.id)) this.selectedIds = new Set([hit.node.id]);
+      // 未選択ノードなら選択に置き換え。#175: グループ所属ならグループ全体を選択（一括移動）。
+      if (!this.selectedIds.has(hit.node.id)) {
+        const gr = groupOfNode(this.graph, hit.node.id);
+        this.selectedIds = new Set(gr ? gr.nodeIds : [hit.node.id]);
+      }
       const anchors = new Map<string, { dx: number; dy: number }>();
       for (const id of this.selectedIds) {
         const n = findNode(this.graph, id);
@@ -571,6 +575,21 @@ export class NodeEditor {
       this.history.record(this.graph);
       const newIds = duplicateNodes(this.graph, this.selectedIds, genId, 24);
       this.selectedIds = new Set(newIds);
+    }
+    // #175: Cmd/Ctrl+G でグループ化、Shift 併用で選択ノードの所属グループを解除。
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "g") {
+      e.preventDefault();
+      if (e.shiftKey) {
+        const groupIds = new Set<string>();
+        for (const id of this.selectedIds) { const gr = groupOfNode(this.graph, id); if (gr) groupIds.add(gr.id); }
+        if (groupIds.size > 0) {
+          this.history.record(this.graph);
+          for (const gid of groupIds) removeGroup(this.graph, gid);
+        }
+      } else if (this.selectedIds.size >= 2) {
+        this.history.record(this.graph);
+        createGroup(this.graph, genId("g"), [...this.selectedIds]);
+      }
     }
   };
 
@@ -804,6 +823,40 @@ export class NodeEditor {
     this.draw();
   };
 
+  /** #175: 各グループのメンバー外接矩形と名前を背面に描く。 */
+  private drawGroups(): void {
+    const groups = this.graph.groups;
+    if (!groups) return;
+    const ctx = this.ctx;
+    const PAD = 12;
+    for (const gr of groups) {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, any = false;
+      for (const id of gr.nodeIds) {
+        const n = findNode(this.graph, id);
+        const def = n && this.registry.get(n.type);
+        if (!n || !def) continue;
+        const r = nodeRect(n, def);
+        minX = Math.min(minX, r.x); minY = Math.min(minY, r.y);
+        maxX = Math.max(maxX, r.x + r.w); maxY = Math.max(maxY, r.y + r.h);
+        any = true;
+      }
+      if (!any) continue;
+      const x = minX - PAD, y = minY - PAD, w = (maxX - minX) + PAD * 2, h = (maxY - minY) + PAD * 2;
+      ctx.fillStyle = "rgba(127,209,255,0.05)";
+      ctx.strokeStyle = "rgba(127,209,255,0.35)";
+      ctx.lineWidth = 1;
+      roundRect(ctx, x, y, w, h, 8);
+      ctx.fill();
+      ctx.stroke();
+      if (gr.name) {
+        ctx.fillStyle = "rgba(180,220,255,0.85)";
+        ctx.font = "12px system-ui"; ctx.textBaseline = "bottom"; ctx.textAlign = "left";
+        ctx.fillText(gr.name, x + 4, y - 2);
+        ctx.textBaseline = "middle";
+      }
+    }
+  }
+
   private draw(): void {
     const ctx = this.ctx;
     ctx.save();
@@ -812,6 +865,8 @@ export class NodeEditor {
     ctx.translate(this.offset.x, this.offset.y);
     ctx.scale(this.scale, this.scale); // #92: ズーム
 
+    // #175: グループの外接枠（ノード/配線の背面）
+    this.drawGroups();
     // 配線
     for (const c of this.graph.connections) this.drawWire(c);
     // ドラッグ中の配線
