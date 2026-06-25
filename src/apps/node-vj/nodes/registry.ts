@@ -26,6 +26,11 @@ import { FlipFlopNode } from "./FlipFlopNode";
 import { BlendNode } from "./BlendNode";
 import { KeyNode } from "./KeyNode";
 import { BlurNode } from "./BlurNode";
+import { BloomNode } from "./BloomNode";
+import { RgbShiftNode } from "./RgbShiftNode";
+import { PixelateNode } from "./PixelateNode";
+import { ColorGradeNode } from "./ColorGradeNode";
+import { CrtNode } from "./CrtNode";
 import { KaleidoscopeNode } from "./KaleidoscopeNode";
 import { FractalNode } from "./FractalNode";
 import { DistortNode } from "./DistortNode";
@@ -77,6 +82,11 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(EdgeVisualNode);
   // effect（texture→texture）
   r.register(BlurNode);
+  r.register(BloomNode);
+  r.register(RgbShiftNode);
+  r.register(PixelateNode);
+  r.register(ColorGradeNode);
+  r.register(CrtNode);
   r.register(KaleidoscopeNode);
   r.register(FractalNode);
   r.register(DistortNode);
