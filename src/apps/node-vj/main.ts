@@ -11,6 +11,7 @@ import { GraphStore, localStorageAdapter } from "./graph/graph-store";
 import { History } from "./graph/history";
 import { previewSize } from "./preview-size";
 import { OutputWindow, OUTPUT_RENDER_W, OUTPUT_RENDER_H } from "./output-window";
+import { Recorder, pickRecorderMimeType, recordingFileName } from "./recorder";
 import type { PlaybackControl } from "./nodes/playback";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "../../core/types";
 import { AssetLibrary } from "./asset/asset-library";
@@ -346,7 +347,44 @@ outBtn.addEventListener("click", () => {
 syncOutBtn();
 bar.appendChild(outBtn);
 
+// #179: 出力（出力 canvas = 出力シーンに追従）をビデオ録画して保存する。
+const recorder = new Recorder();
+const recBtn = document.createElement("button");
+recBtn.style.cssText = "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;";
+function syncRecBtn(): void {
+  recBtn.textContent = recorder.recording ? "■ 停止（録画中）" : "● 録画";
+  recBtn.style.color = recorder.recording ? "#ff6b6b" : "#ddd";
+  recBtn.style.borderColor = recorder.recording ? "#ff6b6b" : "#444";
+}
+/** 録画した Blob を webm としてダウンロードする。 */
+function downloadRecording(blob: Blob): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = recordingFileName(new Date());
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+recBtn.addEventListener("click", () => {
+  if (recorder.recording) {
+    void recorder.stop().then((blob) => {
+      runtime.setRecording(false);
+      if (blob.size > 0) downloadRecording(blob);
+      syncRecBtn();
+    });
+  } else {
+    runtime.setRecording(true);   // 録画中は出力 canvas を更新し続ける
+    const mime = pickRecorderMimeType((m) => MediaRecorder.isTypeSupported(m));
+    recorder.start(runtime.getRecordingStream(30), mime);  // 映像のみ（音声は Phase 2）
+    syncRecBtn();
+  }
+});
+syncRecBtn();
+bar.appendChild(recBtn);
+
 document.body.appendChild(bar);
 
-(window as unknown as { nodeVj: unknown }).nodeVj = { graph, registry, runtime, editor, sceneManager };
+(window as unknown as { nodeVj: unknown }).nodeVj = { graph, registry, runtime, editor, sceneManager, recorder };
 console.log("[node-vj] editor + preview started");

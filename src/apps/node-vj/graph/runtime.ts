@@ -65,6 +65,8 @@ export class GraphRuntime {
   // （参照元シーンの SceneInput.audio / AudioMix が編集中シーンの音を解析できるようにする）。
   private activeAudioMerge: GainNode | null = null;
   private activeAudioConnected = new Set<AudioNode>();
+  // #179: 録画中フラグ（録画前の出力状態を退避し、停止時に戻す）。
+  private outputActiveBeforeRecording = false;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -252,6 +254,33 @@ export class GraphRuntime {
         this.sceneAudioCache.set(this.activeSceneId, merge);
       },
     };
+  }
+
+  /**
+   * #179: 録画用の MediaStream（映像のみ）を返す。
+   * 映像は出力 canvas（出力シーンのピン/追従に追従）の captureStream。
+   * 音声込み録画は Phase 2（無音トラックで muxer が停止する問題の対策込みで別途実装）。
+   */
+  getRecordingStream(fps = 30): MediaStream {
+    const canvas = this.getOutputCanvas() as HTMLCanvasElement & { captureStream?: (fps?: number) => MediaStream };
+    const out = new MediaStream();
+    if (typeof canvas.captureStream === "function") {
+      for (const t of canvas.captureStream(fps).getVideoTracks()) out.addTrack(t);
+    }
+    return out;
+  }
+
+  /**
+   * #179: 録画中フラグ。録画中は出力 canvas を更新し続ける（出力ウィンドウ未表示でも録画可能）。
+   * 停止時は録画開始前の出力状態へ戻す。
+   */
+  setRecording(on: boolean): void {
+    if (on) {
+      this.outputActiveBeforeRecording = this.outputActive;
+      this.outputActive = true;
+    } else {
+      this.outputActive = this.outputActiveBeforeRecording;
+    }
   }
 
   /** #172: 参照先シーン評価用の env（destination 非接続・音声捕捉つき）。 */
