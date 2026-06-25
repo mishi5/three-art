@@ -226,6 +226,11 @@ function wireSceneProvider(): void {
   );
 }
 wireSceneProvider();
+// #174: 出力シーン id を runtime に同期する（編集と独立に出力するシーン）。
+function syncOutputScene(): void {
+  runtime.setOutputSceneId(sceneManager.outputId());
+}
+syncOutputScene();
 
 // #172: 参照先シーンの音声/動画入力を assetId 経由で復元し、解析・再生を走らせる（音声駆動の映像も動く）。
 runtime.setSceneAssetRestorer((node, state) => {
@@ -280,6 +285,9 @@ const sceneActions: ScenePanelActions = {
   },
   rename: (id, name) => sceneManager.rename(id, name),
   onChange: (cb) => sceneManager.onChange(cb),
+  // #174: 出力シーンのピン留め/解除。runtime にも反映する。
+  outputId: () => sceneManager.outputId(),
+  setOutput: (id) => { sceneManager.setOutput(id); syncOutputScene(); },
 };
 // #151: VSCode 風サイドドック（最左アイコン列で アセット/シーン を切替）。
 buildSideDock([assetPanelDef(library), scenePanelDef(sceneActions)]);
@@ -319,12 +327,15 @@ function syncOutBtn(): void {
   outBtn.textContent = output.isOpen() ? "🖥 出力ウィンドウを閉じる" : "🖥 出力ウィンドウ";
   // #148: 出力ウィンドウ表示中は本体が隠れても描画を回し続ける（全画面で固まらないように）。
   runtime.setKeepAliveWhileHidden(output.isOpen());
+  // #174: 出力ウィンドウ表示中だけ出力 canvas を更新する。
+  runtime.setOutputActive(output.isOpen());
   applyPreviewSize();   // 出力状態に応じて描画解像度（高解像度⇄表示サイズ）を切り替える
 }
 output.onClose = syncOutBtn;
 outBtn.addEventListener("click", () => {
   if (output.isOpen()) output.close();
-  else output.open(previewCanvas);   // previewCanvas = renderer の出力 canvas
+  // #174: 出力 canvas（出力シーンを描く 2D canvas）をミラーする（編集と分離可能）。
+  else output.open(runtime.getOutputCanvas());
   syncOutBtn();
 });
 syncOutBtn();

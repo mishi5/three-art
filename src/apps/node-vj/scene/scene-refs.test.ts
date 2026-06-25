@@ -64,4 +64,27 @@ describe("sceneRenderOrder", () => {
     ];
     expect(sceneRenderOrder("A", scenes, reg)).toContain("B");
   });
+
+  // #174: 出力シーンを追加ルートとして評価順に含める
+  test("extraRoots: active が参照しない出力シーンを依存順で追記する", () => {
+    const scenes = [
+      { id: "A", graph: createGraph() },
+      { id: "B", graph: sceneGraph(["C"]) },
+      { id: "C", graph: createGraph() },
+    ];
+    // active=A は何も参照しない。出力シーン B を extraRoots に渡すと C→B が追記される。
+    expect(sceneRenderOrder("A", scenes, reg, ["B"])).toEqual(["C", "B"]);
+  });
+  test("extraRoots: active が既に評価する分は重複しない", () => {
+    const scenes = [
+      { id: "A", graph: sceneGraph(["B"]) },
+      { id: "B", graph: createGraph() },
+    ];
+    // active=A が既に B を評価。出力先も B なら重複追記しない。
+    expect(sceneRenderOrder("A", scenes, reg, ["B"])).toEqual(["B"]);
+  });
+  test("extraRoots: active 自身を渡しても出力順には載らない", () => {
+    const scenes = [{ id: "A", graph: createGraph() }];
+    expect(sceneRenderOrder("A", scenes, reg, ["A"])).toEqual([]);
+  });
 });

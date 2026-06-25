@@ -55,6 +55,43 @@ describe("SceneManager", () => {
     expect(store.load()?.scenes.length).toBe(1);
     expect(store.load()?.activeId).toBe("s0");
   });
+  // #174: 出力シーン id
+  test("outputId 既定は null（編集に追従）", () => {
+    const { m } = mgr();
+    expect(m.outputId()).toBeNull();
+  });
+  test("setOutput でピン留め・永続化・onChange 通知", () => {
+    const { m, store } = mgr();
+    const s = m.add();
+    let fired = 0;
+    m.onChange(() => { fired++; });
+    m.setOutput(s.id);
+    expect(m.outputId()).toBe(s.id);
+    expect(store.load()?.outputId).toBe(s.id);
+    expect(fired).toBe(1);
+  });
+  test("setOutput(null) で追従へ戻す", () => {
+    const { m } = mgr();
+    const s = m.add();
+    m.setOutput(s.id);
+    m.setOutput(null);
+    expect(m.outputId()).toBeNull();
+  });
+  test("出力先シーンを削除すると追従（null）に戻る", () => {
+    const { m } = mgr();
+    const s = m.add();          // [s0, s]、active=s
+    m.setActive("s0");
+    m.setOutput(s.id);          // 出力を s にピン
+    m.remove(s.id);
+    expect(m.outputId()).toBeNull();
+  });
+  test("初期 SceneSet の outputId を引き継ぐ", () => {
+    const store = new SceneStore(memoryAdapter());
+    const set = { ...singleSceneSet(createGraph(), "s0", "Scene 1"), outputId: "s0" };
+    const m = new SceneManager({ store }, set);
+    expect(m.outputId()).toBe("s0");
+  });
+
   test("rename / updateActiveGraph / onChange / 永続化", () => {
     const { m, store } = mgr();
     let fired = 0;

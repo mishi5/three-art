@@ -14,6 +14,8 @@ export interface SceneManagerDeps { store: SceneStore; genId?: () => string; }
 export class SceneManager {
   private scenes: Scene[];
   private _activeId: string;
+  /** #174: 出力シーン id。null は編集（アクティブ）シーンへ追従。 */
+  private _outputId: string | null;
   private readonly store: SceneStore;
   private readonly genId: () => string;
   private counter = 0;
@@ -24,11 +26,14 @@ export class SceneManager {
     this.genId = deps.genId ?? (() => `scene-${Date.now().toString(36)}-${(++this.counter).toString(36)}`);
     this.scenes = initial.scenes;
     this._activeId = initial.activeId;
+    this._outputId = initial.outputId ?? null;
   }
 
   list(): Scene[] { return [...this.scenes]; }
   activeId(): string { return this._activeId; }
   active(): Scene { return this.byId(this._activeId); }
+  /** #174: 出力シーン id（null は編集に追従）。 */
+  outputId(): string | null { return this._outputId; }
 
   add(name?: string): Scene {
     const scene: Scene = { id: this.genId(), name: name ?? `Scene ${this.scenes.length + 1}`, graph: createGraph() };
@@ -56,6 +61,14 @@ export class SceneManager {
     if (this._activeId === id) {
       this._activeId = this.scenes[Math.min(idx, this.scenes.length - 1)]!.id;
     }
+    // #174: 出力先が消えたら編集に追従（null）へ戻す。
+    if (this._outputId === id) this._outputId = null;
+    this.commit();
+  }
+
+  /** #174: 出力シーンをピン留め（null で編集に追従へ戻す）。 */
+  setOutput(id: string | null): void {
+    this._outputId = id && this.scenes.some((s) => s.id === id) ? id : null;
     this.commit();
   }
 
@@ -81,6 +94,6 @@ export class SceneManager {
     if (!s) throw new Error(`scene not found: ${id}`);
     return s;
   }
-  private toSet(): SceneSet { return { version: SCENE_SET_VERSION, scenes: this.scenes, activeId: this._activeId }; }
+  private toSet(): SceneSet { return { version: SCENE_SET_VERSION, scenes: this.scenes, activeId: this._activeId, outputId: this._outputId }; }
   private commit(): void { this.store.save(this.toSet()); for (const cb of this.listeners) cb(); }
 }
