@@ -50,7 +50,7 @@ describe("VideoFileInputNode (#66/#116)", () => {
   test("state 無しでも音響特徴量デフォルトを返す（#116, texture は無し）", () => {
     const out = VideoFileInputNode.evaluate(ctxNoState());
     expect(out.texture).toBeUndefined();
-    expect(out.onset).toBe(false);
+    expect(out.trigger).toBe(false);
   });
 });
 

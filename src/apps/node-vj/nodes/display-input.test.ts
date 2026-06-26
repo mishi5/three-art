@@ -10,7 +10,7 @@ const ctxNoState = (): EvalContext => ({
   node: { id: "x", type: "DisplayInput", params: {} },
 });
 
-const FEATURE_IDS = ["signal", "volume", "bass", "mid", "treble", "onset"];
+const FEATURE_IDS = ["signal", "volume", "bass", "mid", "treble", "trigger"];
 
 describe("DisplayInputNode (#140 AV 化)", () => {
   test("type/category", () => {
@@ -29,10 +29,10 @@ describe("DisplayInputNode (#140 AV 化)", () => {
     expect(DisplayInputNode.params.map((p) => p.id)).toEqual(["onsetThreshold", "onsetCooldown"]);
   });
 
-  test("state 無しは onset=false・デフォルト signal・texture 無し", () => {
+  test("state 無しは trigger=false・デフォルト signal・texture 無し", () => {
     const out = DisplayInputNode.evaluate(ctxNoState());
     expect(out.signal).toBe(DEFAULT_AUDIO_FEATURES);
-    expect(out.onset).toBe(false);
+    expect(out.trigger).toBe(false);
     expect(out.texture).toBeUndefined();
   });
 

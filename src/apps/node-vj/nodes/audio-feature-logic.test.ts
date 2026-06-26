@@ -13,14 +13,14 @@ describe("audio-feature-logic (#100)", () => {
       "bass:number",
       "mid:number",
       "treble:number",
-      "onset:trigger",
+      "trigger:trigger",
     ]);
   });
 
-  test("audioFeatureOutputs: signal(バンドル) とバンドを展開し onset を付与", () => {
+  test("audioFeatureOutputs: signal(バンドル) とバンドを展開し trigger を付与", () => {
     const audio: AudioFeatures = { ...DEFAULT_AUDIO_FEATURES, volume: 0.3, bass: 0.4, mid: 0.5, treble: 0.6 };
     expect(audioFeatureOutputs(audio, true)).toEqual({
-      signal: audio, volume: 0.3, bass: 0.4, mid: 0.5, treble: 0.6, onset: true,
+      signal: audio, volume: 0.3, bass: 0.4, mid: 0.5, treble: 0.6, trigger: true,
     });
   });
 

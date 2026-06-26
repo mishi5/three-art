@@ -74,7 +74,7 @@ describe("AudioMixNode (#127)", () => {
 
   test("出力: audio(合成音) + 音響特徴量(signal)", () => {
     expect(AudioMixNode.outputs.map((p) => p.id)).toEqual([
-      "audio", "signal", "volume", "bass", "mid", "treble", "onset",
+      "audio", "signal", "volume", "bass", "mid", "treble", "trigger",
     ]);
     expect(AudioMixNode.outputs.find((p) => p.id === "audio")?.type).toBe("audio");
     expect(AudioMixNode.outputs.find((p) => p.id === "signal")?.type).toBe("signal");
@@ -89,11 +89,11 @@ describe("AudioMixNode (#127)", () => {
     expect(l1?.default).toBe(1);
   });
 
-  test("state 無しの evaluate は安全デフォルト（audio なし・signal=デフォルト・onset false）", () => {
+  test("state 無しの evaluate は安全デフォルト（audio なし・signal=デフォルト・trigger false）", () => {
     const out = AudioMixNode.evaluate(ctxNoState());
     expect(out.audio).toBeUndefined();
     expect(out.signal).toBe(DEFAULT_AUDIO_FEATURES);
-    expect(out.onset).toBe(false);
+    expect(out.trigger).toBe(false);
   });
 });
 

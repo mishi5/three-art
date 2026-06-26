@@ -22,7 +22,7 @@ export const AUDIO_FEATURE_OUTPUTS: PortDef[] = [
   { id: "bass", label: "bass", type: "number", description: "低域成分の強さ（おおむね 0〜1）。" },
   { id: "mid", label: "mid", type: "number", description: "中域成分の強さ（おおむね 0〜1）。" },
   { id: "treble", label: "treble", type: "number", description: "高域成分の強さ（おおむね 0〜1）。" },
-  { id: "onset", label: "onset", type: "trigger", description: "ビート（音の立ち上がり）検出時に発火する trigger。" },
+  { id: "trigger", label: "trig", type: "trigger", description: "ビート（音の立ち上がり）検出時に発火する trigger。" },
 ];
 
 /** ctx.param から onset しきい値/cooldown を読み出す（未設定は既定値）。 */
@@ -38,7 +38,7 @@ export function audioFeatureOutputs(audio: AudioFeatures, onset: boolean): Recor
   return {
     signal: audio,
     volume: audio.volume, bass: audio.bass, mid: audio.mid, treble: audio.treble,
-    onset,
+    trigger: onset,
   };
 }
 
