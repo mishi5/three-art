@@ -42,8 +42,17 @@ node-vj の出力をビデオ録画してファイル保存（ダウンロード
 
 - `pickRecorderMimeType(isSupported)`（純関数）: vp9+opus → vp8+opus → webm の順で対応する最初を返す。
 - `recordingFileName(date)`（純関数）: `node-vj-YYYYMMDD-HHMMSS.webm`。
-- `class Recorder`: `start(stream, mimeType)` / `stop(): Promise<Blob>` / `recording`。
+- `class Recorder`: `start(stream, mimeType, videoBitsPerSecond?)` / `stop(): Promise<Blob>` / `recording`。
   ondataavailable で chunk 蓄積、onstop で結合 Blob を解決。
+
+### 録画画質（解像度・ビットレート）
+
+- 録画中は出力ウィンドウ表示時と同じく `OUTPUT_RENDER_W×H`（1920×1080）でレンダリングする
+  （`applyPreviewSize` の高解像度条件に `recorder.recording` を追加。録画開始時にも明示的に
+  `setRenderSize` する）。出力ウィンドウ非表示でも鮮明に録れる。
+- `getRecordingStream` は captureStream 開始前に出力 canvas をレンダラ解像度へ合わせる
+  （録画途中の解像度変化を避ける）。
+- ビットレートは `videoBitsPerSecond = 16 Mbps`（既定の自動値は低すぎることがあるため明示）。
 
 ### UI（main.ts）
 

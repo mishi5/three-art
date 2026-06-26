@@ -38,11 +38,17 @@ export class Recorder {
     return !!this.rec && this.rec.state !== "inactive";
   }
 
-  /** 録画開始。mimeType が空なら指定せずブラウザ既定に委ねる。 */
-  start(stream: MediaStream, mimeType: string): void {
+  /**
+   * 録画開始。mimeType が空なら指定せずブラウザ既定に委ねる。
+   * videoBitsPerSecond を渡すと画質（ビットレート）を指定する（既定の自動値は低すぎることがある）。
+   */
+  start(stream: MediaStream, mimeType: string, videoBitsPerSecond?: number): void {
     if (this.recording) return;
     this.chunks = [];
-    this.rec = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    const opts: MediaRecorderOptions = {};
+    if (mimeType) opts.mimeType = mimeType;
+    if (videoBitsPerSecond) opts.videoBitsPerSecond = videoBitsPerSecond;
+    this.rec = new MediaRecorder(stream, opts);
     this.rec.ondataavailable = (e: BlobEvent) => { if (e.data.size > 0) this.chunks.push(e.data); };
     this.rec.start();
   }

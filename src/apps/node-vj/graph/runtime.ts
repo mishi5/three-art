@@ -283,6 +283,13 @@ export class GraphRuntime {
    */
   getRecordingStream(fps = 30, withAudio = true): MediaStream {
     const canvas = this.getOutputCanvas() as HTMLCanvasElement & { captureStream?: (fps?: number) => MediaStream };
+    // #179: captureStream を開始する前に出力 canvas をレンダラ解像度へ合わせる（録画途中の
+    // 解像度変化を避け、高解像度で録り始める）。
+    const rw = this.renderer.domElement.width, rh = this.renderer.domElement.height;
+    if (rw > 0 && rh > 0 && (canvas.width !== rw || canvas.height !== rh)) {
+      canvas.width = rw;
+      canvas.height = rh;
+    }
     const out = new MediaStream();
     if (typeof canvas.captureStream === "function") {
       for (const t of canvas.captureStream(fps).getVideoTracks()) out.addTrack(t);
