@@ -65,18 +65,18 @@ class RgbShiftState {
 export const RgbShiftNode: NodeTypeDef = {
   type: "RgbShift",
   category: "effect",
-  description: "R/B チャンネルを逆方向にずらす色収差エフェクト。kick trigger で一瞬大きくずらせる。",
+  description: "R/B チャンネルを逆方向にずらす色収差エフェクト。trigger で一瞬大きくずらせる。",
   isSink: true,
   inputs: [
     { id: "in", label: "in", type: "texture", description: "ずらす元のテクスチャ。" },
-    { id: "kick", label: "kick", type: "trigger", description: "立ち上がりで一瞬ずれ量を増幅する trigger（onset 等）。" },
+    { id: "trigger", label: "trig", type: "trigger", description: "立ち上がりで一瞬ずれ量を増幅する trigger（onset 等）。" },
   ],
   outputs: [{ id: "texture", label: "tex", type: "texture", description: "色収差適用後のテクスチャ。" }],
   params: [
     EFFECT_ENABLED_PARAM,
     { id: "amount", label: "amount", kind: "number", default: 0.003, min: 0, max: 0.05, step: 0.0005, description: "常時のずれ量（UV 単位）。" },
     { id: "angle", label: "angle", kind: "number", default: 0, min: 0, max: 1, step: 0.01, description: "ずらす方向（0〜1 を一周にマップ）。" },
-    { id: "kickAmount", label: "kickAmount", kind: "number", default: 0.02, min: 0, max: 0.1, step: 0.001, description: "trigger 発火時に加算するずれ量。" },
+    { id: "triggerAmount", label: "triggerAmount", kind: "number", default: 0.02, min: 0, max: 0.1, step: 0.001, description: "trigger 発火時に加算するずれ量。" },
     { id: "decay", label: "decay", kind: "number", default: 0.15, min: 0.01, max: 2, step: 0.01, description: "trigger 後のずれが戻るまでの時間（秒）。" },
   ],
   createState: () => new RgbShiftState(),
@@ -87,9 +87,9 @@ export const RgbShiftNode: NodeTypeDef = {
     if (!isEffectEnabled(ctx.param)) return bypassOutput(ctx.input, s.black); // #134 無効時パススルー
     const env = ctx.env;
     if (!env) return {};
-    s.run.feed(Boolean(ctx.input("kick")), ctx.timeSec);
+    s.run.feed(Boolean(ctx.input("trigger")), ctx.timeSec);
     const level = s.run.getLevel(ctx.timeSec, Number(ctx.param("decay") ?? 0.15));
-    const amount = Number(ctx.param("amount") ?? 0.003) + level * Number(ctx.param("kickAmount") ?? 0.02);
+    const amount = Number(ctx.param("amount") ?? 0.003) + level * Number(ctx.param("triggerAmount") ?? 0.02);
     const angle = Number(ctx.param("angle") ?? 0) * Math.PI * 2;
     const u = s.material.uniforms;
     u.tDiffuse!.value = (ctx.input("in") as THREE.Texture | undefined) ?? s.black;

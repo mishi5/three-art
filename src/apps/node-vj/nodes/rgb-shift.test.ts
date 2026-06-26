@@ -17,11 +17,15 @@ describe("RgbShiftNode (#189)", () => {
     expect(RgbShiftNode.evaluate(noCtx)).toEqual({}); // state/env なしは no-op
   });
 
-  test("params: enabled + amount/angle/kickAmount/decay", () => {
+  test("params: enabled + amount/angle/triggerAmount/decay", () => {
     expect(RgbShiftNode.params.map((p) => p.id)).toEqual([
-      "enabled", "amount", "angle", "kickAmount", "decay",
+      "enabled", "amount", "angle", "triggerAmount", "decay",
     ]);
     expect(RgbShiftNode.params.find((p) => p.id === "enabled")?.default).toBe("on");
+  });
+
+  test("trigger 入力ポートの id は他ノードと揃えて trigger", () => {
+    expect(RgbShiftNode.inputs.map((p) => p.id)).toEqual(["in", "trigger"]);
   });
 
   test("registry に登録されている", () => {
