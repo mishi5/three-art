@@ -41,9 +41,13 @@ export function wouldCreateSceneCycle(
   return false;
 }
 
-/** activeSceneId から到達する参照先シーンを依存順（leaf 先）で返す（active 自身は含めない）。 */
+/**
+ * activeSceneId から到達する参照先シーンを依存順（leaf 先）で返す（active 自身は含めない）。
+ * #174: extraRoots を渡すと、その各シーン（active でなければ）と未評価の参照先も
+ * 依存順に追記する（出力シーンを編集と別に評価するため）。重複は排除される。
+ */
 export function sceneRenderOrder(
-  activeSceneId: string, scenes: SceneList, registry: NodeRegistry,
+  activeSceneId: string, scenes: SceneList, registry: NodeRegistry, extraRoots: string[] = [],
 ): string[] {
   const m = refMap(scenes, registry);
   const order: string[] = [];
@@ -58,5 +62,6 @@ export function sceneRenderOrder(
     if (id !== activeSceneId) order.push(id);
   }
   visit(activeSceneId);
+  for (const root of extraRoots) visit(root);
   return order;
 }

@@ -192,10 +192,12 @@ editor.onDropAsset = (assetId, x, y) => {
 /** #154: グラフ読込後、params.assetId を持つノードへライブラリからファイルを復元する。 */
 async function restoreAssets(): Promise<void> {
   for (const ref of collectAssetRefs(graph)) {
+    // #174: state 移譲で既に読込済み（再生継続中）のノードは再読込しない（loadFile は先頭から再生し直すため）。
+    const cur = runtime.getState(ref.nodeId) as (FileLoadable & Named) | undefined;
+    if (cur?.fileName) continue;
     const file = await library.getFile(ref.assetId);
     if (!file) { console.warn(`[node-vj] asset not found: ${ref.assetId}`); continue; }
-    const s = runtime.getState(ref.nodeId) as FileLoadable | undefined;
-    await s?.loadFile?.(file).catch((e) => console.warn(`[node-vj] restore failed ${ref.nodeId}:`, e));
+    await cur?.loadFile?.(file).catch((e) => console.warn(`[node-vj] restore failed ${ref.nodeId}:`, e));
   }
 }
 
@@ -226,6 +228,11 @@ function wireSceneProvider(): void {
   );
 }
 wireSceneProvider();
+// #174: 出力シーン id を runtime に同期する（編集と独立に出力するシーン）。
+function syncOutputScene(): void {
+  runtime.setOutputSceneId(sceneManager.outputId());
+}
+syncOutputScene();
 
 // #172: 参照先シーンの音声/動画入力を assetId 経由で復元し、解析・再生を走らせる（音声駆動の映像も動く）。
 runtime.setSceneAssetRestorer((node, state) => {
@@ -245,12 +252,15 @@ function snapshotActiveScene(): void {
 /** 新アクティブシーンの内容を共有グラフへ反映し、履歴トラック切替・state 再同期・アセット復元する。 */
 function reflectActiveScene(): void {
   const act = sceneManager.active();
+  // #174: 切替前に state を移譲（破棄しない）。pin 中に編集シーンを切り替えても、
+  // 出力/参照先として再生継続中の動画/音声がシーク位置を保つ（replaceGraph より前に呼ぶ）。
+  runtime.migrateActiveStates(act.id);
   replaceGraph(graph, structuredClone(act.graph));
   history.useScene(act.id);
   runtime.resumeAudio();   // user gesture 由来の切替で共有 AudioContext を起こす
-  runtime.ensureStates();  // 旧シーンの state を破棄し新シーンを生成（即時ハードカット）
+  runtime.ensureStates();  // 移譲後の state を新グラフへ整合（不足ノードのみ生成・余剰のみ破棄）
   wireSceneProvider();     // #152: 新しいアクティブシーン id を runtime に反映
-  void restoreAssets();    // 新シーンの assetId をライブラリから復元
+  void restoreAssets();    // 新シーンの assetId をライブラリから復元（読込済みはスキップ）
 }
 
 const sceneActions: ScenePanelActions = {
@@ -280,6 +290,9 @@ const sceneActions: ScenePanelActions = {
   },
   rename: (id, name) => sceneManager.rename(id, name),
   onChange: (cb) => sceneManager.onChange(cb),
+  // #174: 出力シーンのピン留め/解除。runtime にも反映する。
+  outputId: () => sceneManager.outputId(),
+  setOutput: (id) => { sceneManager.setOutput(id); syncOutputScene(); },
 };
 // #151: VSCode 風サイドドック（最左アイコン列で アセット/シーン を切替）。
 buildSideDock([assetPanelDef(library), scenePanelDef(sceneActions)]);
@@ -319,12 +332,15 @@ function syncOutBtn(): void {
   outBtn.textContent = output.isOpen() ? "🖥 出力ウィンドウを閉じる" : "🖥 出力ウィンドウ";
   // #148: 出力ウィンドウ表示中は本体が隠れても描画を回し続ける（全画面で固まらないように）。
   runtime.setKeepAliveWhileHidden(output.isOpen());
+  // #174: 出力ウィンドウ表示中だけ出力 canvas を更新する。
+  runtime.setOutputActive(output.isOpen());
   applyPreviewSize();   // 出力状態に応じて描画解像度（高解像度⇄表示サイズ）を切り替える
 }
 output.onClose = syncOutBtn;
 outBtn.addEventListener("click", () => {
   if (output.isOpen()) output.close();
-  else output.open(previewCanvas);   // previewCanvas = renderer の出力 canvas
+  // #174: 出力 canvas（出力シーンを描く 2D canvas）をミラーする（編集と分離可能）。
+  else output.open(runtime.getOutputCanvas());
   syncOutBtn();
 });
 syncOutBtn();

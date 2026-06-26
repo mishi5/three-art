@@ -9,6 +9,7 @@ import type { GraphDoc, NodeInstance } from "./graph-doc";
 import type { NodeEnv, NodeRegistry, NodeState, NodeTypeDef } from "./node-type";
 import { pickScreenTextures } from "./texture-screen";
 import { collectSceneRefs, sceneRenderOrder } from "../scene/scene-refs";
+import { effectiveOutputSceneId } from "../scene/output-scene";
 import { TextureBlitter } from "./blit";
 import { PREVIEW_W, PREVIEW_H } from "./preview";
 import { BackgroundTicker } from "./background-ticker";
@@ -50,6 +51,20 @@ export class GraphRuntime {
   // #172: 参照先シーンの音声（マージ gain）キャッシュと、参照先 state のアセット復元フック。
   private sceneAudioCache = new Map<string, AudioNode>();
   private sceneAssetRestorer: ((node: NodeInstance, state: NodeState) => void) | null = null;
+  // #174: 出力シーン（編集と分離）。outputSceneId=null は編集（アクティブ）に追従。
+  // outputActive のときだけ outputCanvas を毎フレーム更新する（出力ウィンドウ表示中）。
+  private outputSceneId: string | null = null;
+  private outputActive = false;
+  private outputCanvas: HTMLCanvasElement | null = null;
+  private outputCtx: CanvasRenderingContext2D | null = null;
+  // #174: アクティブ（編集中）シーンが他シーン（出力シーン等）から SceneInput 参照されるとき、
+  // active も RT へ合成して sceneTextureCache に積む（active は通常 canvas 直描きで cache に無いため）。
+  private activeRT: THREE.WebGLRenderTarget | null = null;
+  private activeReferenced = false;
+  // #174: 同上の音声版。active の AudioOutput をここへもタップし sceneAudioCache[activeId] に供給する
+  // （参照元シーンの SceneInput.audio / AudioMix が編集中シーンの音を解析できるようにする）。
+  private activeAudioMerge: GainNode | null = null;
+  private activeAudioConnected = new Set<AudioNode>();
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -75,12 +90,90 @@ export class GraphRuntime {
   /** #152: シーン id → GraphDoc を引く provider と現在のアクティブシーン id を設定する。 */
   setSceneProvider(provider: (id: string) => GraphDoc | null, activeSceneId: string): void {
     this.sceneProvider = provider;
+    // #174: アクティブシーンが変わったら、旧 active の音声タップ状態と cache をリセットする。
+    if (activeSceneId !== this.activeSceneId) {
+      this.sceneAudioCache.delete(this.activeSceneId);
+      this.activeAudioConnected.clear();
+    }
     this.activeSceneId = activeSceneId;
   }
 
   /** #172: 参照先シーンの state 生成時にアセット（assetId）を復元する関数を設定する。 */
   setSceneAssetRestorer(fn: (node: NodeInstance, state: NodeState) => void): void {
     this.sceneAssetRestorer = fn;
+  }
+
+  /**
+   * #174: アクティブ（編集中）シーンを newActiveId へ切り替える直前に、ノード state を破棄せず
+   * 「アクティブ用ストア(this.states)」と「参照先用ストア(sceneRes[id].states)」の間で移譲する。
+   * これで pin 中に編集シーンを切り替えても、再生中の動画/音声（state＝<video> 要素）が作り直されず
+   * シーク位置を保ったまま継続する。実際の使用前（replaceGraph 前）に main から呼ぶ。
+   */
+  migrateActiveStates(newActiveId: string): void {
+    const oldId = this.activeSceneId;
+    if (oldId === newActiveId) return;
+    // 旧アクティブの state を sceneRes[oldId] へ退避（出力/参照先として再利用＝再生継続）。
+    if (this.states.size > 0) {
+      const res = this.ensureSceneRes(oldId);
+      for (const [nid, st] of this.states) res.states.set(nid, st);
+      for (const [nid, def] of this.stateDefs) res.defs.set(nid, def);
+      this.states = new Map();
+      this.stateDefs = new Map();
+    }
+    // 新アクティブが参照先として state を持っていれば、それを採用（参照先→アクティブ＝再生継続）。
+    const inc = this.sceneRes.get(newActiveId);
+    if (inc && inc.states.size > 0) {
+      this.states = inc.states;
+      this.stateDefs = inc.defs;
+      inc.states = new Map();
+      inc.defs = new Map();
+    }
+  }
+
+  /** #174: 出力シーン id を設定する（null は編集シーンへ追従）。 */
+  setOutputSceneId(id: string | null): void {
+    this.outputSceneId = id;
+  }
+
+  /** #174: 出力ウィンドウ表示中など、出力 canvas を毎フレーム更新するか。 */
+  setOutputActive(on: boolean): void {
+    this.outputActive = on;
+  }
+
+  /** #174: 出力ウィンドウが captureStream するための 2D 出力 canvas（遅延生成）。 */
+  getOutputCanvas(): HTMLCanvasElement {
+    if (!this.outputCanvas) {
+      const c = document.createElement("canvas");
+      c.width = this.renderer.domElement.width || 2;
+      c.height = this.renderer.domElement.height || 2;
+      this.outputCanvas = c;
+      this.outputCtx = c.getContext("2d");
+    }
+    return this.outputCanvas;
+  }
+
+  /**
+   * #174: 実効的な出力シーン id。outputSceneId が未指定 / 存在しないシーンなら
+   * アクティブ（編集）シーンへ追従する。
+   */
+  private effectiveOutputId(): string {
+    const provider = this.sceneProvider;
+    const exists = (id: string): boolean => id === this.activeSceneId || (!!provider && !!provider(id));
+    if (this.outputSceneId && exists(this.outputSceneId)) {
+      return effectiveOutputSceneId(this.outputSceneId, this.activeSceneId, [this.outputSceneId]);
+    }
+    return this.activeSceneId;
+  }
+
+  /** #174: 現フレームの WebGL canvas を 2D 出力 canvas へコピーする（GPU 間 drawImage）。 */
+  private copyToOutputCanvas(): void {
+    const src = this.renderer.domElement;
+    const dst = this.getOutputCanvas();
+    if (dst.width !== src.width || dst.height !== src.height) {
+      dst.width = src.width;
+      dst.height = src.height;
+    }
+    this.outputCtx?.drawImage(src, 0, 0);
   }
 
   /** ノードの永続状態を取得する（入力ノードの start() を user gesture から呼ぶ用）。 */
@@ -133,6 +226,11 @@ export class GraphRuntime {
     void this.getAudioContext().resume().catch(() => { /* gesture 不足時は次回 */ });
   }
 
+  /** #174: アクティブシーンの音声タップ用 gain（destination 非接続。参照元が pull する）。 */
+  private getActiveAudioMerge(): GainNode {
+    return (this.activeAudioMerge ??= this.getAudioContext().createGain());
+  }
+
   private env(): NodeEnv {
     return {
       audio: this.audio,
@@ -141,6 +239,18 @@ export class GraphRuntime {
       audioContext: this.getAudioContext(),
       sceneTexture: (id) => this.sceneTextureCache.get(id) ?? null,
       sceneAudio: (id) => this.sceneAudioCache.get(id) ?? null,
+      // #174: アクティブシーンの AudioOutput をタップして sceneAudioCache[activeId] に供給する。
+      // これで出力シーン等がアクティブ（編集中）シーンを SceneInput 参照したとき、その音声も
+      // 解析できる（bass 等の音響パラメータが効く）。destination へは AudioOutput が別途繋ぐので
+      // タップ用 merge は destination 非接続（二重発音しない）。
+      captureSceneAudio: (node) => {
+        const merge = this.getActiveAudioMerge();
+        if (!this.activeAudioConnected.has(node)) {
+          try { node.connect(merge); } catch { /* ignore */ }
+          this.activeAudioConnected.add(node);
+        }
+        this.sceneAudioCache.set(this.activeSceneId, merge);
+      },
     };
   }
 
@@ -190,7 +300,16 @@ export class GraphRuntime {
   private renderReferencedScenes(timeSec: number): void {
     const provider = this.sceneProvider;
     if (!provider) return;
-    const order = this.collectSceneOrder();
+    // #174: 出力シーンが編集と別なら、それも追加ルートとして専用 RT へ評価する。
+    const outId = this.effectiveOutputId();
+    const extraRoots = this.outputActive && outId !== this.activeSceneId ? [outId] : [];
+    const order = this.collectSceneOrder(extraRoots);
+    // #174: 描画する各シーンがアクティブシーンを参照しているか（出力シーン B が編集中 A を参照する等）。
+    // 参照されていれば tick で active も RT に積む（active は canvas 直描きで cache に無いため）。
+    this.activeReferenced = order.some((id) => {
+      const g = provider(id);
+      return g ? collectSceneRefs(g, this.registry).includes(this.activeSceneId) : false;
+    });
     const alive = new Set(order);
     // 参照されなくなったシーンのリソースを破棄
     for (const [id, res] of [...this.sceneRes.entries()]) {
@@ -226,14 +345,17 @@ export class GraphRuntime {
     }
   }
 
-  /** アクティブグラフ＋provider から到達する参照先シーンを依存順（leaf 先）で返す。 */
-  private collectSceneOrder(): string[] {
+  /**
+   * アクティブグラフ＋provider から到達する参照先シーンを依存順（leaf 先）で返す。
+   * #174: extraRoots（出力シーン等）も到達対象に含め、評価順に追記する。
+   */
+  private collectSceneOrder(extraRoots: string[] = []): string[] {
     const provider = this.sceneProvider;
     if (!provider) return [];
     const graphOf = (id: string): GraphDoc | null => (id === this.activeSceneId ? this.graph : provider(id));
     const scenes: { id: string; graph: GraphDoc }[] = [{ id: this.activeSceneId, graph: this.graph }];
     const seen = new Set<string>([this.activeSceneId]);
-    const stack = [...collectSceneRefs(this.graph, this.registry)];
+    const stack = [...collectSceneRefs(this.graph, this.registry), ...extraRoots];
     while (stack.length) {
       const id = stack.pop()!;
       if (seen.has(id)) continue;
@@ -243,7 +365,7 @@ export class GraphRuntime {
       scenes.push({ id, graph: g });
       for (const ref of collectSceneRefs(g, this.registry)) stack.push(ref);
     }
-    return sceneRenderOrder(this.activeSceneId, scenes, this.registry);
+    return sceneRenderOrder(this.activeSceneId, scenes, this.registry, extraRoots);
   }
 
   private ensureSceneRes(id: string): { states: Map<string, NodeState>; defs: Map<string, NodeTypeDef>; rt: THREE.WebGLRenderTarget; audioMerge: GainNode; audioConnected: Set<AudioNode> } {
@@ -298,11 +420,39 @@ export class GraphRuntime {
     // 画面出力: Screen ノードの texture（なければ終端 visual）を canvas へ転写。
     // 1 枚目は通常合成、2 枚目以降は加算（旧・共有シーンでの加算合成相当）。
     const textures = pickScreenTextures(this.graph, this.registry, this.lastOutputs);
+    // #174: アクティブシーンが他シーンから SceneInput 参照されている場合、active も RT へ合成して
+    // sceneTextureCache に積む（次フレームの renderReferencedScenes が読む。1 フレーム遅延は VJ 用途で許容）。
+    if (this.activeReferenced) {
+      const w = this.renderer.domElement.width, h = this.renderer.domElement.height;
+      if (!this.activeRT) this.activeRT = new THREE.WebGLRenderTarget(w, h, { depthBuffer: true });
+      else if (this.activeRT.width !== w || this.activeRT.height !== h) this.activeRT.setSize(w, h);
+      const prevRT = this.renderer.getRenderTarget();
+      this.renderer.setRenderTarget(this.activeRT);
+      this.renderer.clear();
+      textures.forEach((tex, i) => this.blitter.blit(this.renderer, tex as THREE.Texture, i > 0));
+      this.renderer.setRenderTarget(prevRT);
+      this.sceneTextureCache.set(this.activeSceneId, this.activeRT.texture);
+    } else if (this.activeRT && this.sceneTextureCache.get(this.activeSceneId) === this.activeRT.texture) {
+      this.sceneTextureCache.delete(this.activeSceneId);
+    }
+    // #174: 出力シーンが編集と別シーンのとき、先に出力シーンの合成結果を canvas に描いて
+    // 出力 canvas へコピーし、その後アクティブシーンを描き直す（画面プレビューはアクティブ）。
+    const outId = this.outputActive ? this.effectiveOutputId() : this.activeSceneId;
+    const separateOutput = this.outputActive && outId !== this.activeSceneId;
+    if (separateOutput) {
+      const outTex = this.sceneTextureCache.get(outId);
+      this.renderer.setRenderTarget(null);
+      this.renderer.clear();
+      if (outTex) this.blitter.blit(this.renderer, outTex, false);
+      this.copyToOutputCanvas();
+    }
     this.renderer.setRenderTarget(null);
     this.renderer.clear();
     textures.forEach((tex, i) => {
       this.blitter.blit(this.renderer, tex as THREE.Texture, i > 0);
     });
+    // #174: 出力が編集に追従中なら、アクティブを描いた canvas をそのまま出力 canvas へコピー。
+    if (this.outputActive && !separateOutput) this.copyToOutputCanvas();
     // #77: ノードプレビュー小窓の更新（間引きあり）。
     // #148: 本体 hidden の背面駆動中だけは小窓が不可視で readPixels の GPU ストールだけ残るのでスキップ。
     if (this.frameCount++ % PREVIEW_INTERVAL === 0 && !this.bgTicker?.running) this.updatePreviews();

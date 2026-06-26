@@ -27,4 +27,17 @@ describe("SceneStore", () => {
     kv.setItem("node-vj.scenes.v1", JSON.stringify({ version: 99, scenes: [], activeId: "x" }));
     expect(new SceneStore(kv).load()).toBeNull();
   });
+
+  // #174: 出力シーン id の永続化
+  test("outputId を round-trip する", () => {
+    const s = new SceneStore(memoryAdapter());
+    const set = { ...sampleSet(), outputId: "a" };
+    s.save(set);
+    expect(s.load()?.outputId).toBe("a");
+  });
+  test("outputId 無しの旧データは load で undefined（追従扱い）", () => {
+    const s = new SceneStore(memoryAdapter());
+    s.save(sampleSet()); // outputId を持たない
+    expect(s.load()?.outputId).toBeUndefined();
+  });
 });
