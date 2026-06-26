@@ -57,6 +57,10 @@ export class GraphRuntime {
   private outputActive = false;
   private outputCanvas: HTMLCanvasElement | null = null;
   private outputCtx: CanvasRenderingContext2D | null = null;
+  // #174: アクティブ（編集中）シーンが他シーン（出力シーン等）から SceneInput 参照されるとき、
+  // active も RT へ合成して sceneTextureCache に積む（active は通常 canvas 直描きで cache に無いため）。
+  private activeRT: THREE.WebGLRenderTarget | null = null;
+  private activeReferenced = false;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -247,6 +251,12 @@ export class GraphRuntime {
     const outId = this.effectiveOutputId();
     const extraRoots = this.outputActive && outId !== this.activeSceneId ? [outId] : [];
     const order = this.collectSceneOrder(extraRoots);
+    // #174: 描画する各シーンがアクティブシーンを参照しているか（出力シーン B が編集中 A を参照する等）。
+    // 参照されていれば tick で active も RT に積む（active は canvas 直描きで cache に無いため）。
+    this.activeReferenced = order.some((id) => {
+      const g = provider(id);
+      return g ? collectSceneRefs(g, this.registry).includes(this.activeSceneId) : false;
+    });
     const alive = new Set(order);
     // 参照されなくなったシーンのリソースを破棄
     for (const [id, res] of [...this.sceneRes.entries()]) {
@@ -357,6 +367,21 @@ export class GraphRuntime {
     // 画面出力: Screen ノードの texture（なければ終端 visual）を canvas へ転写。
     // 1 枚目は通常合成、2 枚目以降は加算（旧・共有シーンでの加算合成相当）。
     const textures = pickScreenTextures(this.graph, this.registry, this.lastOutputs);
+    // #174: アクティブシーンが他シーンから SceneInput 参照されている場合、active も RT へ合成して
+    // sceneTextureCache に積む（次フレームの renderReferencedScenes が読む。1 フレーム遅延は VJ 用途で許容）。
+    if (this.activeReferenced) {
+      const w = this.renderer.domElement.width, h = this.renderer.domElement.height;
+      if (!this.activeRT) this.activeRT = new THREE.WebGLRenderTarget(w, h, { depthBuffer: true });
+      else if (this.activeRT.width !== w || this.activeRT.height !== h) this.activeRT.setSize(w, h);
+      const prevRT = this.renderer.getRenderTarget();
+      this.renderer.setRenderTarget(this.activeRT);
+      this.renderer.clear();
+      textures.forEach((tex, i) => this.blitter.blit(this.renderer, tex as THREE.Texture, i > 0));
+      this.renderer.setRenderTarget(prevRT);
+      this.sceneTextureCache.set(this.activeSceneId, this.activeRT.texture);
+    } else if (this.activeRT && this.sceneTextureCache.get(this.activeSceneId) === this.activeRT.texture) {
+      this.sceneTextureCache.delete(this.activeSceneId);
+    }
     // #174: 出力シーンが編集と別シーンのとき、先に出力シーンの合成結果を canvas に描いて
     // 出力 canvas へコピーし、その後アクティブシーンを描き直す（画面プレビューはアクティブ）。
     const outId = this.outputActive ? this.effectiveOutputId() : this.activeSceneId;
