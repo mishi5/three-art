@@ -11,6 +11,7 @@ import { GraphStore, localStorageAdapter } from "./graph/graph-store";
 import { History } from "./graph/history";
 import { previewSize } from "./preview-size";
 import { OutputWindow, OUTPUT_RENDER_W, OUTPUT_RENDER_H } from "./output-window";
+import { Recorder, pickRecorderMimeType, recordingFileName } from "./recorder";
 import type { PlaybackControl } from "./nodes/playback";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "../../core/types";
 import { AssetLibrary } from "./asset/asset-library";
@@ -57,6 +58,10 @@ const runtime = new GraphRuntime(previewCanvas, registry, graph);
 // #148: 出力ウィンドウ（プロジェクタ/セカンドディスプレイへのミラー）。
 // applyPreviewSize が出力状態で描画解像度を切り替えるため、ここで生成しておく。
 const output = new OutputWindow();
+// #179: 録画器。applyPreviewSize が録画中も高解像度で描くため先に生成しておく。
+const recorder = new Recorder();
+// #179: 録画ビットレート（1080p を鮮明に保つ。既定の自動値は低すぎることがある）。
+const RECORD_VIDEO_BITRATE = 16_000_000;
 
 // プレビュー拡大トグル: 小 PiP(320×180) ⇄ 全画面（#136）。
 // クリック（移動量小）で切替、ドラッグは OrbitControls の回転に使う。Esc で全画面解除。
@@ -73,9 +78,9 @@ function applyPreviewSize(): void {
     // 小窓: 右下 PiP に戻す（node-vj.html の既定と同じ）。
     Object.assign(preview.style, { left: "auto", top: "auto", right: "12px", bottom: "56px", border: "1px solid rgba(255,255,255,0.25)", zIndex: "120" });
   }
-  // #148: 出力ウィンドウ表示中は PiP の見た目サイズに依らず高解像度で描き、出力を鮮明にする
-  //（PiP は CSS で縮小表示＝同じ映像の縮小ビュー）。通常は表示サイズ×dpr で描く。
-  if (output.isOpen()) {
+  // #148/#179: 出力ウィンドウ表示中・録画中は PiP の見た目サイズに依らず高解像度で描き、
+  // 出力/録画を鮮明にする（PiP は CSS で縮小表示＝同じ映像の縮小ビュー）。通常は表示サイズ×dpr。
+  if (output.isOpen() || recorder.recording) {
     runtime.setRenderSize(OUTPUT_RENDER_W, OUTPUT_RENDER_H, 1);
   } else {
     runtime.setRenderSize(w, h, Math.min(window.devicePixelRatio, 2));
@@ -346,7 +351,47 @@ outBtn.addEventListener("click", () => {
 syncOutBtn();
 bar.appendChild(outBtn);
 
+// #179: 出力（出力 canvas = 出力シーンに追従）をビデオ録画して保存する（recorder は上部で生成済み）。
+const recBtn = document.createElement("button");
+recBtn.style.cssText = "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;";
+function syncRecBtn(): void {
+  recBtn.textContent = recorder.recording ? "■ 停止（録画中）" : "● 録画";
+  recBtn.style.color = recorder.recording ? "#ff6b6b" : "#ddd";
+  recBtn.style.borderColor = recorder.recording ? "#ff6b6b" : "#444";
+}
+/** 録画した Blob を webm としてダウンロードする。 */
+function downloadRecording(blob: Blob): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = recordingFileName(new Date());
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+recBtn.addEventListener("click", () => {
+  if (recorder.recording) {
+    void recorder.stop().then((blob) => {
+      runtime.setRecording(false);
+      applyPreviewSize();          // #179: 録画終了で描画解像度を通常へ戻す
+      if (blob.size > 0) downloadRecording(blob);
+      syncRecBtn();
+    });
+  } else {
+    runtime.resumeAudio();        // #128: user gesture で共有 AudioContext を起こす（音声録画に必要）
+    runtime.setRecording(true);   // 録画中は出力 canvas を更新し続ける
+    // #179: 録画は高解像度（OUTPUT_RENDER_W×H）で描く。出力ウィンドウ非表示でも鮮明に録る。
+    runtime.setRenderSize(OUTPUT_RENDER_W, OUTPUT_RENDER_H, 1);
+    const mime = pickRecorderMimeType((m) => MediaRecorder.isTypeSupported(m));
+    recorder.start(runtime.getRecordingStream(30, true), mime, RECORD_VIDEO_BITRATE);  // 映像＋音声
+    syncRecBtn();
+  }
+});
+syncRecBtn();
+bar.appendChild(recBtn);
+
 document.body.appendChild(bar);
 
-(window as unknown as { nodeVj: unknown }).nodeVj = { graph, registry, runtime, editor, sceneManager };
+(window as unknown as { nodeVj: unknown }).nodeVj = { graph, registry, runtime, editor, sceneManager, recorder };
 console.log("[node-vj] editor + preview started");

@@ -30,7 +30,14 @@ export const AudioOutputNode: NodeTypeDef = {
     const gain = ctx.createGain();
     // #172: 参照先シーンとして評価される場合は destination へ繋がない（音は SceneInput.audio 経由で親が発音）。
     const destConnected = !env.referencedScene;
-    if (destConnected) gain.connect(ctx.destination);
+    if (destConnected) {
+      gain.connect(ctx.destination);
+      // #179: 録画用の分岐先があれば併せて接続（録画しない間も無害＝ストリームは未消費）。
+      // 移譲で参照先→アクティブに移っても、ここで繋いだ録画タップは維持される（evaluate は destination のみ整合）。
+      if (env.recordingDestination) {
+        try { gain.connect(env.recordingDestination); } catch { /* ignore */ }
+      }
+    }
     return { ctx, gain, connected: null, destConnected };
   },
   disposeState(state: NodeState): void {

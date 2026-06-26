@@ -65,6 +65,9 @@ export class GraphRuntime {
   // （参照元シーンの SceneInput.audio / AudioMix が編集中シーンの音を解析できるようにする）。
   private activeAudioMerge: GainNode | null = null;
   private activeAudioConnected = new Set<AudioNode>();
+  // #179: 録画用の音声分岐先。録画中フラグ（録画前の出力状態を退避し、停止時に戻す）。
+  private recordDest: MediaStreamAudioDestinationNode | null = null;
+  private outputActiveBeforeRecording = false;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -221,6 +224,24 @@ export class GraphRuntime {
     return (this.audioCtx ??= new AudioContext());
   }
 
+  /**
+   * #179: 録画用の音声分岐先（MediaStreamAudioDestinationNode）を遅延生成する。
+   * 無音でもサンプルが流れ続けるよう ConstantSource(offset 0) を keep-alive で常時接続する
+   * （これが無いと、音が鳴っていない間は無音トラックにサンプルが出ず muxer が停止して
+   * 映像ごと書き出されない。const0 は録画分岐のみで、スピーカー出力には影響しない）。
+   */
+  private getRecordingDestination(): MediaStreamAudioDestinationNode {
+    if (!this.recordDest) {
+      const ctx = this.getAudioContext();
+      this.recordDest = ctx.createMediaStreamDestination();
+      const keepAlive = ctx.createConstantSource();
+      keepAlive.offset.value = 0;
+      keepAlive.connect(this.recordDest);
+      keepAlive.start();
+    }
+    return this.recordDest;
+  }
+
   /** user gesture から共有 AudioContext を resume する（発音に必要）。 */
   resumeAudio(): void {
     void this.getAudioContext().resume().catch(() => { /* gesture 不足時は次回 */ });
@@ -251,7 +272,45 @@ export class GraphRuntime {
         }
         this.sceneAudioCache.set(this.activeSceneId, merge);
       },
+      // #179: AudioOutput はここへも分岐接続し、録画時に音声トラックとして取り出せるようにする。
+      recordingDestination: this.getRecordingDestination(),
     };
+  }
+
+  /**
+   * #179: 録画用の MediaStream を返す。映像は出力 canvas（出力シーンのピン/追従に追従）の
+   * captureStream。withAudio のとき録画先（AudioOutput 分岐 + keep-alive）の音声トラックも足す。
+   */
+  getRecordingStream(fps = 30, withAudio = true): MediaStream {
+    const canvas = this.getOutputCanvas() as HTMLCanvasElement & { captureStream?: (fps?: number) => MediaStream };
+    // #179: captureStream を開始する前に出力 canvas をレンダラ解像度へ合わせる（録画途中の
+    // 解像度変化を避け、高解像度で録り始める）。
+    const rw = this.renderer.domElement.width, rh = this.renderer.domElement.height;
+    if (rw > 0 && rh > 0 && (canvas.width !== rw || canvas.height !== rh)) {
+      canvas.width = rw;
+      canvas.height = rh;
+    }
+    const out = new MediaStream();
+    if (typeof canvas.captureStream === "function") {
+      for (const t of canvas.captureStream(fps).getVideoTracks()) out.addTrack(t);
+    }
+    if (withAudio) {
+      for (const t of this.getRecordingDestination().stream.getAudioTracks()) out.addTrack(t);
+    }
+    return out;
+  }
+
+  /**
+   * #179: 録画中フラグ。録画中は出力 canvas を更新し続ける（出力ウィンドウ未表示でも録画可能）。
+   * 停止時は録画開始前の出力状態へ戻す。
+   */
+  setRecording(on: boolean): void {
+    if (on) {
+      this.outputActiveBeforeRecording = this.outputActive;
+      this.outputActive = true;
+    } else {
+      this.outputActive = this.outputActiveBeforeRecording;
+    }
   }
 
   /** #172: 参照先シーン評価用の env（destination 非接続・音声捕捉つき）。 */
