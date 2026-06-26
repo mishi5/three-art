@@ -61,6 +61,10 @@ export class GraphRuntime {
   // active も RT へ合成して sceneTextureCache に積む（active は通常 canvas 直描きで cache に無いため）。
   private activeRT: THREE.WebGLRenderTarget | null = null;
   private activeReferenced = false;
+  // #174: 同上の音声版。active の AudioOutput をここへもタップし sceneAudioCache[activeId] に供給する
+  // （参照元シーンの SceneInput.audio / AudioMix が編集中シーンの音を解析できるようにする）。
+  private activeAudioMerge: GainNode | null = null;
+  private activeAudioConnected = new Set<AudioNode>();
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -86,6 +90,11 @@ export class GraphRuntime {
   /** #152: シーン id → GraphDoc を引く provider と現在のアクティブシーン id を設定する。 */
   setSceneProvider(provider: (id: string) => GraphDoc | null, activeSceneId: string): void {
     this.sceneProvider = provider;
+    // #174: アクティブシーンが変わったら、旧 active の音声タップ状態と cache をリセットする。
+    if (activeSceneId !== this.activeSceneId) {
+      this.sceneAudioCache.delete(this.activeSceneId);
+      this.activeAudioConnected.clear();
+    }
     this.activeSceneId = activeSceneId;
   }
 
@@ -190,6 +199,11 @@ export class GraphRuntime {
     void this.getAudioContext().resume().catch(() => { /* gesture 不足時は次回 */ });
   }
 
+  /** #174: アクティブシーンの音声タップ用 gain（destination 非接続。参照元が pull する）。 */
+  private getActiveAudioMerge(): GainNode {
+    return (this.activeAudioMerge ??= this.getAudioContext().createGain());
+  }
+
   private env(): NodeEnv {
     return {
       audio: this.audio,
@@ -198,6 +212,18 @@ export class GraphRuntime {
       audioContext: this.getAudioContext(),
       sceneTexture: (id) => this.sceneTextureCache.get(id) ?? null,
       sceneAudio: (id) => this.sceneAudioCache.get(id) ?? null,
+      // #174: アクティブシーンの AudioOutput をタップして sceneAudioCache[activeId] に供給する。
+      // これで出力シーン等がアクティブ（編集中）シーンを SceneInput 参照したとき、その音声も
+      // 解析できる（bass 等の音響パラメータが効く）。destination へは AudioOutput が別途繋ぐので
+      // タップ用 merge は destination 非接続（二重発音しない）。
+      captureSceneAudio: (node) => {
+        const merge = this.getActiveAudioMerge();
+        if (!this.activeAudioConnected.has(node)) {
+          try { node.connect(merge); } catch { /* ignore */ }
+          this.activeAudioConnected.add(node);
+        }
+        this.sceneAudioCache.set(this.activeSceneId, merge);
+      },
     };
   }
 
