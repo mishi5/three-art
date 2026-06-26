@@ -11,6 +11,7 @@ varying vec2 vUv;
 uniform sampler2D tDiffuse;
 uniform float uTime;
 uniform float uScanline;
+uniform float uScanlineCount;
 uniform float uColorBleed;
 uniform float uNoise;
 uniform float uVignette;
@@ -26,8 +27,9 @@ void main() {
   float g = texture2D(tDiffuse, uv).g;
   float b = texture2D(tDiffuse, uv - vec2(bleed, 0.0)).b;
   vec3 col = vec3(r, g, b);
-  // scanlines: periodic darkening along y
-  float sl = 0.5 + 0.5 * sin(uv.y * uResolution.y * 3.14159265);
+  // scanlines: fixed line count (independent of buffer resolution).
+  // 以前は uResolution.y を使い1px周期になって表示時に潰れていた（#196）。
+  float sl = 0.5 + 0.5 * sin(uv.y * uScanlineCount * 6.28318530718);
   col *= 1.0 - uScanline * 0.5 * sl;
   // time-seeded noise
   float n = hash(uv * uResolution + fract(uTime) * 100.0) - 0.5;
@@ -52,6 +54,7 @@ class CrtState {
         tDiffuse: { value: this.black },
         uTime: { value: 0 },
         uScanline: { value: 0.3 },
+        uScanlineCount: { value: 240 },
         uColorBleed: { value: 0.002 },
         uNoise: { value: 0.08 },
         uVignette: { value: 0.3 },
@@ -75,6 +78,7 @@ export const CrtNode: NodeTypeDef = {
   params: [
     EFFECT_ENABLED_PARAM,
     { id: "scanline", label: "scanline", kind: "number", default: 0.3, min: 0, max: 1, step: 0.01, description: "走査線の濃さ。" },
+    { id: "scanlineCount", label: "lines", kind: "number", default: 240, min: 30, max: 600, step: 10, description: "走査線の本数（画面全体の縞の数）。多いほど細かい。" },
     { id: "colorBleed", label: "colorBleed", kind: "number", default: 0.002, min: 0, max: 0.02, step: 0.0005, description: "色にじみ（R/B の横ずれ量）。" },
     { id: "noise", label: "noise", kind: "number", default: 0.08, min: 0, max: 0.5, step: 0.01, description: "ノイズ（ザラつき）の量。" },
     { id: "vignette", label: "vignette", kind: "number", default: 0.3, min: 0, max: 1, step: 0.01, description: "周辺減光（ビネット）の強さ。" },
@@ -91,6 +95,7 @@ export const CrtNode: NodeTypeDef = {
     u.tDiffuse!.value = (ctx.input("in") as THREE.Texture | undefined) ?? s.black;
     u.uTime!.value = ctx.timeSec;
     u.uScanline!.value = Number(ctx.param("scanline") ?? 0.3);
+    u.uScanlineCount!.value = Number(ctx.param("scanlineCount") ?? 240);
     u.uColorBleed!.value = Number(ctx.param("colorBleed") ?? 0.002);
     u.uNoise!.value = Number(ctx.param("noise") ?? 0.08);
     u.uVignette!.value = Number(ctx.param("vignette") ?? 0.3);
