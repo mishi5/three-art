@@ -192,10 +192,12 @@ editor.onDropAsset = (assetId, x, y) => {
 /** #154: グラフ読込後、params.assetId を持つノードへライブラリからファイルを復元する。 */
 async function restoreAssets(): Promise<void> {
   for (const ref of collectAssetRefs(graph)) {
+    // #174: state 移譲で既に読込済み（再生継続中）のノードは再読込しない（loadFile は先頭から再生し直すため）。
+    const cur = runtime.getState(ref.nodeId) as (FileLoadable & Named) | undefined;
+    if (cur?.fileName) continue;
     const file = await library.getFile(ref.assetId);
     if (!file) { console.warn(`[node-vj] asset not found: ${ref.assetId}`); continue; }
-    const s = runtime.getState(ref.nodeId) as FileLoadable | undefined;
-    await s?.loadFile?.(file).catch((e) => console.warn(`[node-vj] restore failed ${ref.nodeId}:`, e));
+    await cur?.loadFile?.(file).catch((e) => console.warn(`[node-vj] restore failed ${ref.nodeId}:`, e));
   }
 }
 
@@ -250,12 +252,15 @@ function snapshotActiveScene(): void {
 /** 新アクティブシーンの内容を共有グラフへ反映し、履歴トラック切替・state 再同期・アセット復元する。 */
 function reflectActiveScene(): void {
   const act = sceneManager.active();
+  // #174: 切替前に state を移譲（破棄しない）。pin 中に編集シーンを切り替えても、
+  // 出力/参照先として再生継続中の動画/音声がシーク位置を保つ（replaceGraph より前に呼ぶ）。
+  runtime.migrateActiveStates(act.id);
   replaceGraph(graph, structuredClone(act.graph));
   history.useScene(act.id);
   runtime.resumeAudio();   // user gesture 由来の切替で共有 AudioContext を起こす
-  runtime.ensureStates();  // 旧シーンの state を破棄し新シーンを生成（即時ハードカット）
+  runtime.ensureStates();  // 移譲後の state を新グラフへ整合（不足ノードのみ生成・余剰のみ破棄）
   wireSceneProvider();     // #152: 新しいアクティブシーン id を runtime に反映
-  void restoreAssets();    // 新シーンの assetId をライブラリから復元
+  void restoreAssets();    // 新シーンの assetId をライブラリから復元（読込済みはスキップ）
 }
 
 const sceneActions: ScenePanelActions = {

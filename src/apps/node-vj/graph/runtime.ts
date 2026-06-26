@@ -103,6 +103,33 @@ export class GraphRuntime {
     this.sceneAssetRestorer = fn;
   }
 
+  /**
+   * #174: アクティブ（編集中）シーンを newActiveId へ切り替える直前に、ノード state を破棄せず
+   * 「アクティブ用ストア(this.states)」と「参照先用ストア(sceneRes[id].states)」の間で移譲する。
+   * これで pin 中に編集シーンを切り替えても、再生中の動画/音声（state＝<video> 要素）が作り直されず
+   * シーク位置を保ったまま継続する。実際の使用前（replaceGraph 前）に main から呼ぶ。
+   */
+  migrateActiveStates(newActiveId: string): void {
+    const oldId = this.activeSceneId;
+    if (oldId === newActiveId) return;
+    // 旧アクティブの state を sceneRes[oldId] へ退避（出力/参照先として再利用＝再生継続）。
+    if (this.states.size > 0) {
+      const res = this.ensureSceneRes(oldId);
+      for (const [nid, st] of this.states) res.states.set(nid, st);
+      for (const [nid, def] of this.stateDefs) res.defs.set(nid, def);
+      this.states = new Map();
+      this.stateDefs = new Map();
+    }
+    // 新アクティブが参照先として state を持っていれば、それを採用（参照先→アクティブ＝再生継続）。
+    const inc = this.sceneRes.get(newActiveId);
+    if (inc && inc.states.size > 0) {
+      this.states = inc.states;
+      this.stateDefs = inc.defs;
+      inc.states = new Map();
+      inc.defs = new Map();
+    }
+  }
+
   /** #174: 出力シーン id を設定する（null は編集シーンへ追従）。 */
   setOutputSceneId(id: string | null): void {
     this.outputSceneId = id;

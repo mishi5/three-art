@@ -9,6 +9,8 @@ interface AudioOutputState {
   gain: GainNode;
   /** 現在 gain に接続済みの入力 AudioNode（変化時のみ繋ぎ替え）。 */
   connected: AudioNode | null;
+  /** #174: gain→destination の接続状態。アクティブ⇄参照先の state 移譲後も毎フレーム整合させる。 */
+  destConnected: boolean;
 }
 
 /** Audio 出力ノード（#128）。signal をスピーカー（destination）へ発音する終端ノード。 */
@@ -27,8 +29,9 @@ export const AudioOutputNode: NodeTypeDef = {
     const ctx = env.audioContext;
     const gain = ctx.createGain();
     // #172: 参照先シーンとして評価される場合は destination へ繋がない（音は SceneInput.audio 経由で親が発音）。
-    if (!env.referencedScene) gain.connect(ctx.destination);
-    return { ctx, gain, connected: null };
+    const destConnected = !env.referencedScene;
+    if (destConnected) gain.connect(ctx.destination);
+    return { ctx, gain, connected: null, destConnected };
   },
   disposeState(state: NodeState): void {
     const st = state as AudioOutputState;
@@ -38,6 +41,16 @@ export const AudioOutputNode: NodeTypeDef = {
   evaluate(ctx) {
     const st = ctx.state as AudioOutputState | undefined;
     if (!st) return {};
+    // #174: アクティブ（非参照）なら destination へ発音、参照先なら外す。state が
+    // アクティブ⇄参照先を移譲されても（pin 中の編集シーン切替で再生継続）毎フレーム整合させる。
+    const referenced = ctx.env?.referencedScene === true;
+    if (!referenced && !st.destConnected) {
+      try { st.gain.connect(st.ctx.destination); } catch { /* ignore */ }
+      st.destConnected = true;
+    } else if (referenced && st.destConnected) {
+      try { st.gain.disconnect(st.ctx.destination); } catch { /* ignore */ }
+      st.destConnected = false;
+    }
     const node = asAudioNode(ctx.input("audio"));
     // 入力が変わったときだけ繋ぎ替える（毎フレーム connect しない）。
     if (node !== st.connected) {
