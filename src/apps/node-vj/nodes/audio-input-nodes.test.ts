@@ -17,7 +17,7 @@ function ctxNoState(over: Partial<EvalContext> = {}): EvalContext {
 }
 
 // #127/#128 命名: 特徴量バンドルは "signal"、実音声信号は "audio"。
-const FEATURE_IDS = ["signal", "volume", "bass", "mid", "treble", "onset"];
+const FEATURE_IDS = ["signal", "volume", "bass", "mid", "treble", "trigger"];
 
 describe("MicInputNode (#100)", () => {
   test("ポート定義: 音響特徴量のみ（section 無し）・onset param（#109）", () => {
@@ -31,7 +31,7 @@ describe("MicInputNode (#100)", () => {
   test("state 無しでは onset=false・デフォルト signal", () => {
     const out = MicInputNode.evaluate(ctxNoState());
     expect(out.signal).toBe(DEFAULT_AUDIO_FEATURES);
-    expect(out.onset).toBe(false);
+    expect(out.trigger).toBe(false);
     expect(out.volume).toBe(0);
   });
 
@@ -53,7 +53,7 @@ describe("AudioFileInputNode (#100)", () => {
   test("state 無しでは section=-1・onset=false・デフォルト signal", () => {
     const out = AudioFileInputNode.evaluate(ctxNoState());
     expect(out.section).toBe(-1);
-    expect(out.onset).toBe(false);
+    expect(out.trigger).toBe(false);
     expect(out.signal).toBe(DEFAULT_AUDIO_FEATURES);
   });
 

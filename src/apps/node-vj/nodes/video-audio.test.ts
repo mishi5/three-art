@@ -16,14 +16,14 @@ function ctxNoState(over: Partial<EvalContext> = {}): EvalContext {
 }
 
 // #127/#128 命名: 特徴量バンドルは "signal"、実音声信号は "audio"。
-const FEATURE_IDS = ["signal", "volume", "bass", "mid", "treble", "onset"];
+const FEATURE_IDS = ["signal", "volume", "bass", "mid", "treble", "trigger"];
 
 describe("VideoFileInputNode 音声特徴量出力 (#116)", () => {
   test("ポート定義: texture + 音響特徴量（section 無し）", () => {
     expect(VideoFileInputNode.outputs.map((p) => p.id)).toEqual(["texture", ...FEATURE_IDS, "audio"]);
     expect(VideoFileInputNode.outputs.find((p) => p.id === "texture")?.type).toBe("texture");
     expect(VideoFileInputNode.outputs.find((p) => p.id === "signal")?.type).toBe("signal");
-    expect(VideoFileInputNode.outputs.find((p) => p.id === "onset")?.type).toBe("trigger");
+    expect(VideoFileInputNode.outputs.find((p) => p.id === "trigger")?.type).toBe("trigger");
     expect(VideoFileInputNode.outputs.find((p) => p.id === "audio")?.type).toBe("audio");
   });
 
@@ -41,7 +41,7 @@ describe("VideoFileInputNode 音声特徴量出力 (#116)", () => {
     const out = VideoFileInputNode.evaluate(ctxNoState());
     expect(out.signal).toBe(DEFAULT_AUDIO_FEATURES);
     expect(out.volume).toBe(0);
-    expect(out.onset).toBe(false);
+    expect(out.trigger).toBe(false);
     expect(out.texture).toBeUndefined();
   });
 
