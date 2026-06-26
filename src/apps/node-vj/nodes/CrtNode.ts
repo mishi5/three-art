@@ -30,7 +30,8 @@ void main() {
   // scanlines: fixed line count (independent of buffer resolution).
   // 以前は uResolution.y を使い1px周期になって表示時に潰れていた（#196）。
   float sl = 0.5 + 0.5 * sin(uv.y * uScanlineCount * 6.28318530718);
-  col *= 1.0 - uScanline * 0.5 * sl;
+  sl = sl * sl; // 暗線をくっきり（明部を広く・暗線をシャープに）
+  col *= 1.0 - uScanline * 0.8 * sl;
   // time-seeded noise
   float n = hash(uv * uResolution + fract(uTime) * 100.0) - 0.5;
   col += n * uNoise;
