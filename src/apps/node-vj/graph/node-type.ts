@@ -26,6 +26,8 @@ export interface NodeEnv {
   captureSceneAudio?(node: AudioNode): void;
   /** #172: 参照先シーンの音声出力（マージ gain）を引く（SceneInput 用）。 */
   sceneAudio?(sceneId: string): AudioNode | null;
+  /** #179: 録画用の音声分岐先（MediaStreamAudioDestinationNode）。AudioOutput が destination と併せて接続する。 */
+  recordingDestination?: AudioNode;
 }
 
 /** ノードのフレーム間永続状態（visual モジュールのインスタンス等）。 */

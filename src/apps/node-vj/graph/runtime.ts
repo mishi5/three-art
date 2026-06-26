@@ -65,7 +65,8 @@ export class GraphRuntime {
   // （参照元シーンの SceneInput.audio / AudioMix が編集中シーンの音を解析できるようにする）。
   private activeAudioMerge: GainNode | null = null;
   private activeAudioConnected = new Set<AudioNode>();
-  // #179: 録画中フラグ（録画前の出力状態を退避し、停止時に戻す）。
+  // #179: 録画用の音声分岐先。録画中フラグ（録画前の出力状態を退避し、停止時に戻す）。
+  private recordDest: MediaStreamAudioDestinationNode | null = null;
   private outputActiveBeforeRecording = false;
 
   constructor(
@@ -223,6 +224,24 @@ export class GraphRuntime {
     return (this.audioCtx ??= new AudioContext());
   }
 
+  /**
+   * #179: 録画用の音声分岐先（MediaStreamAudioDestinationNode）を遅延生成する。
+   * 無音でもサンプルが流れ続けるよう ConstantSource(offset 0) を keep-alive で常時接続する
+   * （これが無いと、音が鳴っていない間は無音トラックにサンプルが出ず muxer が停止して
+   * 映像ごと書き出されない。const0 は録画分岐のみで、スピーカー出力には影響しない）。
+   */
+  private getRecordingDestination(): MediaStreamAudioDestinationNode {
+    if (!this.recordDest) {
+      const ctx = this.getAudioContext();
+      this.recordDest = ctx.createMediaStreamDestination();
+      const keepAlive = ctx.createConstantSource();
+      keepAlive.offset.value = 0;
+      keepAlive.connect(this.recordDest);
+      keepAlive.start();
+    }
+    return this.recordDest;
+  }
+
   /** user gesture から共有 AudioContext を resume する（発音に必要）。 */
   resumeAudio(): void {
     void this.getAudioContext().resume().catch(() => { /* gesture 不足時は次回 */ });
@@ -253,19 +272,23 @@ export class GraphRuntime {
         }
         this.sceneAudioCache.set(this.activeSceneId, merge);
       },
+      // #179: AudioOutput はここへも分岐接続し、録画時に音声トラックとして取り出せるようにする。
+      recordingDestination: this.getRecordingDestination(),
     };
   }
 
   /**
-   * #179: 録画用の MediaStream（映像のみ）を返す。
-   * 映像は出力 canvas（出力シーンのピン/追従に追従）の captureStream。
-   * 音声込み録画は Phase 2（無音トラックで muxer が停止する問題の対策込みで別途実装）。
+   * #179: 録画用の MediaStream を返す。映像は出力 canvas（出力シーンのピン/追従に追従）の
+   * captureStream。withAudio のとき録画先（AudioOutput 分岐 + keep-alive）の音声トラックも足す。
    */
-  getRecordingStream(fps = 30): MediaStream {
+  getRecordingStream(fps = 30, withAudio = true): MediaStream {
     const canvas = this.getOutputCanvas() as HTMLCanvasElement & { captureStream?: (fps?: number) => MediaStream };
     const out = new MediaStream();
     if (typeof canvas.captureStream === "function") {
       for (const t of canvas.captureStream(fps).getVideoTracks()) out.addTrack(t);
+    }
+    if (withAudio) {
+      for (const t of this.getRecordingDestination().stream.getAudioTracks()) out.addTrack(t);
     }
     return out;
   }

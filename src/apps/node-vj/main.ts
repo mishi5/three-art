@@ -375,9 +375,10 @@ recBtn.addEventListener("click", () => {
       syncRecBtn();
     });
   } else {
+    runtime.resumeAudio();        // #128: user gesture で共有 AudioContext を起こす（音声録画に必要）
     runtime.setRecording(true);   // 録画中は出力 canvas を更新し続ける
     const mime = pickRecorderMimeType((m) => MediaRecorder.isTypeSupported(m));
-    recorder.start(runtime.getRecordingStream(30), mime);  // 映像のみ（音声は Phase 2）
+    recorder.start(runtime.getRecordingStream(30, true), mime);  // 映像＋音声
     syncRecBtn();
   }
 });

@@ -9,23 +9,34 @@ node-vj の出力をビデオ録画してファイル保存（ダウンロード
 
 ## スコープ（このPR）
 
-- **Phase 1（映像のみ）** を実装する。
+- **Phase 1（映像）+ Phase 2（音声込み）** を実装する。
 - 録画ソースは **出力 canvas**（#174 の `getOutputCanvas()`）。出力シーンのピン/追従に自動追従する
   ＝「録画対象＝最終出力」。録画中は `setRecording(true)` で `outputActive` を強制し出力 canvas を
   更新し続ける（出力ウィンドウ未表示でも録画できる）。停止時は録画前の出力状態へ戻す。
-- **Phase 2（音声込み）は本PR対象外**。検証時、`MediaStreamAudioDestinationNode` の無音トラックを
-  混ぜると（headless で AudioContext の音声レンダリングが回らない環境では）muxer が停止し映像も
-  書き出されない（ヘッダのみ）問題を確認したため、無音トラック対策を含めて別途実装する。
-- Phase 3（プレビュー/出力ウィンドウ等の明示的な録画対象選択 UI）も本PR対象外
+- 音声は AudioOutput を `MediaStreamAudioDestinationNode`（recordDest）へも分岐し、その音声トラックを
+  映像ストリームに合成して録画する。
+- **muxer 停止問題への対策**: 音が鳴っていない間は無音トラックにサンプルが出ず、muxer が停止して
+  映像ごと書き出されない（webm ヘッダのみ 110B）。対策として recordDest に **ConstantSource(offset 0)**
+  を keep-alive として常時接続し、無音でもサンプルを流し続ける（録画分岐のみ。スピーカー出力には影響しない）。
+- Phase 3（プレビュー/出力ウィンドウ等の明示的な録画対象選択 UI）は本PR対象外
   （出力 canvas が出力シーン選択に追従するため、当面は最終出力の録画で足りる）。
 
 ## 設計
 
 ### 録画ストリーム（GraphRuntime）
 
-- `getRecordingStream(fps = 30): MediaStream`
-  - 映像: `getOutputCanvas().captureStream(fps)` のビデオトラックのみを新しい `MediaStream` に add。
+- `getRecordingStream(fps = 30, withAudio = true): MediaStream`
+  - 映像: `getOutputCanvas().captureStream(fps)` のビデオトラック。
+  - 音声: `withAudio` なら recordDest.stream のオーディオトラック。両方を新しい `MediaStream` に add。
+- `getRecordingDestination()`: recordDest を遅延生成し、ConstantSource(offset 0) を keep-alive 接続。
+- `env().recordingDestination = recordDest`。AudioOutput が gain を destination と recordDest の両方へ接続。
 - `setRecording(on)`: 録画中は `outputActive` を強制 true（停止時は録画前の状態へ戻す）。
+
+### NodeEnv / AudioOutput
+
+- `NodeEnv.recordingDestination?: AudioNode` を追加。
+- `AudioOutputNode.createState`: 非参照シーン時に `gain.connect(ctx.destination)` に加え、
+  `env.recordingDestination` があれば `gain.connect(env.recordingDestination)`。
 
 ### Recorder（MediaRecorder ラッパ, recorder.ts 新規）
 
@@ -45,5 +56,5 @@ node-vj の出力をビデオ録画してファイル保存（ダウンロード
 - 純関数（bun）: `recorder.test.ts` … pickRecorderMimeType の優先順位・全滅時の空文字、
   recordingFileName の桁揃え。
 - Playwright スモーク: 録画開始→数フレーム→停止で十分なサイズ（>10KB）の webm Blob が得られる。
-  ストリームに video トラック 1・audio トラック 0。録画ライフサイクル（recording true→false）。
-  エラーが出ないこと。
+  ストリームに video トラック 1・audio トラック 1（keep-alive で無音でもサンプルが流れる）。
+  録画ライフサイクル（recording true→false）。エラーが出ないこと。
