@@ -10,6 +10,7 @@ import type { NodeEnv, NodeRegistry, NodeState, NodeTypeDef } from "./node-type"
 import { pickScreenTextures } from "./texture-screen";
 import { collectSceneRefs, sceneRenderOrder } from "../scene/scene-refs";
 import { effectiveOutputSceneId } from "../scene/output-scene";
+import { outputAudioSourceId } from "../scene/output-audio";
 import { TextureBlitter } from "./blit";
 import { PREVIEW_W, PREVIEW_H } from "./preview";
 import { BackgroundTicker } from "./background-ticker";
@@ -68,6 +69,10 @@ export class GraphRuntime {
   // #179: 録画用の音声分岐先。録画中フラグ（録画前の出力状態を退避し、停止時に戻す）。
   private recordDest: MediaStreamAudioDestinationNode | null = null;
   private outputActiveBeforeRecording = false;
+  // #198: 出力シーンの音声を別オーディオ出力デバイスへ発音するための分岐先（遅延生成）。
+  // ピン中の出力シーンの集約音声を毎フレーム接続/差し替えする。<audio>.setSinkId で任意デバイスへ。
+  private outputAudioDest: MediaStreamAudioDestinationNode | null = null;
+  private outputAudioConnected: AudioNode | null = null;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -240,6 +245,48 @@ export class GraphRuntime {
       keepAlive.start();
     }
     return this.recordDest;
+  }
+
+  /**
+   * #198: 出力シーンの音声を別オーディオ出力デバイスへ発音するための MediaStream を返す。
+   * 分岐先（outputAudioDest）を遅延生成する。recordDest と同様、無音時もグラフを駆動し続ける
+   * よう ConstantSource(offset 0) を keep-alive で常時接続する（消費側 <audio> が pull する限り
+   * 停止しないが、recordDest と挙動を揃えるため付ける。スピーカー出力には影響しない）。
+   * 隠し <audio>.srcObject にこの stream を流し、setSinkId(deviceId) で任意デバイスへ出す。
+   */
+  getOutputAudioStream(): MediaStream {
+    if (!this.outputAudioDest) {
+      const ctx = this.getAudioContext();
+      this.outputAudioDest = ctx.createMediaStreamDestination();
+      const keepAlive = ctx.createConstantSource();
+      keepAlive.offset.value = 0;
+      keepAlive.connect(this.outputAudioDest);
+      keepAlive.start();
+    }
+    return this.outputAudioDest.stream;
+  }
+
+  /**
+   * #198: 出力シーンの集約音声を outputAudioDest へ接続/差し替えする（ピン時のみ分離）。
+   * outputAudioDest 未生成（デバイス未選択）なら何もしない＝オーバヘッドなし。変化時のみ繋ぎ替える。
+   */
+  private updateOutputAudioRouting(): void {
+    const dest = this.outputAudioDest;
+    if (!dest) return;
+    const srcId = outputAudioSourceId({
+      outputActive: this.outputActive,
+      effectiveOutputId: this.effectiveOutputId(),
+      activeSceneId: this.activeSceneId,
+    });
+    const src = srcId ? (this.sceneAudioCache.get(srcId) ?? null) : null;
+    if (src === this.outputAudioConnected) return;
+    if (this.outputAudioConnected) {
+      try { this.outputAudioConnected.disconnect(dest); } catch { /* ignore */ }
+    }
+    if (src) {
+      try { src.connect(dest); } catch { /* ignore */ }
+    }
+    this.outputAudioConnected = src;
   }
 
   /** user gesture から共有 AudioContext を resume する（発音に必要）。 */
@@ -512,6 +559,8 @@ export class GraphRuntime {
     });
     // #174: 出力が編集に追従中なら、アクティブを描いた canvas をそのまま出力 canvas へコピー。
     if (this.outputActive && !separateOutput) this.copyToOutputCanvas();
+    // #198: 出力シーンの集約音声を別オーディオ出力デバイス分岐へ接続/差し替え（ピン時のみ分離）。
+    this.updateOutputAudioRouting();
     // #77: ノードプレビュー小窓の更新（間引きあり）。
     // #148: 本体 hidden の背面駆動中だけは小窓が不可視で readPixels の GPU ストールだけ残るのでスキップ。
     if (this.frameCount++ % PREVIEW_INTERVAL === 0 && !this.bgTicker?.running) this.updatePreviews();
