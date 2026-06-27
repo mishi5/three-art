@@ -9,8 +9,10 @@ interface AudioOutputState {
   gain: GainNode;
   /** 現在 gain に接続済みの入力 AudioNode（変化時のみ繋ぎ替え）。 */
   connected: AudioNode | null;
-  /** #174: gain→destination の接続状態。アクティブ⇄参照先の state 移譲後も毎フレーム整合させる。 */
+  /** #174: gain→発音先の接続状態。アクティブ⇄参照先の state 移譲後も毎フレーム整合させる。 */
   destConnected: boolean;
+  /** #198: 発音先（env.monitorBus があればそれ、無ければ ctx.destination）。整合時もこのノードを対象にする。 */
+  destNode: AudioNode;
 }
 
 /** Audio 出力ノード（#128）。signal をスピーカー（destination）へ発音する終端ノード。 */
@@ -28,17 +30,20 @@ export const AudioOutputNode: NodeTypeDef = {
   createState(env: NodeEnv): AudioOutputState {
     const ctx = env.audioContext;
     const gain = ctx.createGain();
-    // #172: 参照先シーンとして評価される場合は destination へ繋がない（音は SceneInput.audio 経由で親が発音）。
+    // #198: 編集音の発音先は monitorBus（あれば）。ランタイムが monitorBus の出力先を既定⇄選択デバイスで
+    // 繋ぎ替えるため、AudioOutput は常にこの 1 ノードへ繋ぐだけでよい。未指定（旧/テスト）は destination 直結。
+    const destNode = env.monitorBus ?? ctx.destination;
+    // #172: 参照先シーンとして評価される場合は発音先へ繋がない（音は SceneInput.audio 経由で親が発音）。
     const destConnected = !env.referencedScene;
     if (destConnected) {
-      gain.connect(ctx.destination);
+      gain.connect(destNode);
       // #179: 録画用の分岐先があれば併せて接続（録画しない間も無害＝ストリームは未消費）。
-      // 移譲で参照先→アクティブに移っても、ここで繋いだ録画タップは維持される（evaluate は destination のみ整合）。
+      // 移譲で参照先→アクティブに移っても、ここで繋いだ録画タップは維持される（evaluate は発音先のみ整合）。
       if (env.recordingDestination) {
         try { gain.connect(env.recordingDestination); } catch { /* ignore */ }
       }
     }
-    return { ctx, gain, connected: null, destConnected };
+    return { ctx, gain, connected: null, destConnected, destNode };
   },
   disposeState(state: NodeState): void {
     const st = state as AudioOutputState;
@@ -52,10 +57,10 @@ export const AudioOutputNode: NodeTypeDef = {
     // アクティブ⇄参照先を移譲されても（pin 中の編集シーン切替で再生継続）毎フレーム整合させる。
     const referenced = ctx.env?.referencedScene === true;
     if (!referenced && !st.destConnected) {
-      try { st.gain.connect(st.ctx.destination); } catch { /* ignore */ }
+      try { st.gain.connect(st.destNode); } catch { /* ignore */ }
       st.destConnected = true;
     } else if (referenced && st.destConnected) {
-      try { st.gain.disconnect(st.ctx.destination); } catch { /* ignore */ }
+      try { st.gain.disconnect(st.destNode); } catch { /* ignore */ }
       st.destConnected = false;
     }
     const node = asAudioNode(ctx.input("audio"));

@@ -12,7 +12,7 @@ import { History } from "./graph/history";
 import { previewSize } from "./preview-size";
 import { OutputWindow, OUTPUT_RENDER_W, OUTPUT_RENDER_H } from "./output-window";
 import { Recorder, pickRecorderMimeType, recordingFileName } from "./recorder";
-import { audioOutputOptions } from "./scene/output-audio";
+import { audioOutputOptions, type AudioOutputOption } from "./scene/output-audio";
 import type { PlaybackControl } from "./nodes/playback";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "../../core/types";
 import { AssetLibrary } from "./asset/asset-library";
@@ -396,36 +396,51 @@ bar.appendChild(recBtn);
 // 隠し <audio> に出力音声 stream を流し、ドロップダウンで選んだデバイスへ setSinkId で出す。
 // ポリシー: ピン時のみ分離（追従中は編集シーンの音が既定デバイスで鳴っているため出さない）。
 type SinkAudio = HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
+// 隠し <audio> を 2 本（出力音声＝プログラム / モニター音声＝編集音）置き、各々別デバイスへ setSinkId で発音する。
 const outAudioEl = document.createElement("audio") as SinkAudio;
 outAudioEl.style.display = "none";
 document.body.appendChild(outAudioEl);
+const monAudioEl = document.createElement("audio") as SinkAudio;
+monAudioEl.style.display = "none";
+document.body.appendChild(monAudioEl);
 
+const audioSelCss =
+  "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 6px;cursor:pointer;max-width:180px;";
 const outAudioSel = document.createElement("select");
 outAudioSel.title = "出力シーン（ピン中）の音声を発音するデバイス";
-outAudioSel.style.cssText =
-  "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 6px;cursor:pointer;max-width:180px;";
+outAudioSel.style.cssText = audioSelCss;
+const monAudioSel = document.createElement("select");
+monAudioSel.title = "編集中シーンの音声（モニター）を発音するデバイス";
+monAudioSel.style.cssText = audioSelCss;
 
-/** enumerateDevices から audiooutput 一覧でドロップダウンを再構築する（選択は維持）。 */
-async function refreshAudioOutputs(): Promise<void> {
-  let devices: MediaDeviceInfo[] = [];
-  try { devices = await navigator.mediaDevices.enumerateDevices(); } catch { /* 取得不可 */ }
-  const prev = outAudioSel.value;
-  const opts = audioOutputOptions(devices);
-  outAudioSel.replaceChildren();
+/** select に audiooutput 一覧を流し込む（先頭は分離なし・選択は維持）。 */
+function fillDeviceSelect(sel: HTMLSelectElement, opts: AudioOutputOption[], noneLabel: string, prefix: string): void {
+  const prev = sel.value;
+  sel.replaceChildren();
   const none = document.createElement("option");
   none.value = "";
-  none.textContent = "🔈 出力音声: 分離しない";
-  outAudioSel.appendChild(none);
+  none.textContent = noneLabel;
+  sel.appendChild(none);
   for (const o of opts) {
     const el = document.createElement("option");
     el.value = o.deviceId;
-    el.textContent = `🔈 ${o.label}`;
-    outAudioSel.appendChild(el);
+    el.textContent = `${prefix} ${o.label}`;
+    sel.appendChild(el);
   }
   // 以前の選択がまだ存在すれば維持。
-  if (prev && opts.some((o) => o.deviceId === prev)) outAudioSel.value = prev;
+  if (prev && opts.some((o) => o.deviceId === prev)) sel.value = prev;
 }
 
+/** enumerateDevices から audiooutput 一覧で両ドロップダウンを再構築する（選択は維持）。 */
+async function refreshAudioOutputs(): Promise<void> {
+  let devices: MediaDeviceInfo[] = [];
+  try { devices = await navigator.mediaDevices.enumerateDevices(); } catch { /* 取得不可 */ }
+  const opts = audioOutputOptions(devices);
+  fillDeviceSelect(outAudioSel, opts, "🔈 出力音声: 分離しない", "🔈");
+  fillDeviceSelect(monAudioSel, opts, "🎧 モニター音声: 既定デバイス", "🎧");
+}
+
+// #198: 出力シーン（ピン中）の音声を別オーディオ出力デバイスへ発音する（プログラム側）。
 outAudioSel.addEventListener("change", () => {
   runtime.resumeAudio(); // user gesture で共有 AudioContext を起こす
   const id = outAudioSel.value;
@@ -441,10 +456,34 @@ outAudioSel.addEventListener("change", () => {
     : Promise.resolve(console.warn("[node-vj] setSinkId 非対応のブラウザです"));
   void apply.then(() => outAudioEl.play().catch((e) => console.warn("[node-vj] output audio play failed:", e)));
 });
+
+// #198: 編集中シーンの音声（モニター）を別オーディオ出力デバイスへ発音する。編集音と出力音を独立
+// デバイスへ振り分けられ、編集中シーンが出力から参照される構成でも重複して聞こえない（モニター/プログラム分離）。
+monAudioSel.addEventListener("change", () => {
+  runtime.resumeAudio();
+  const id = monAudioSel.value;
+  if (!id) {
+    // 既定デバイスへ戻す（monitorBus → ctx.destination 直結。遅延が増えない）。
+    runtime.setMonitorSeparation(false);
+    monAudioEl.pause();
+    return;
+  }
+  if (monAudioEl.srcObject == null) monAudioEl.srcObject = runtime.getMonitorAudioStream();
+  const apply = monAudioEl.setSinkId
+    ? monAudioEl.setSinkId(id).catch((e) => console.warn("[node-vj] monitor setSinkId failed:", e))
+    : Promise.resolve(console.warn("[node-vj] setSinkId 非対応のブラウザです"));
+  void apply.then(() => {
+    // setSinkId 確定後にモニターバスを選択デバイスへ繋ぎ替える。
+    runtime.setMonitorSeparation(true);
+    return monAudioEl.play().catch((e) => console.warn("[node-vj] monitor audio play failed:", e));
+  });
+});
+
 if (navigator.mediaDevices) {
   void refreshAudioOutputs();
   navigator.mediaDevices.addEventListener?.("devicechange", () => void refreshAudioOutputs());
 }
+bar.appendChild(monAudioSel);
 bar.appendChild(outAudioSel);
 
 document.body.appendChild(bar);

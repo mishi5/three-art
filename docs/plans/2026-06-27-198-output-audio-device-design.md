@@ -77,3 +77,71 @@ Issue: https://github.com/mishi5/three-art/issues/198
 - ピン留めした出力シーンに音（AudioFile 等）を載せ、下部バーのデバイス選択で別デバイスを選ぶ。
 - 編集音は既定デバイス、出力音は選択デバイスから鳴ることを確認。
 - 出力を追従に戻すと別デバイス発音が止まる（編集音のみ）ことを確認。
+
+---
+
+## 追補（動作確認で判明した二重発音と、モニター出力デバイス選択の追加）
+
+### 発見したバグ（根本原因）
+
+手動確認で次の事象が判明した:
+
+- **編集中シーンが出力シーン（ピン）から SceneInput 参照されている**とき、編集中シーンの音が
+  「既定デバイス（ヘッドホン）」と「選択した出力デバイス」の**両方で重なって鳴る**。
+- 編集中シーンが出力から参照されていない（無関係な別シーンを編集中）ときは正常に分離される。
+
+根本原因は音声経路の二重化:
+
+1. 編集中シーン Z は **active** として `runtime.env()` で評価される。この env には `referencedScene`
+   が無い（＝`false`）ため、Z の `AudioOutput` は `gain → ctx.destination`（既定デバイス）へ発音する。
+   同時に `captureSceneAudio` で `activeAudioMerge` にタップされ `sceneAudioCache[Z]` に積まれる。
+2. 出力シーン Y（Z を SceneInput 参照）は参照先として評価され、`SceneInput(Z)` 経由で Z の音を
+   取り込み `sceneAudioCache[Y]`（Z を含む）に集約する。
+3. `updateOutputAudioRouting` が `sceneAudioCache[Y]` を `outputAudioDest`（選択デバイス）へ流す。
+
+→ Z の音が **`ctx.destination`（既定）と `outputAudioDest`（選択）の両方**に出る。これは #198 で
+出力経路を初めて実デバイス発音にしたことで顕在化した（従来は出力シーンの音がスピーカー非発音
+だったため Z は既定でしか鳴らなかった）。
+
+### 解決方針: モニター出力デバイスも選択可能にする（編集音と出力音を独立 2 系統に）
+
+編集音（モニター）の発音先デバイスも選べるようにし、モニターとプログラムを別物理デバイスへ
+振り分けられるようにする。これにより Z が両系統に出ても別デバイスなので重ならない。
+
+`AudioOutput` の発音先を `ctx.destination` 固定から、runtime 管理の **`monitorBus`（GainNode）経由**に
+変える。デバイス切替は runtime が `monitorBus` の出力先を 1 箇所繋ぎ替えるだけで済む:
+
+- runtime は `monitorBus` を常時持ち、起動時に `monitorBus → ctx.destination`（既定）へ繋ぐ。
+- active シーンの `AudioOutput` は `ctx.destination` の代わりに `env.monitorBus` へ発音する
+  （`env.monitorBus ?? ctx.destination` のフォールバック付きで後方互換）。
+- モニターデバイス選択時: runtime が `monitorBus → ctx.destination` を外し
+  `monitorBus → monitorAudioDest`（`MediaStreamAudioDestination` + keep-alive）へ繋ぎ替え、
+  `main` の隠し `<audio>.setSinkId(deviceId)` で選択デバイスへ発音する。
+- モニターデバイス未選択（既定）時は `ctx.destination` 直結相当で**遅延が増えない**
+  （MediaStream 経由の A/V 遅延はユーザーが明示的に別デバイスを選んだときのみ発生）。
+
+### 追加/変更（追補分）
+
+- `graph/node-type.ts`: `NodeEnv` に `monitorBus?: AudioNode` を追加。
+- `nodes/AudioOutputNode.ts`: 発音先を `env.monitorBus ?? ctx.destination` に。createState/evaluate の
+  destination 整合も同じ接続先（state に `destNode` を保持）を対象にする。
+- `graph/runtime.ts`:
+  - `monitorBus`（常時生成・起動時に `ctx.destination` へ接続）、`monitorAudioDest`/`monitorAudioConnected`。
+  - `env()` で `monitorBus` を渡す。
+  - `getMonitorAudioStream()`（dest 遅延生成＋keep-alive）、`setMonitorSeparation(on)`
+    （monitorBus の出力先を `ctx.destination` ⇄ `monitorAudioDest` で繋ぎ替え）。
+- `main.ts`: 下部バーに「🎧 モニター音声デバイス」ドロップダウン（既存「🔈 出力音声」と並ぶ 2 本）。
+  選択で `runtime.getMonitorAudioStream()` を隠し `<audio>` に流し `setSinkId` ＋ `setMonitorSeparation(true)`、
+  空選択で既定へ戻す（`setMonitorSeparation(false)`）。
+
+### テスト方針（追補分）
+
+- `AudioOutputNode` の発音先切替（`env.monitorBus` 指定時は monitorBus、未指定時は destination、
+  referenced 時はどちらにも繋がない、移譲後の整合も monitorBus 対象）を `fakeCtx` でユニットテスト。
+- runtime の `monitorBus` 繋ぎ替え・`<audio>.setSinkId`・実デバイス発音は headless 検証不可＝手動確認。
+
+### 手動確認（追補分）
+
+- モニターデバイスにヘッドホン、出力デバイスに別 I/F を選ぶ。
+- 編集中シーンが出力シーンから SceneInput 参照されている構成で、ヘッドホンに編集音が重ならず
+  1 系統で聞こえ、出力音は別 I/F から鳴ることを確認。
