@@ -10,6 +10,7 @@ import { NoiseNode } from "./NoiseNode";
 import { RemapNode } from "./RemapNode";
 import { SmoothNode } from "./SmoothNode";
 import { CameraInputNode } from "./CameraInputNode";
+import { PoseFeaturesNode } from "./PoseFeaturesNode";
 import { VideoFileInputNode } from "./VideoFileInputNode";
 import { MicInputNode } from "./MicInputNode";
 import { DisplayInputNode } from "./DisplayInputNode";
@@ -53,6 +54,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(PulseNode);
   r.register(RandomValueNode);
   r.register(CameraInputNode);
+  r.register(PoseFeaturesNode);
   r.register(VideoFileInputNode);
   r.register(MicInputNode);
   r.register(DisplayInputNode);
