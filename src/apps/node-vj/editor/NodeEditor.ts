@@ -23,6 +23,7 @@ import { groupNodesByCategory } from "./node-menu";
 import { duplicateNodes } from "../graph/duplicate";
 import type { History } from "../graph/history";
 import { nodesInRect, normRect } from "./selection";
+import { backgroundPointerDrag } from "./pan-policy";
 import { openParamInput } from "./param-overlay";
 import { formatPortValue } from "./port-format";
 import { containRect } from "./fit";
@@ -56,7 +57,7 @@ type Drag =
   | { kind: "wire"; fromNode: string; fromPort: string; type: PortType; startX: number; startY: number; recorded?: boolean; regrab?: boolean }
   // #167: bySpace=true は Space 押下で始めたパン。Space を離したら（buttons の状態に依らず）終了する。
   | { kind: "pan"; startX: number; startY: number; ox: number; oy: number; bySpace: boolean }
-  // 空白ドラッグの矩形選択（#83）。start は world 座標。
+  // 矩形選択（#83: 空白左ドラッグ → #207: Shift+左ドラッグに変更）。start は world 座標。
   | { kind: "rect"; startX: number; startY: number }
   // param 行のスライダドラッグ候補。moved=false のまま up したらクリック（数値入力）扱い。
   | { kind: "param"; nodeId: string; paramIndex: number; moved: boolean; recorded: boolean; startX: number; lastX: number }
@@ -94,7 +95,7 @@ export class NodeEditor {
   private selectedIds = new Set<string>();
   /** #176: 選択中の自由ラベル id（ノード選択 selectedIds とは別管理＝グループ化対象にしない）。 */
   private selectedLabelId: string | null = null;
-  /** Space 押下中は空白ドラッグをパンにする（#83 で空白ドラッグは矩形選択に変更）。 */
+  /** Space 押下中は常にパン（#207: 空白左ドラッグは既定でパン、Shift+左ドラッグで矩形選択）。 */
   private spaceDown = false;
   private rafId: number | null = null;
   private toolbar: HTMLDivElement;
@@ -195,7 +196,7 @@ export class NodeEditor {
     dbg.addEventListener("click", () => { this.showOutputValues = !this.showOutputValues; syncDbg(); });
     bar.appendChild(dbg);
     const hint = document.createElement("span");
-    hint.textContent = "  右クリック=メニュー / 空白ドラッグ=矩形選択 / Space|右ドラッグ=パン / ホイール=ズーム / 0=ズーム100% / Cmd+C=複製 / Del=削除";
+    hint.textContent = "  右クリック=メニュー / 空白ドラッグ=パン / Shift+ドラッグ=矩形選択 / Space・右ドラッグ=パン / ホイール=ズーム / 0=ズーム100% / Cmd+C=複製 / Del=削除";
     hint.style.cssText = "color:#888;align-self:center;";
     bar.appendChild(hint);
     document.body.appendChild(bar);
@@ -287,7 +288,8 @@ export class NodeEditor {
 
   private onDown = (e: PointerEvent): void => {
     const w = this.toWorld(e);
-    // パン: Space+左ドラッグ / 中ボタン / 右ボタン（#83 で空白左ドラッグは矩形選択に変更）。
+    // パン: 中ボタン / 右ボタン / Space+左ドラッグ（ノード上でもこれらはパン）。
+    // 空白左ドラッグは下の背景分岐でパン、Shift+左ドラッグで矩形選択（#207）。
     if (e.button !== 0 || this.spaceDown) {
       // Space 押下で始めたパンは、Space を離した時点で終了させる（#167）。
       const bySpace = e.button === 0 && this.spaceDown;
@@ -415,8 +417,12 @@ export class NodeEditor {
       this.drag = { kind: "group", anchors, moved: false };
       return;
     }
-    // 空白: 矩形選択を開始（確定は up）
-    this.drag = { kind: "rect", startX: w.x, startY: w.y };
+    // 背景（#207）: Shift+左ドラッグは矩形選択、それ以外（空白左ドラッグ）はパン。確定は up。
+    if (backgroundPointerDrag({ button: e.button, shiftKey: e.shiftKey, spaceDown: this.spaceDown }) === "rect") {
+      this.drag = { kind: "rect", startX: w.x, startY: w.y };
+    } else {
+      this.drag = { kind: "pan", startX: e.clientX, startY: e.clientY, ox: this.offset.x, oy: this.offset.y, bySpace: false };
+    }
   };
 
   private onMove = (e: PointerEvent): void => {
@@ -515,6 +521,13 @@ export class NodeEditor {
       const w = this.toWorld(e);
       const rect = normRect(this.drag.startX, this.drag.startY, w.x, w.y);
       this.selectedIds = new Set(nodesInRect(this.graph.nodes, this.registry, rect));
+    }
+    // #207: 空白を左クリック（移動なしのパン）したら選択解除。
+    // 従来は「空白左ドラッグ＝矩形」で移動なし＝空矩形→解除だった挙動を、パン化後も維持する。
+    if (this.drag?.kind === "pan" && !this.drag.bySpace && e.button === 0 &&
+        Math.hypot(e.clientX - this.drag.startX, e.clientY - this.drag.startY) < DRAG_THRESHOLD) {
+      this.selectedIds = new Set();
+      this.selectedLabelId = null;
     }
     if (this.drag?.kind === "param" && !this.drag.moved) {
       // ドラッグなし＝クリック → 従来の数値入力/選択オーバーレイを開く。
