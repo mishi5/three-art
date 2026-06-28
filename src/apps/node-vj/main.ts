@@ -24,6 +24,7 @@ import { assetDropTarget, nodeTypeForKind } from "./asset/asset-drop";
 import { collectAssetRefs } from "./asset/asset-refs";
 import { SceneStore } from "./scene/scene-store";
 import { SceneManager, singleSceneSet } from "./scene/scene-manager";
+import { serializeProject, deserializeProject, projectFileName } from "./scene/project-file";
 import { wouldCreateSceneCycle } from "./scene/scene-refs";
 import { scenePanelDef, type ScenePanelActions } from "./scene/scene-panel";
 import { buildSideDock } from "./editor/side-dock";
@@ -309,7 +310,25 @@ window.addEventListener("beforeunload", () => snapshotActiveScene());
 
 // グラフ保存/読込バー（#65）。読込は replaceGraph で同一参照のまま反映される。
 // #154: 読込完了後に restoreAssets でアセットを自動復元する。
-buildGraphIoBar(graph, registry, new GraphStore(localStorageAdapter()), history, () => { void restoreAssets(); });
+// #201: プロジェクト（全シーン状態）保存/読込フックを併設する。
+buildGraphIoBar(
+  graph, registry, new GraphStore(localStorageAdapter()), history,
+  () => { void restoreAssets(); },
+  {
+    // 保存: 編集中グラフをアクティブシーンへ書き戻してから全シーンを YAML 化。
+    serialize: () => { snapshotActiveScene(); return serializeProject(sceneManager.toSceneSet()); },
+    // 読込: 現在の状態を破棄して復元。失敗時は throw（UI が toast 表示）。
+    apply: (text) => {
+      const { project, warnings } = deserializeProject(text, registry);
+      history.clear();                 // 旧シーンの履歴トラックを捨てる（読込は全置換）
+      sceneManager.replaceAll(project); // onChange でシーンパネル再描画
+      reflectActiveScene();            // 共有 graph 反映・state 再同期・restoreAssets
+      syncOutputScene();               // #174 出力シーン id を runtime へ反映
+      return warnings;
+    },
+    downloadName: () => projectFileName(new Date()),
+  },
+);
 
 // 入力起動コントロール（mic/camera/display は user gesture 必須のためボタンから start）。
 // #99: ファイル選択はノード上の「ファイル行」クリックに移行（共有ファイル input は撤去）。

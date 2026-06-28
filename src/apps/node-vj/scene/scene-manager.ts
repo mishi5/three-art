@@ -87,6 +87,21 @@ export class SceneManager {
   /** 現在の集合を保存する（初期化直後など、変更を伴わない保存用）。 */
   persist(): void { this.store.save(this.toSet()); }
 
+  /** #201 現在の全シーン状態を SceneSet として取り出す（プロジェクト保存用）。 */
+  toSceneSet(): SceneSet { return this.toSet(); }
+
+  /**
+   * #201 全シーンを差し替える（プロジェクト読込用）。activeId/outputId も置換し永続化・通知する。
+   * activeId が scenes に無ければ先頭へフォールバック、outputId は scenes に無ければ null。
+   */
+  replaceAll(set: SceneSet): void {
+    if (set.scenes.length === 0) throw new Error("replaceAll: scenes が空です");
+    this.scenes = set.scenes;
+    this._activeId = set.scenes.some((s) => s.id === set.activeId) ? set.activeId : set.scenes[0]!.id;
+    this._outputId = set.outputId && set.scenes.some((s) => s.id === set.outputId) ? set.outputId : null;
+    this.commit();
+  }
+
   onChange(cb: () => void): () => void { this.listeners.add(cb); return () => { this.listeners.delete(cb); }; }
 
   private byId(id: string): Scene {
