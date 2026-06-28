@@ -28,6 +28,9 @@ export interface NodeEnv {
   sceneAudio?(sceneId: string): AudioNode | null;
   /** #179: 録画用の音声分岐先（MediaStreamAudioDestinationNode）。AudioOutput が destination と併せて接続する。 */
   recordingDestination?: AudioNode;
+  /** #198: 編集音（モニター）の発音先バス。AudioOutput はこれを ctx.destination の代わりに使い、
+   * ランタイムが monitorBus の出力先（既定デバイス ⇄ 選択デバイス）を 1 箇所で繋ぎ替える。未指定なら destination 直結。 */
+  monitorBus?: AudioNode;
 }
 
 /** ノードのフレーム間永続状態（visual モジュールのインスタンス等）。 */

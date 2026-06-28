@@ -10,6 +10,8 @@ import type { NodeEnv, NodeRegistry, NodeState, NodeTypeDef } from "./node-type"
 import { pickScreenTextures } from "./texture-screen";
 import { collectSceneRefs, sceneRenderOrder } from "../scene/scene-refs";
 import { effectiveOutputSceneId } from "../scene/output-scene";
+import { outputAudioSourceId } from "../scene/output-audio";
+import { resetActiveAudioTaps } from "../scene/active-audio-taps";
 import { TextureBlitter } from "./blit";
 import { PREVIEW_W, PREVIEW_H } from "./preview";
 import { BackgroundTicker } from "./background-ticker";
@@ -68,6 +70,14 @@ export class GraphRuntime {
   // #179: 録画用の音声分岐先。録画中フラグ（録画前の出力状態を退避し、停止時に戻す）。
   private recordDest: MediaStreamAudioDestinationNode | null = null;
   private outputActiveBeforeRecording = false;
+  // #198: 出力シーンの音声を別オーディオ出力デバイスへ発音するための分岐先（遅延生成）。
+  // ピン中の出力シーンの集約音声を毎フレーム接続/差し替えする。<audio>.setSinkId で任意デバイスへ。
+  private outputAudioDest: MediaStreamAudioDestinationNode | null = null;
+  private outputAudioConnected: AudioNode | null = null;
+  // #198: 編集音（モニター）の発音先バス。active な AudioOutput はここへ繋ぎ、ランタイムが
+  // 出力先を既定デバイス（ctx.destination）⇄ モニター選択デバイス（monitorAudioDest 経由）で繋ぎ替える。
+  private monitorBus: GainNode | null = null;
+  private monitorAudioDest: MediaStreamAudioDestinationNode | null = null;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -94,9 +104,12 @@ export class GraphRuntime {
   setSceneProvider(provider: (id: string) => GraphDoc | null, activeSceneId: string): void {
     this.sceneProvider = provider;
     // #174: アクティブシーンが変わったら、旧 active の音声タップ状態と cache をリセットする。
+    // #198: 帳簿 clear だけでなく activeAudioMerge から物理 disconnect する。怠ると旧シーンの
+    // AudioOutput.gain が merge へ繋がったまま残り、出力シーンが旧アクティブを SceneInput 参照する
+    // 構成でフィードバックループ（merge→SceneInput→AudioOutput.gain→merge）を作りフランジングになる。
     if (activeSceneId !== this.activeSceneId) {
       this.sceneAudioCache.delete(this.activeSceneId);
-      this.activeAudioConnected.clear();
+      resetActiveAudioTaps(this.activeAudioConnected, this.activeAudioMerge);
     }
     this.activeSceneId = activeSceneId;
   }
@@ -242,6 +255,95 @@ export class GraphRuntime {
     return this.recordDest;
   }
 
+  /**
+   * #198: 出力シーンの音声を別オーディオ出力デバイスへ発音するための MediaStream を返す。
+   * 分岐先（outputAudioDest）を遅延生成する。recordDest と同様、無音時もグラフを駆動し続ける
+   * よう ConstantSource(offset 0) を keep-alive で常時接続する（消費側 <audio> が pull する限り
+   * 停止しないが、recordDest と挙動を揃えるため付ける。スピーカー出力には影響しない）。
+   * 隠し <audio>.srcObject にこの stream を流し、setSinkId(deviceId) で任意デバイスへ出す。
+   */
+  getOutputAudioStream(): MediaStream {
+    if (!this.outputAudioDest) {
+      const ctx = this.getAudioContext();
+      this.outputAudioDest = ctx.createMediaStreamDestination();
+      const keepAlive = ctx.createConstantSource();
+      keepAlive.offset.value = 0;
+      keepAlive.connect(this.outputAudioDest);
+      keepAlive.start();
+    }
+    return this.outputAudioDest.stream;
+  }
+
+  /**
+   * #198: 編集音（モニター）の発音先バス。active な AudioOutput はここへ繋ぐ（env 経由）。
+   * 起動時は既定デバイス（ctx.destination）へ出す。setMonitorSeparation で選択デバイスへ繋ぎ替える。
+   */
+  private getMonitorBus(): GainNode {
+    if (!this.monitorBus) {
+      const ctx = this.getAudioContext();
+      this.monitorBus = ctx.createGain();
+      this.monitorBus.connect(ctx.destination);
+    }
+    return this.monitorBus;
+  }
+
+  /**
+   * #198: モニター音声（編集音）を別オーディオ出力デバイスへ発音するための MediaStream を返す。
+   * 分岐先（monitorAudioDest）を遅延生成する（outputAudioDest と同様、keep-alive 付き）。
+   * 隠し <audio>.srcObject にこの stream を流し setSinkId(deviceId) で任意デバイスへ出す。
+   */
+  getMonitorAudioStream(): MediaStream {
+    if (!this.monitorAudioDest) {
+      const ctx = this.getAudioContext();
+      this.monitorAudioDest = ctx.createMediaStreamDestination();
+      const keepAlive = ctx.createConstantSource();
+      keepAlive.offset.value = 0;
+      keepAlive.connect(this.monitorAudioDest);
+      keepAlive.start();
+    }
+    return this.monitorAudioDest.stream;
+  }
+
+  /**
+   * #198: モニターバスの出力先を切り替える。on=選択デバイス（monitorAudioDest 経由）、
+   * off=既定デバイス（ctx.destination）。AudioOutput 側は常に monitorBus へ繋ぐため、ここ 1 箇所の
+   * 繋ぎ替えで編集音の発音デバイスが切り替わる。off 時は MediaStream 経路を介さず遅延が増えない。
+   */
+  setMonitorSeparation(on: boolean): void {
+    const ctx = this.getAudioContext();
+    const bus = this.getMonitorBus();
+    try { bus.disconnect(); } catch { /* ignore */ }
+    if (on) {
+      this.getMonitorAudioStream(); // monitorAudioDest を生成
+      if (this.monitorAudioDest) bus.connect(this.monitorAudioDest);
+    } else {
+      bus.connect(ctx.destination);
+    }
+  }
+
+  /**
+   * #198: 出力シーンの集約音声を outputAudioDest へ接続/差し替えする（ピン時のみ分離）。
+   * outputAudioDest 未生成（デバイス未選択）なら何もしない＝オーバヘッドなし。変化時のみ繋ぎ替える。
+   */
+  private updateOutputAudioRouting(): void {
+    const dest = this.outputAudioDest;
+    if (!dest) return;
+    const srcId = outputAudioSourceId({
+      outputActive: this.outputActive,
+      effectiveOutputId: this.effectiveOutputId(),
+      activeSceneId: this.activeSceneId,
+    });
+    const src = srcId ? (this.sceneAudioCache.get(srcId) ?? null) : null;
+    if (src === this.outputAudioConnected) return;
+    if (this.outputAudioConnected) {
+      try { this.outputAudioConnected.disconnect(dest); } catch { /* ignore */ }
+    }
+    if (src) {
+      try { src.connect(dest); } catch { /* ignore */ }
+    }
+    this.outputAudioConnected = src;
+  }
+
   /** user gesture から共有 AudioContext を resume する（発音に必要）。 */
   resumeAudio(): void {
     void this.getAudioContext().resume().catch(() => { /* gesture 不足時は次回 */ });
@@ -258,6 +360,8 @@ export class GraphRuntime {
       renderer: this.renderer,
       camera: this.camera,
       audioContext: this.getAudioContext(),
+      // #198: 編集音の発音先バス。AudioOutput はこれを ctx.destination の代わりに使う。
+      monitorBus: this.getMonitorBus(),
       sceneTexture: (id) => this.sceneTextureCache.get(id) ?? null,
       sceneAudio: (id) => this.sceneAudioCache.get(id) ?? null,
       // #174: アクティブシーンの AudioOutput をタップして sceneAudioCache[activeId] に供給する。
@@ -512,6 +616,8 @@ export class GraphRuntime {
     });
     // #174: 出力が編集に追従中なら、アクティブを描いた canvas をそのまま出力 canvas へコピー。
     if (this.outputActive && !separateOutput) this.copyToOutputCanvas();
+    // #198: 出力シーンの集約音声を別オーディオ出力デバイス分岐へ接続/差し替え（ピン時のみ分離）。
+    this.updateOutputAudioRouting();
     // #77: ノードプレビュー小窓の更新（間引きあり）。
     // #148: 本体 hidden の背面駆動中だけは小窓が不可視で readPixels の GPU ストールだけ残るのでスキップ。
     if (this.frameCount++ % PREVIEW_INTERVAL === 0 && !this.bgTicker?.running) this.updatePreviews();
