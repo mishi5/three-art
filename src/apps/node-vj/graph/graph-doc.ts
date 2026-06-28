@@ -13,6 +13,11 @@ export interface NodeInstance {
   preview?: boolean;
   /** #176: ノード名（ユーザが付ける名前。グループ名に近い注釈。ノード上部に表示）。 */
   name?: string;
+  /**
+   * #208: number 型出力ポート単位の倍率（スケール）。portId → 倍率。
+   * 評価器が出力値に掛けてから下流へ渡す。未設定/1 は従来と同じ挙動（params とは別管理）。
+   */
+  outputScales?: Record<string, number>;
 }
 
 /** #176: エディタ上の自由ラベル（付箋）。x/y は world 座標。 */

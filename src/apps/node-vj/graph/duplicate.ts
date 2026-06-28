@@ -25,6 +25,8 @@ export function duplicateNodes(
         ? { position: { x: node.position.x + offset, y: node.position.y + offset } }
         : {}),
       ...(node.preview !== undefined ? { preview: node.preview } : {}),
+      // #208: 出力倍率は機能的設定なので複製にも引き継ぐ。
+      ...(node.outputScales ? { outputScales: structuredClone(node.outputScales) } : {}),
     });
   }
   if (idMap.size === 0) return [];

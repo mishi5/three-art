@@ -34,6 +34,16 @@ describe("duplicateNodes", () => {
     expect(clone.preview).toBe(true);
   });
 
+  test("#208 outputScales を引き継ぐ（深いコピー）", () => {
+    const g = sample();
+    const b = g.nodes.find((n) => n.id === "b")!;
+    b.outputScales = { out: 2 };
+    const ids = duplicateNodes(g, new Set(["b"]), makeGenId(), 24);
+    const clone = g.nodes.find((n) => n.id === ids[0])!;
+    expect(clone.outputScales).toEqual({ out: 2 });
+    expect(clone.outputScales).not.toBe(b.outputScales);
+  });
+
   test("選択内→選択内のエッジは複製ノード間に張り直す", () => {
     const g = sample();
     const ids = duplicateNodes(g, new Set(["b", "c"]), makeGenId(), 24);
