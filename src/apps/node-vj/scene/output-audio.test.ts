@@ -1,26 +1,26 @@
 import { expect, test, describe } from "bun:test";
 import { outputAudioSourceId, audioOutputOptions } from "./output-audio";
 
-describe("outputAudioSourceId (#198 ピン時のみ分離)", () => {
+describe("outputAudioSourceId (#198 出力中は出力デバイスへ発音)", () => {
   test("出力非アクティブなら null（分離しない）", () => {
     expect(
       outputAudioSourceId({ outputActive: false, effectiveOutputId: "s2", activeSceneId: "s1" }),
     ).toBeNull();
   });
 
-  test("追従中（出力 id == アクティブ id）は null（既定デバイスで発音済み）", () => {
-    expect(
-      outputAudioSourceId({ outputActive: true, effectiveOutputId: "s1", activeSceneId: "s1" }),
-    ).toBeNull();
-  });
-
-  test("ピン中（出力 id != アクティブ id かつ outputActive）は出力シーン id を返す", () => {
+  test("ピン中（出力 id != アクティブ id）は出力シーン id を返す", () => {
     expect(
       outputAudioSourceId({ outputActive: true, effectiveOutputId: "s2", activeSceneId: "s1" }),
     ).toBe("s2");
   });
 
-  test("ピン指定でも outputActive=false なら分離しない", () => {
+  test("出力シーンを編集中（出力 id == アクティブ id）でも出力 id を返す（出力デバイスから発音）", () => {
+    expect(
+      outputAudioSourceId({ outputActive: true, effectiveOutputId: "s1", activeSceneId: "s1" }),
+    ).toBe("s1");
+  });
+
+  test("outputActive=false なら分離しない", () => {
     expect(
       outputAudioSourceId({ outputActive: false, effectiveOutputId: "s2", activeSceneId: "s1" }),
     ).toBeNull();

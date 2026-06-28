@@ -3,21 +3,22 @@
 // 一覧整形を切り出してテスト可能にする。
 
 /**
- * 別オーディオ出力デバイスへ分離発音すべきシーン id を返す（無ければ null）。
- * ポリシー: ピン時のみ分離。
+ * 別オーディオ出力デバイス（プログラム）へ発音すべきシーン id を返す（無ければ null）。
+ * ポリシー: 出力中なら常に出力シーンを出力デバイスへ。
  * - outputActive=false（出力していない）→ null
- * - effectiveOutputId === activeSceneId（編集に追従）→ null
- *   （追従中は編集シーンの音が既定デバイスで鳴っているため二重発音を避ける）
- * - それ以外（ピン中＝出力が編集と別シーン）→ そのシーン id を分離発音する
+ * - outputActive=true → 出力シーン id（effectiveOutputId）を返す。
+ *   編集中シーンと一致（出力シーンをエディタ表示中／追従）していても出力デバイスから発音する。
+ *   編集音（モニター）は monitorBus 経由で別系統へ流れるため、二重発音はモニター/出力を別デバイスに
+ *   分けることで解消する（同一デバイスを選んだ場合のみ重複しうる＝ユーザー運用で回避）。
  */
 export function outputAudioSourceId(opts: {
   outputActive: boolean;
   effectiveOutputId: string;
-  activeSceneId: string;
+  /** 互換のため受け取るが未使用（出力中は編集中シーンと一致しても出力デバイスへ発音する）。 */
+  activeSceneId?: string;
 }): string | null {
-  const { outputActive, effectiveOutputId, activeSceneId } = opts;
+  const { outputActive, effectiveOutputId } = opts;
   if (!outputActive) return null;
-  if (effectiveOutputId === activeSceneId) return null;
   return effectiveOutputId;
 }
 
