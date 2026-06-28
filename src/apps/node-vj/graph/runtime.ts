@@ -11,6 +11,7 @@ import { pickScreenTextures } from "./texture-screen";
 import { collectSceneRefs, sceneRenderOrder } from "../scene/scene-refs";
 import { effectiveOutputSceneId } from "../scene/output-scene";
 import { outputAudioSourceId } from "../scene/output-audio";
+import { resetActiveAudioTaps } from "../scene/active-audio-taps";
 import { TextureBlitter } from "./blit";
 import { PREVIEW_W, PREVIEW_H } from "./preview";
 import { BackgroundTicker } from "./background-ticker";
@@ -103,9 +104,12 @@ export class GraphRuntime {
   setSceneProvider(provider: (id: string) => GraphDoc | null, activeSceneId: string): void {
     this.sceneProvider = provider;
     // #174: アクティブシーンが変わったら、旧 active の音声タップ状態と cache をリセットする。
+    // #198: 帳簿 clear だけでなく activeAudioMerge から物理 disconnect する。怠ると旧シーンの
+    // AudioOutput.gain が merge へ繋がったまま残り、出力シーンが旧アクティブを SceneInput 参照する
+    // 構成でフィードバックループ（merge→SceneInput→AudioOutput.gain→merge）を作りフランジングになる。
     if (activeSceneId !== this.activeSceneId) {
       this.sceneAudioCache.delete(this.activeSceneId);
-      this.activeAudioConnected.clear();
+      resetActiveAudioTaps(this.activeAudioConnected, this.activeAudioMerge);
     }
     this.activeSceneId = activeSceneId;
   }

@@ -176,3 +176,54 @@ Issue: https://github.com/mishi5/three-art/issues/198
 
 - 出力中のシーンをエディタで開いた状態で、出力デバイス（スピーカー）から出力音が鳴ること。
 - モニターデバイス（ヘッドホン）からも編集音が聞こえ、両者が別デバイスで分離していること。
+
+---
+
+## 追補3（シーン切替後に出力スピーカーでフランジング／二重発音）
+
+Issue: https://github.com/mishi5/three-art/issues/198
+
+### 症状
+
+モニター＝ヘッドホン・出力＝スピーカーで別デバイスに分離していても、**出力ウィンドウ再表示直後は正常**だが
+**シーンを切り替えた後**から、出力スピーカー単独で「同じ音が微小遅延で2回」＝エフェクトが掛かったような
+フランジングが鳴る。モニターを既定デバイスに戻しても残る。出力ウィンドウを閉じて開き直すと一旦正常化する。
+
+### 調査が難航した理由（重要）
+
+- 状態ダンプ（`runtime.activeAudioConnected.size` 等の帳簿）はすべて「1」を返し、累積が無いように見えた。
+  しかし帳簿はシーン切替時に `clear()` されるため、**実際の Web Audio グラフと乖離して嘘をついていた**。
+- 真因特定には `AudioNode.prototype.connect/disconnect` を起動時からパッチし、各合流点（`activeAudioMerge`
+  等）への**実入力エッジ**を可視化する必要があった。実グラフを見て初めて `activeAudioMerge.count === 2`
+  が判明した。前段の修正（追補1/2）が真因を外したのも、帳簿を信じて実グラフを見ていなかったため。
+
+### 根本原因（フィードバックループ）
+
+`setSceneProvider` がアクティブシーン切替時に帳簿 `activeAudioConnected.clear()` だけ行い、
+旧アクティブシーンの `AudioOutput.gain` を共有 `activeAudioMerge` から**物理 disconnect していなかった**。
+その結果、過去にアクティブ編集したシーン（＝出力シーン）の `AudioOutput.gain` が `activeAudioMerge` に
+残留。出力シーンが編集中シーンを SceneInput 参照する構成では、次の閉ループが生まれる:
+
+```
+activeAudioMerge → SceneInput(active) → 出力シーンの AudioOutput.gain(0.83) → activeAudioMerge
+```
+
+Web Audio はループに最小 1 レンダクォンタム（128 サンプル≈2.7ms）の遅延を挿入するため、
+**約2.7ms・帰還率0.83 のフィードバックコムフィルタ**となり、出力経路（`sceneMerge → outputAudioDest →
+<audio>.setSinkId → スピーカー`）にこのコムフィルタ済み信号が届く＝単一スピーカーでフランジングになる。
+
+### 修正
+
+不変条件「**論理的に忘れる ＝ 必ず物理 disconnect**」を 1 箇所に閉じ込める。
+
+- `scene/active-audio-taps.ts`（新規）: `resetActiveAudioTaps(connected, merge)` — `connected` の全ノードを
+  `merge` から物理 disconnect してから Set を空にする純関数。
+- `graph/runtime.ts` `setSceneProvider`: アクティブシーン変更時の `activeAudioConnected.clear()` を
+  `resetActiveAudioTaps(this.activeAudioConnected, this.activeAudioMerge)` に置換。
+- `scene/active-audio-taps.test.ts`（新規）: 物理 disconnect・clear・例外継続の回帰テスト3件。
+
+### 確認
+
+- 実機: シーン切替後も出力スピーカーがクリーン（フランジング消失）。実グラフ計測で `activeAudioMerge.count`
+  が切替後も 1（アクティブシーンの AudioOutput のみ）に保たれることを確認。
+- 自動: 全テスト 893 件パス・型チェック通過。
