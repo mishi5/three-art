@@ -75,19 +75,6 @@ export function motionStep(
   return prevMotion * (1 - s) + m * s;
 }
 
-/**
- * ジャンプ検出。重心 y の上昇速度 velY（m/s）がしきい値超で 1 度だけ発火し、再武装は
- * しきい値の半分を下回ったとき（ヒステリシスで連続発火を防ぐ）。
- */
-export function jumpStep(
-  velY: number, threshold: number, armed: boolean,
-): { fired: boolean; armed: boolean } {
-  const th = Math.max(1e-4, threshold);
-  if (armed && velY >= th) return { fired: true, armed: false };
-  if (!armed && velY < th * 0.5) return { fired: false, armed: true };
-  return { fired: false, armed };
-}
-
 /** 関節 i が可視か。 */
 export function visible(vis: Float32Array, i: number): boolean {
   return (vis[i] ?? 0) >= VIS_MIN;

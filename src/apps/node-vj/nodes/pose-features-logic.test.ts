@@ -2,7 +2,7 @@ import { expect, test, describe } from "bun:test";
 import { NUM_JOINTS, makeEmptyJoints } from "../../../core/types";
 import {
   POSE_POS, VIS_MIN, clamp01, shoulderMetrics, handHeightNorm,
-  motionStep, jumpStep, visible,
+  motionStep, visible,
 } from "./pose-features-logic";
 
 /** 全関節可視の visibility を作る。 */
@@ -82,32 +82,6 @@ describe("motionStep", () => {
     const j = makeEmptyJoints();
     // 変位0・prevMotion=1・smooth=0.25 → 1*0.75 + 0*0.25 = 0.75
     expect(motionStep(j, j, fullVis(), 1, 0.25)).toBeCloseTo(0.75);
-  });
-});
-
-describe("jumpStep", () => {
-  test("武装中にしきい値超で発火し解除", () => {
-    const r = jumpStep(2, 1, true);
-    expect(r.fired).toBe(true);
-    expect(r.armed).toBe(false);
-  });
-
-  test("解除中は連続発火しない", () => {
-    const r = jumpStep(2, 1, false);
-    expect(r.fired).toBe(false);
-    expect(r.armed).toBe(false);
-  });
-
-  test("しきい値の半分を下回ると再武装", () => {
-    const r = jumpStep(0.4, 1, false); // 0.4 < 0.5
-    expect(r.fired).toBe(false);
-    expect(r.armed).toBe(true);
-  });
-
-  test("武装中でもしきい値未満なら発火しない", () => {
-    const r = jumpStep(0.6, 1, true);
-    expect(r.fired).toBe(false);
-    expect(r.armed).toBe(true);
   });
 });
 

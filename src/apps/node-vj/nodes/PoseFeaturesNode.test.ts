@@ -5,10 +5,10 @@ import type { EvalContext } from "../graph/node-type";
 import type { PoseFrame } from "../../../core/types";
 import { NUM_JOINTS, makeEmptyJoints } from "../../../core/types";
 
-type Out = { handHeightL: number; handHeightR: number; motion: number; jump: boolean };
+type Out = { handHeightL: number; handHeightR: number; motion: number };
 
 const DEFAULTS: Record<string, number> = {
-  smoothing: 1, raiseSpan: 1.2, motionScale: 0.3, jumpThreshold: 1.2, outMin: 0, outMax: 1,
+  smoothing: 1, raiseSpan: 1.2, motionScale: 0.3, outMin: 0, outMax: 1,
 };
 
 /** 肩（幅0.4・高さ1.0）を立て、必要関節を可視にした PoseFrame を作る。 */
@@ -47,23 +47,23 @@ function mkCtx(
 const run = (ctx: EvalContext): Out => PoseFeaturesNode.evaluate(ctx) as Out;
 
 describe("PoseFeaturesNode (#185) メタ", () => {
-  test("input=pose / 出力4本 / params", () => {
+  test("input=pose / 出力3本 / params", () => {
     expect(PoseFeaturesNode.type).toBe("PoseFeatures");
     expect(PoseFeaturesNode.category).toBe("input");
     expect(PoseFeaturesNode.inputs.map((p) => `${p.id}:${p.type}`)).toEqual(["pose:pose"]);
     expect(PoseFeaturesNode.outputs.map((p) => `${p.id}:${p.type}`)).toEqual([
-      "handHeightL:number", "handHeightR:number", "motion:number", "jump:trigger",
+      "handHeightL:number", "handHeightR:number", "motion:number",
     ]);
     expect(PoseFeaturesNode.params.map((p) => p.id)).toEqual([
-      "smoothing", "raiseSpan", "motionScale", "jumpThreshold", "outMin", "outMax",
+      "smoothing", "raiseSpan", "motionScale", "outMin", "outMax",
     ]);
   });
 });
 
 describe("PoseFeaturesNode 出力", () => {
-  test("pose 未接続は全出力 0・jump 非発火", () => {
+  test("pose 未接続は全出力 0", () => {
     const o = run(mkCtx(new PoseFeaturesRuntime(), 0, undefined));
-    expect(o).toEqual({ handHeightL: 0, handHeightR: 0, motion: 0, jump: false });
+    expect(o).toEqual({ handHeightL: 0, handHeightR: 0, motion: 0 });
   });
 
   test("手を肩の高さに置くと 0、肩幅×raiseSpan 上げると 1", () => {
@@ -88,18 +88,6 @@ describe("PoseFeaturesNode 出力", () => {
     expect(o.handHeightR).toBe(0);
   });
 
-  test("ジャンプ: 重心が速く上昇した瞬間に 1 度発火、停止で再武装", () => {
-    const s = new PoseFeaturesRuntime();
-    // frame0: prev 確定（hasPrev=false なので発火しない）
-    expect(run(mkCtx(s, 0, makePose({ centerY: 1.0 }))).jump).toBe(false);
-    // frame1: 0.1s で +0.2m → 2.0 m/s >= 1.2 → 発火
-    expect(run(mkCtx(s, 0.1, makePose({ centerY: 1.2 }))).jump).toBe(true);
-    // frame2: 静止 → 速度0 → 再武装（発火しない）
-    expect(run(mkCtx(s, 0.2, makePose({ centerY: 1.2 }))).jump).toBe(false);
-    // frame3: 再び上昇 → 再発火
-    expect(run(mkCtx(s, 0.3, makePose({ centerY: 1.4 }))).jump).toBe(true);
-  });
-
   test("動き量: 関節が動くと motion>0、静止で減衰", () => {
     const s = new PoseFeaturesRuntime();
     // frame0: prev 確定
@@ -112,17 +100,17 @@ describe("PoseFeaturesNode 出力", () => {
     expect(still.motion).toBeCloseTo(0, 5);
   });
 
-  test("pose が途切れて復帰しても誤発火しない", () => {
+  test("pose が途切れて復帰しても motion がスパイクしない", () => {
     const s = new PoseFeaturesRuntime();
-    run(mkCtx(s, 0, makePose({ centerY: 1.0 })));
+    run(mkCtx(s, 0, makePose({ rWristY: 1.0 }), { motionScale: 1 }));
     // pose 途切れ（hasPrev=false にリセット）
     run(mkCtx(s, 0.1, undefined));
-    // 復帰直後は prev 無し扱いで jump 発火しない
-    expect(run(mkCtx(s, 0.2, makePose({ centerY: 3.0 }))).jump).toBe(false);
+    // 復帰直後は prev 無し扱い → 変位 0 → motion はスパイクしない
+    expect(run(mkCtx(s, 0.2, makePose({ rWristY: 1.5 }), { motionScale: 1 })).motion).toBeCloseTo(0, 5);
   });
 
   test("state 無しでは全 0", () => {
     const o = run(mkCtx(undefined, 0, makePose({ rWristY: 1.48 })));
-    expect(o).toEqual({ handHeightL: 0, handHeightR: 0, motion: 0, jump: false });
+    expect(o).toEqual({ handHeightL: 0, handHeightR: 0, motion: 0 });
   });
 });

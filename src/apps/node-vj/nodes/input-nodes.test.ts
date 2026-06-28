@@ -16,8 +16,8 @@ function ctxNoState(over: Partial<EvalContext> = {}): EvalContext {
 }
 
 describe("CameraInputNode (#66)", () => {
-  test("ポート定義: texture/pose/motion を出力", () => {
-    expect(CameraInputNode.outputs.map((p) => p.id)).toEqual(["texture", "pose", "motion"]);
+  test("ポート定義: texture/pose を出力", () => {
+    expect(CameraInputNode.outputs.map((p) => p.id)).toEqual(["texture", "pose"]);
     expect(CameraInputNode.outputs.find((p) => p.id === "texture")?.type).toBe("texture");
     expect(CameraInputNode.outputs.find((p) => p.id === "pose")?.type).toBe("pose");
   });
@@ -30,9 +30,8 @@ describe("CameraInputNode (#66)", () => {
     expect(sk?.options).toEqual(["off", "on"]);
   });
 
-  test("state 無しでも空 pose と motion=0 を返す", () => {
+  test("state 無しでも空 pose を返す", () => {
     const out = CameraInputNode.evaluate(ctxNoState());
-    expect(out.motion).toBe(0);
     const pose = out.pose as { joints: Float32Array };
     expect(pose.joints.length).toBe(13 * 3);
   });

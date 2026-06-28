@@ -134,19 +134,18 @@ export class CameraInputRuntime {
 
 /**
  * カメラ入力ノード（#66・旧 PoseInput を統合）。
- * texture（カメラ映像）+ pose + motion を出力。poseDetect=off なら姿勢推定を
- * 動かさない（映像のみ・推定コストゼロ）。
+ * texture（カメラ映像）+ pose を出力。poseDetect=off なら姿勢推定を
+ * 動かさない（映像のみ・推定コストゼロ）。動き量は PoseFeatures ノード（#185）へ集約。
  */
 export const CameraInputNode: NodeTypeDef = {
   type: "CameraInput",
   category: "input",
-  description: "カメラ映像と姿勢推定を入力するノード。映像 texture・骨格 pose・動き量 motion を出力する。",
+  description: "カメラ映像と姿勢推定を入力するノード。映像 texture・骨格 pose を出力する（動き量は PoseFeatures へ）。",
   isSink: false,
   inputs: [],
   outputs: [
     { id: "texture", label: "tex", type: "texture", description: "カメラ映像のテクスチャ（アスペクト比を入口で正規化済み）。" },
     { id: "pose", label: "pose", type: "pose", description: "MediaPipe Pose で推定した骨格（poseDetect=off なら空）。" },
-    { id: "motion", label: "motion", type: "number", description: "骨格の動き量（大きいほど激しく動いている）。" },
   ],
   params: [
     { id: "poseDetect", label: "poseDetect", kind: "enum", default: "on", options: ["on", "off"], description: "姿勢推定の ON/OFF。off なら映像のみ供給し推定コストをゼロにする。" },
@@ -161,7 +160,7 @@ export const CameraInputNode: NodeTypeDef = {
     const empty: PoseFrame = {
       joints: makeEmptyJoints(), visibility: new Float32Array(NUM_JOINTS), center: new Float32Array(3),
     };
-    if (!s) return { texture: undefined, pose: empty, motion: 0 };
+    if (!s) return { texture: undefined, pose: empty };
     // poseDetect に応じて推定を遅延起動/停止（カメラは維持）
     if (ctx.param("poseDetect") === "on") s.ensurePose();
     else s.stopPose();
@@ -174,7 +173,6 @@ export const CameraInputNode: NodeTypeDef = {
     return {
       texture: (ctx.env ? s.getTexture(ctx.env.renderer) : null) ?? undefined,
       pose,
-      motion: s.anchors.getMotion(),
     };
   },
 };
