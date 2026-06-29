@@ -3,6 +3,8 @@ import {
   NODE_WIDTH, TITLE_H, ROW_H, nodeHeight, inputPortPos, outputPortPos,
   portIndex, nodeRect, hasRandomRow, randomRowRect,
   hasSceneRow, sceneRowRect, sceneRowLabel,
+  hasPadGrid, padGridMetrics, padGridHeight, padGridRect, padRect, padIndexAt,
+  PAD_MARGIN_X, PAD_MARGIN_TOP,
 } from "./layout";
 import type { NodeTypeDef } from "../graph/node-type";
 import type { NodeInstance } from "../graph/graph-doc";
@@ -76,5 +78,73 @@ describe("editor layout", () => {
   test("#152 sceneRowLabel 未選択表示", () => {
     expect(sceneRowLabel(null)).toBe("(シーン未選択)");
     expect(sceneRowLabel("Intro")).toBe("Intro");
+  });
+});
+
+describe("#205 padGrid layout", () => {
+  // 4×4 グリッド・出力 audio・volume param のみ可視（padAssets は hidden）。
+  const padDef: NodeTypeDef = {
+    type: "MidiPad", category: "input",
+    inputs: [], outputs: [{ id: "audio", label: "audio", type: "audio" }],
+    params: [
+      { id: "volume", label: "volume", kind: "number", default: 1 },
+      { id: "padAssets", label: "padAssets", kind: "string", default: [], hidden: true, noInput: true },
+    ],
+    padGrid: { rows: 4, cols: 4 }, evaluate: () => ({}),
+  };
+  const padNode: NodeInstance = { id: "m", type: "MidiPad", params: {}, position: { x: 100, y: 50 } };
+
+  test("hasPadGrid 判定", () => {
+    expect(hasPadGrid(padDef)).toBe(true);
+    expect(hasPadGrid(def)).toBe(false);
+  });
+
+  test("padGridMetrics: 4列はノード幅から正方形パッドを算出", () => {
+    const m = padGridMetrics(padDef)!;
+    expect(m.rows).toBe(4);
+    expect(m.cols).toBe(4);
+    expect(m.padW).toBe(m.padH); // 正方形
+    // innerW = NODE_WIDTH - 2*margin、padW = (innerW - 3*gap)/4
+    expect(m.innerW).toBe(NODE_WIDTH - 2 * PAD_MARGIN_X);
+    expect(padGridMetrics(def)).toBeNull();
+  });
+
+  test("nodeHeight は padGrid 分（上マージン＋グリッド）増える", () => {
+    // portRows=max(0,1)=1, 可視 param=1（volume のみ）
+    const base = TITLE_H + 1 * ROW_H + 1 * ROW_H + 8;
+    expect(nodeHeight(padDef)).toBe(base + PAD_MARGIN_TOP + padGridHeight(padDef));
+  });
+
+  test("padGridRect は params 直下・グリッドは index で row/col に並ぶ", () => {
+    const grid = padGridRect(padNode, padDef)!;
+    expect(grid.x).toBe(100 + PAD_MARGIN_X);
+    expect(grid.y).toBe(50 + TITLE_H + 1 * ROW_H + 1 * ROW_H + PAD_MARGIN_TOP);
+    // index 0 は左上、index 5 は (row1, col1)
+    const p0 = padRect(padNode, padDef, 0)!;
+    expect(p0.x).toBe(grid.x);
+    expect(p0.y).toBe(grid.y);
+    const m = padGridMetrics(padDef)!;
+    const p5 = padRect(padNode, padDef, 5)!;
+    expect(p5.x).toBeCloseTo(grid.x + 1 * (m.padW + m.gap));
+    expect(p5.y).toBeCloseTo(grid.y + 1 * (m.padH + m.gap));
+    // 範囲外は null
+    expect(padRect(padNode, padDef, 16)).toBeNull();
+    expect(padRect(padNode, padDef, -1)).toBeNull();
+  });
+
+  test("padIndexAt: パッド中心→index、ギャップ/範囲外→null", () => {
+    for (const i of [0, 3, 5, 12, 15]) {
+      const r = padRect(padNode, padDef, i)!;
+      expect(padIndexAt(padNode, padDef, r.x + r.w / 2, r.y + r.h / 2)).toBe(i);
+    }
+    // グリッドの遥か外側
+    expect(padIndexAt(padNode, padDef, 0, 0)).toBeNull();
+    // パッド間のギャップ（index0 と index1 の隙間）
+    const r0 = padRect(padNode, padDef, 0)!;
+    const r1 = padRect(padNode, padDef, 1)!;
+    const gapX = (r0.x + r0.w + r1.x) / 2;
+    expect(padIndexAt(padNode, padDef, gapX, r0.y + r0.h / 2)).toBeNull();
+    // padGrid を持たない def は常に null
+    expect(padIndexAt(node, def, 100, 50)).toBeNull();
   });
 });

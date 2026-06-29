@@ -32,6 +32,34 @@ export function hasRandomRow(def: NodeTypeDef): boolean {
   return !!def.randomButton;
 }
 
+/** #205: ノード本体にパッドグリッド（4×4 等）を描くか（padGrid を持つノード）。 */
+export function hasPadGrid(def: NodeTypeDef): boolean {
+  return !!def.padGrid;
+}
+
+/** #205: パッドグリッドのレイアウト定数（ノード内マージン・パッド間ギャップ）。 */
+export const PAD_GAP = 4;
+export const PAD_MARGIN_X = 8;
+export const PAD_MARGIN_TOP = 6;
+
+/** #205: グリッド全体の寸法（パッドサイズはノード幅から算出・正方形）。padGrid 無しは null。 */
+export function padGridMetrics(def: NodeTypeDef): {
+  rows: number; cols: number; padW: number; padH: number; gap: number; innerW: number;
+} | null {
+  if (!def.padGrid) return null;
+  const { rows, cols } = def.padGrid;
+  const innerW = NODE_WIDTH - 2 * PAD_MARGIN_X;
+  const padW = (innerW - (cols - 1) * PAD_GAP) / cols;
+  return { rows, cols, padW, padH: padW, gap: PAD_GAP, innerW };
+}
+
+/** #205: グリッドの高さ（全パッド＋ギャップ）。padGrid 無しは 0。 */
+export function padGridHeight(def: NodeTypeDef): number {
+  const m = padGridMetrics(def);
+  if (!m) return 0;
+  return m.rows * m.padH + (m.rows - 1) * m.gap;
+}
+
 /** #152: SceneInput のシーン選択行を出すか。 */
 export function hasSceneRow(def: NodeTypeDef): boolean {
   return !!def.sceneInput;
@@ -46,7 +74,9 @@ export function nodeHeight(def: NodeTypeDef): number {
   const fileRows = hasFileRow(def) ? FILE_ROWS * ROW_H : 0;
   const randomRow = hasRandomRow(def) ? ROW_H : 0;
   const sceneRow = hasSceneRow(def) ? ROW_H : 0;
-  return TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H + randomRow + fileRows + sceneRow + PADDING;
+  // #205: パッドグリッドは params 直下に上マージン＋グリッド本体ぶん高さを足す。
+  const padRows = hasPadGrid(def) ? PAD_MARGIN_TOP + padGridHeight(def) : 0;
+  return TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H + randomRow + fileRows + sceneRow + padRows + PADDING;
 }
 
 export function nodePos(node: NodeInstance): { x: number; y: number } {
@@ -155,6 +185,51 @@ export function randomRowRect(
 /** #99: ファイル行のラベル。未選択（空/undefined/null）は「ファイル未選択」。 */
 export function fileRowLabel(name: string | null | undefined): string {
   return name ? name : "ファイル未選択";
+}
+
+/**
+ * #205: パッドグリッド全体の領域（params 直下・padGrid 無しは null）。
+ * グリッドはファイル行/scene 行を持たないノード（MidiPad）の params の下に置く。
+ */
+export function padGridRect(
+  node: NodeInstance, def: NodeTypeDef,
+): { x: number; y: number; w: number; h: number } | null {
+  const m = padGridMetrics(def);
+  if (!m) return null;
+  const p = nodePos(node);
+  const top = TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H + PAD_MARGIN_TOP;
+  return { x: p.x + PAD_MARGIN_X, y: p.y + top, w: m.innerW, h: padGridHeight(def) };
+}
+
+/** #205: index（0..rows*cols-1）番目のパッド矩形。row=floor(index/cols), col=index%cols。範囲外/padGrid 無しは null。 */
+export function padRect(
+  node: NodeInstance, def: NodeTypeDef, index: number,
+): { x: number; y: number; w: number; h: number } | null {
+  const m = padGridMetrics(def);
+  const grid = padGridRect(node, def);
+  if (!m || !grid) return null;
+  if (index < 0 || index >= m.rows * m.cols) return null;
+  const col = index % m.cols;
+  const row = Math.floor(index / m.cols);
+  return {
+    x: grid.x + col * (m.padW + m.gap),
+    y: grid.y + row * (m.padH + m.gap),
+    w: m.padW,
+    h: m.padH,
+  };
+}
+
+/** #205: world 座標がどのパッドの上か（0..rows*cols-1）。ギャップ/範囲外は null。 */
+export function padIndexAt(
+  node: NodeInstance, def: NodeTypeDef, worldX: number, worldY: number,
+): number | null {
+  const m = padGridMetrics(def);
+  if (!m) return null;
+  for (let i = 0; i < m.rows * m.cols; i++) {
+    const r = padRect(node, def, i);
+    if (r && worldX >= r.x && worldX <= r.x + r.w && worldY >= r.y && worldY <= r.y + r.h) return i;
+  }
+  return null;
 }
 
 /** #152: シーン選択行の領域（params 直下・sceneInput 無しは null）。 */

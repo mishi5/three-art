@@ -98,6 +98,11 @@ export interface NodeTypeDef {
   /** #152: ノードに「シーン選択行」を出す目印（SceneInput）。params.sceneId に参照先シーン id を持つ。 */
   sceneInput?: boolean;
   /**
+   * #205: ノード本体にパッドグリッド（rows×cols）を描く目印（MidiPad）。各パッドに音声ファイルを割り当て、
+   * クリックでワンショット発音する。ランタイム state に loadPadFile/playPad/hasPad/padLabel を持つ前提。
+   */
+  padGrid?: { rows: number; cols: number };
+  /**
    * #150: ノード上に値をランダム化するボタンを出す目印。クリックで paramId の param を
    * 同ノードの min/max param 範囲のランダム値に再ロールする（Number 用）。
    */

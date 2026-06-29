@@ -127,10 +127,52 @@ function recordAsset(nodeId: string, file: File): void {
   }).catch((e) => console.warn(`[node-vj] library.add failed for ${nodeId}:`, e));
 }
 
+/** #205: パッドへ割り当てたファイルをライブラリへ取り込み、params.padAssets[slot] に assetId を記録する。 */
+function recordPadAsset(nodeId: string, slot: number, file: File): void {
+  library.add(file).then((m) => {
+    if (!m) return;
+    const n = graph.nodes.find((x) => x.id === nodeId);
+    if (!n) return;
+    // 共有 default 配列を破壊しないよう必ず slice して自分専用の配列にしてから書き込む。
+    const prev = (n.params as Record<string, unknown>).padAssets;
+    const arr = Array.isArray(prev) ? prev.slice() : [];
+    arr[slot] = m.id;
+    (n.params as Record<string, unknown>).padAssets = arr;
+  }).catch((e) => console.warn(`[node-vj] library.add (pad) failed for ${nodeId}:`, e));
+}
+
+/** #205: パッドへの音声割当（user gesture 内でファイル選択ダイアログを開く）。 */
+function openPadFileDialog(nodeId: string, slot: number): void {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "audio/*";
+  input.style.display = "none";
+  document.body.appendChild(input);
+  input.addEventListener("change", () => {
+    const file = input.files?.[0];
+    if (file) {
+      runtime.resumeAudio();
+      const s = runtime.getState(nodeId) as PadLoadable | undefined;
+      void s?.loadPadFile?.(slot, file).catch((e) => console.warn(`[node-vj] loadPadFile failed ${nodeId}[${slot}]:`, e));
+      recordPadAsset(nodeId, slot, file);
+    }
+    input.remove();
+  });
+  input.addEventListener("cancel", () => input.remove());
+  input.click();
+}
+
 // ノードエディタ（全画面）。出力ポートのライブ値は runtime の直近評価結果から引く。
 const history = new History();
 type FileLoadable = { loadFile?: (f: File) => Promise<void> };
 type Named = { fileName?: string | null };
+// #205: MidiPad ランタイムの duck-type（パッド割当/発音/状態参照）。
+type PadLoadable = {
+  loadPadFile?: (index: number, file: File) => Promise<void>;
+  playPad?: (index: number) => void;
+  hasPad?: (index: number) => boolean;
+  padLabel?: (index: number) => string | null;
+};
 const editor = new NodeEditor(
   editorCanvas, graph, registry, history,
   (id) => runtime.getOutputs(id),
@@ -187,6 +229,20 @@ function loadAssetIntoNode(nodeId: string, assetId: string, file: File): void {
 // #206: ノードのアプリ内クリップボード（Cmd+C コピー / Cmd+V 貼付 / パネルからのドロップ貼付）。
 const clipboard = new NodeClipboard();
 editor.clipboard = clipboard;
+// #205: MidiPad のパッド操作配線（発音・割当・状態参照）。
+editor.onHitPad = (id, idx) => {
+  runtime.resumeAudio(); // user gesture で共有 AudioContext を起こす
+  (runtime.getState(id) as PadLoadable | undefined)?.playPad?.(idx);
+};
+editor.onAssignPad = (id, idx) => {
+  runtime.resumeAudio();
+  openPadFileDialog(id, idx); // pointerdown の user gesture 内でダイアログを開く
+};
+editor.padCellInfo = (id, idx) => {
+  const s = runtime.getState(id) as PadLoadable | undefined;
+  if (!s || typeof s.hasPad !== "function") return undefined;
+  return { filled: s.hasPad(idx), label: s.padLabel?.(idx) ?? null };
+};
 editor.onDropAsset = (assetId, x, y) => {
   runtime.resumeAudio(); // #128: 読込（user gesture）で共有 AudioContext を起こす
   Promise.all([library.getFile(assetId), library.get(assetId)]).then(([file, meta]) => {
@@ -204,6 +260,15 @@ editor.onDropAsset = (assetId, x, y) => {
 /** #154: グラフ読込後、params.assetId を持つノードへライブラリからファイルを復元する。 */
 async function restoreAssets(): Promise<void> {
   for (const ref of collectAssetRefs(graph)) {
+    // #205: slot 付き参照（MidiPad のパッド）は loadPadFile で復元する。
+    if (ref.slot !== undefined) {
+      const pad = runtime.getState(ref.nodeId) as PadLoadable | undefined;
+      if (pad?.hasPad?.(ref.slot)) continue; // 既に割当済みは再読込しない
+      const file = await library.getFile(ref.assetId);
+      if (!file) { console.warn(`[node-vj] asset not found: ${ref.assetId}`); continue; }
+      await pad?.loadPadFile?.(ref.slot, file).catch((e) => console.warn(`[node-vj] pad restore failed ${ref.nodeId}[${ref.slot}]:`, e));
+      continue;
+    }
     // #174: state 移譲で既に読込済み（再生継続中）のノードは再読込しない（loadFile は先頭から再生し直すため）。
     const cur = runtime.getState(ref.nodeId) as (FileLoadable & Named) | undefined;
     if (cur?.fileName) continue;

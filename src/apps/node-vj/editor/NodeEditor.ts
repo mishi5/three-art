@@ -15,6 +15,7 @@ import {
   transportRowRect, transportLayout, seekRatioAt, formatTime, randomRowRect,
   hasSceneRow, sceneRowRect, sceneRowLabel,
   outputScaleChipRect, CATEGORY_COLORS,
+  hasPadGrid, padRect, padIndexAt,
 } from "./layout";
 import { getOutputScale, setOutputScale, formatScale, DEFAULT_OUTPUT_SCALE } from "../graph/output-scale";
 import { randomInRange } from "./random-value";
@@ -116,6 +117,12 @@ export class NodeEditor {
   onDropAsset?: (assetId: string, worldX: number, worldY: number) => void;
   /** #206: ノードのアプリ内クリップボード（Cmd+C コピー / Cmd+V 貼付 / パネルからのドロップ貼付）。任意。 */
   clipboard?: NodeClipboard;
+  /** #205: 音入りパッドのクリック（ワンショット発音）。任意。 */
+  onHitPad?: (nodeId: string, padIndex: number) => void;
+  /** #205: 空パッドのクリック / Shift+クリック（ファイル割当ダイアログ）。任意。 */
+  onAssignPad?: (nodeId: string, padIndex: number) => void;
+  /** #205: パッドの状態（割当済みか・短縮ラベル）を引く。任意。 */
+  padCellInfo?: (nodeId: string, padIndex: number) => { filled: boolean; label: string | null } | undefined;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -369,6 +376,16 @@ export class NodeEditor {
         const b = previewButtonRect(hit.node);
         if (w.x >= b.x && w.x <= b.x + b.w && w.y >= b.y && w.y <= b.y + b.h) {
           hit.node.preview = !hit.node.preview;
+          return;
+        }
+      }
+      // #205: パッドグリッドのクリック。音入り→発音、空 or Shift→割当ダイアログ（pointerdown の user gesture 内）。
+      if (def?.padGrid) {
+        const idx = padIndexAt(hit.node, def, w.x, w.y);
+        if (idx !== null) {
+          const filled = this.padCellInfo?.(hit.node.id, idx)?.filled ?? false;
+          if (filled && !e.shiftKey) this.onHitPad?.(hit.node.id, idx);
+          else this.onAssignPad?.(hit.node.id, idx);
           return;
         }
       }
@@ -1433,6 +1450,29 @@ export class NodeEditor {
       ctx.strokeStyle = "#4a5566"; ctx.lineWidth = 1; ctx.stroke();
       ctx.fillStyle = "#9ab"; ctx.textAlign = "left"; ctx.font = "11px system-ui";
       ctx.fillText(ellipsizeEnd(ctx, sceneRowLabel(name), sr.w - 24), sr.x + 12, sr.y + sr.h / 2);
+    }
+    // #205: パッドグリッド（4×4）。音入り=色付き＋短縮ラベル、空=暗色。
+    if (hasPadGrid(def)) {
+      const grid = def.padGrid!;
+      const count = grid.rows * grid.cols;
+      ctx.font = "9px system-ui";
+      for (let i = 0; i < count; i++) {
+        const pr = padRect(node, def, i);
+        if (!pr) continue;
+        const info = this.padCellInfo?.(node.id, i);
+        const filled = info?.filled ?? false;
+        ctx.fillStyle = filled ? "#2f5a44" : "#1e2228";
+        roundRect(ctx, pr.x, pr.y, pr.w, pr.h, 4);
+        ctx.fill();
+        ctx.strokeStyle = filled ? "#5cc99a" : "#3a4048";
+        ctx.lineWidth = 1; ctx.stroke();
+        const label = filled ? (info?.label ?? null) : null;
+        ctx.fillStyle = filled ? "#cfeede" : "#586068";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        const text = label ?? String(i + 1);
+        ctx.fillText(ellipsizeEnd(ctx, text, pr.w - 6), pr.x + pr.w / 2, pr.y + pr.h / 2);
+      }
+      ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.font = "11px system-ui";
     }
     // #150: 🎲ランダムボタン行。
     if (def.randomButton) {
