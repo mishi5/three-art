@@ -23,6 +23,7 @@ import { tooltipForHit, tooltipBox, wrapLines, nodeMenuTooltipContent, type Tool
 import { screenToWorld, worldToScreen, zoomAt } from "./viewport";
 import { groupNodesByCategory } from "./node-menu";
 import { duplicateNodes } from "../graph/duplicate";
+import { CLIP_MIME, makeClipItem, pasteClip, type NodeClipboard } from "./node-clipboard";
 import type { History } from "../graph/history";
 import { nodesInRect, normRect } from "./selection";
 import { backgroundPointerDrag } from "./pan-policy";
@@ -116,6 +117,8 @@ export class NodeEditor {
   private showOutputValues = false;
   /** #154: アセットパネルから canvas へ D&D されたときのコールバック（world 座標）。任意。 */
   onDropAsset?: (assetId: string, worldX: number, worldY: number) => void;
+  /** #206: ノードのアプリ内クリップボード（Cmd+C コピー / Cmd+V 貼付 / パネルからのドロップ貼付）。任意。 */
+  clipboard?: NodeClipboard;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -203,7 +206,7 @@ export class NodeEditor {
     dbg.addEventListener("click", () => { this.showOutputValues = !this.showOutputValues; syncDbg(); });
     bar.appendChild(dbg);
     const hint = document.createElement("span");
-    hint.textContent = "  右クリック=メニュー / 空白ドラッグ=パン / Shift+ドラッグ=矩形選択 / Space・右ドラッグ=パン / ホイール=ズーム / 0=ズーム100% / Cmd+C=複製 / Del=削除";
+    hint.textContent = "  右クリック=メニュー / 空白ドラッグ=パン / Shift+ドラッグ=矩形選択 / Space・右ドラッグ=パン / ホイール=ズーム / 0=ズーム100% / Cmd+C=コピー / Cmd+V=貼付 / Del=削除";
     hint.style.cssText = "color:#888;align-self:center;";
     bar.appendChild(hint);
     document.body.appendChild(bar);
@@ -259,13 +262,27 @@ export class NodeEditor {
     this.hover = null; // ズーム中はツールチップを消す
   };
 
-  /** #154: asset id を運ぶ D&D のみ受け入れる（ドロップ可否を示すため preventDefault）。 */
+  /** #154/#206: asset id / クリップ項目を運ぶ D&D を受け入れる（ドロップ可否を示すため preventDefault）。 */
   private onDragOver = (e: DragEvent): void => {
-    if (e.dataTransfer?.types.includes("application/x-node-vj-asset")) e.preventDefault();
+    const t = e.dataTransfer?.types;
+    if (t && (t.includes("application/x-node-vj-asset") || t.includes(CLIP_MIME))) e.preventDefault();
   };
 
-  /** #154: ドロップ位置（world 座標）と asset id を onDropAsset へ通知する。 */
+  /** #154: asset / #206: クリップ項目をドロップ位置（world 座標）へ貼り付ける。 */
   private onDrop = (e: DragEvent): void => {
+    // #206: クリップ履歴項目のドロップ＝その位置に貼り付け、貼付ノードを選択・current に。
+    const clipId = e.dataTransfer?.getData(CLIP_MIME);
+    if (clipId && this.clipboard) {
+      e.preventDefault();
+      const item = this.clipboard.get(clipId);
+      if (item) {
+        this.history.record(this.graph);
+        const w = screenToWorld(e.clientX, e.clientY, this.offset, this.scale);
+        this.selectedIds = new Set(pasteClip(this.graph, this.registry, item, genId, { at: w }));
+        this.clipboard.setCurrent(clipId);
+      }
+      return;
+    }
     const id = e.dataTransfer?.getData("application/x-node-vj-asset");
     if (!id) return;
     e.preventDefault();
@@ -636,12 +653,21 @@ export class NodeEditor {
       }
       return;
     }
-    // #83: Cmd/Ctrl+C で選択ノードを即複製（+24px）し、複製群を選択状態にする。
-    if ((e.metaKey || e.ctrlKey) && e.key === "c" && this.selectedIds.size > 0) {
+    // #206: Cmd/Ctrl+C で選択ノード＋内部接続をクリップボードへコピー（履歴に積む）。貼付は Cmd+V。
+    if ((e.metaKey || e.ctrlKey) && e.key === "c" && this.selectedIds.size > 0 && this.clipboard) {
       e.preventDefault();
-      this.history.record(this.graph);
-      const newIds = duplicateNodes(this.graph, this.selectedIds, genId, 24);
-      this.selectedIds = new Set(newIds);
+      const item = makeClipItem(this.graph, this.selectedIds, genId);
+      if (item) this.clipboard.add(item);
+    }
+    // #206: Cmd/Ctrl+V で現在のクリップ項目をマウス位置へ貼り付け、貼付ノードを選択状態にする。
+    if ((e.metaKey || e.ctrlKey) && e.key === "v" && this.clipboard) {
+      const item = this.clipboard.current();
+      if (item) {
+        e.preventDefault();
+        this.history.record(this.graph);
+        const w = screenToWorld(this.pointer.x, this.pointer.y, this.offset, this.scale);
+        this.selectedIds = new Set(pasteClip(this.graph, this.registry, item, genId, { at: w }));
+      }
     }
     // #175: Cmd/Ctrl+G でグループ化、Shift 併用で選択ノードの所属グループを解除。
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "g") {

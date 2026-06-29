@@ -28,6 +28,8 @@ import { serializeProject, deserializeProject, projectFileName } from "./scene/p
 import { wouldCreateSceneCycle } from "./scene/scene-refs";
 import { scenePanelDef, type ScenePanelActions } from "./scene/scene-panel";
 import { buildSideDock } from "./editor/side-dock";
+import { NodeClipboard } from "./editor/node-clipboard";
+import { clipboardPanelDef } from "./editor/clipboard-panel";
 
 const editorCanvas = document.getElementById("editor");
 const previewCanvas = document.getElementById("preview");
@@ -182,6 +184,9 @@ function loadAssetIntoNode(nodeId: string, assetId: string, file: File): void {
   const n = graph.nodes.find((x2) => x2.id === nodeId);
   if (n) n.params.assetId = assetId; // 保存対象に記録
 }
+// #206: ノードのアプリ内クリップボード（Cmd+C コピー / Cmd+V 貼付 / パネルからのドロップ貼付）。
+const clipboard = new NodeClipboard();
+editor.clipboard = clipboard;
 editor.onDropAsset = (assetId, x, y) => {
   runtime.resumeAudio(); // #128: 読込（user gesture）で共有 AudioContext を起こす
   Promise.all([library.getFile(assetId), library.get(assetId)]).then(([file, meta]) => {
@@ -313,7 +318,7 @@ const sceneActions: ScenePanelActions = {
   setOutput: (id) => { sceneManager.setOutput(id); syncOutputScene(); },
 };
 // #151: VSCode 風サイドドック（最左アイコン列で アセット/シーン を切替）。
-buildSideDock([assetPanelDef(library), scenePanelDef(sceneActions)]);
+buildSideDock([assetPanelDef(library), scenePanelDef(sceneActions), clipboardPanelDef(clipboard)]);
 
 // 自動永続化: 編集の取りこぼし防止に定期 + ページ離脱時にアクティブシーンへ書き戻して保存。
 setInterval(() => snapshotActiveScene(), 5000);
