@@ -127,6 +127,38 @@ describe("serializeGraph / deserializeGraph", () => {
     expect(warnings.some((w) => w.includes("g2"))).toBe(true);
   });
 
+  test("#208 outputScales が round-trip で保持される", () => {
+    const g = createGraph();
+    addNode(g, { id: "n1", type: "Number", params: { value: 2 }, outputScales: { out: 2.5 } });
+    const { graph, warnings } = deserializeGraph(serializeGraph(g), r);
+    expect(warnings).toEqual([]);
+    expect(graph.nodes[0]!.outputScales).toEqual({ out: 2.5 });
+  });
+
+  test("#208 不正な outputScales は捨てる（未知ポート/非数値/非有限）", () => {
+    const text = [
+      "version: 1",
+      "nodes:",
+      "  - id: n1",
+      "    type: Number",
+      "    params: { value: 1 }",
+      "    outputScales:",
+      "      out: 3",        // 既知 number 出力 → 採用
+      "      ghost: 2",      // 未知ポート → 捨てる
+      "      bad: foo",      // 非数値 → 捨てる
+      "connections: []",
+    ].join("\n");
+    const { graph } = deserializeGraph(text, r);
+    expect(graph.nodes[0]!.outputScales).toEqual({ out: 3 });
+  });
+
+  test("#208 outputScales が無いノードは undefined のまま（既定挙動）", () => {
+    const g = createGraph();
+    addNode(g, { id: "n1", type: "Number", params: { value: 1 } });
+    const { graph } = deserializeGraph(serializeGraph(g), r);
+    expect(graph.nodes[0]!.outputScales).toBeUndefined();
+  });
+
   test("version 不一致は throw", () => {
     expect(() => deserializeGraph("version: 99\nnodes: []\nconnections: []", r)).toThrow();
   });

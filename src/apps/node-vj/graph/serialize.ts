@@ -61,6 +61,18 @@ export function deserializeGraph(text: string, registry: NodeRegistry): Deserial
     }
     if (typeof n.preview === "boolean") node.preview = n.preview;
     if (typeof n.name === "string" && n.name !== "") node.name = n.name; // #176
+    // #208: 出力倍率を復元。既知の number 型出力ポートかつ有限数値のみ採用（不正/未知ポートは捨てる）。
+    const rawScales = (n as { outputScales?: unknown }).outputScales;
+    if (rawScales && typeof rawScales === "object" && !Array.isArray(rawScales)) {
+      const numberOutputs = new Set(def.outputs.filter((p) => p.type === "number").map((p) => p.id));
+      const scales: Record<string, number> = {};
+      for (const [portId, v] of Object.entries(rawScales as Record<string, unknown>)) {
+        if (numberOutputs.has(portId) && typeof v === "number" && Number.isFinite(v)) {
+          scales[portId] = v;
+        }
+      }
+      if (Object.keys(scales).length > 0) node.outputScales = scales;
+    }
     graph.nodes.push(node);
   }
 

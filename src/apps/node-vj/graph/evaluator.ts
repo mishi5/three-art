@@ -3,6 +3,7 @@
 import { findNode, type GraphDoc, type NodeInstance } from "./graph-doc";
 import type { EvalContext, NodeEnv, NodeRegistry, NodeState, NodeTypeDef } from "./node-type";
 import { effectiveInputPorts, isParamInput } from "./node-ports";
+import { applyOutputScales } from "./output-scale";
 
 export interface EvaluateOptions {
   timeSec: number;
@@ -64,10 +65,13 @@ export function evaluate(
       env: opts.env,
     };
     const outputs = def.evaluate(ctx);
+    // #208: number 出力ポートの倍率を適用してから記録・下流伝播する。
+    // 倍率なし/既定 1 のときは applyOutputScales が同じ参照を返す（＝従来と完全に同じ挙動）。
+    const scaled = applyOutputScales(outputs, def, node.outputScales);
 
     visiting.delete(nodeId);
-    memo.set(nodeId, outputs);
-    return outputs;
+    memo.set(nodeId, scaled);
+    return scaled;
   }
 
   for (const sink of getSinks(g, registry)) evalNode(sink.id);

@@ -85,6 +85,44 @@ describe("evaluator", () => {
     expect(sunk).toEqual([12]);
   });
 
+  test("#208 outputScales 無しなら従来と完全に同じ値（回帰防止）", () => {
+    const { r, sunk } = setup();
+    const g = createGraph();
+    addNode(g, { id: "c1", type: "Const", params: { value: 3 } });
+    addNode(g, { id: "s", type: "Sink", params: {} });
+    addConnection(g, r, conn("e1", "c1", "outN", "s", "inN"));
+    evaluate(g, r, { timeSec: 0 });
+    expect(sunk).toEqual([3]);
+  });
+
+  test("#208 number 出力に倍率が掛かって下流へ流れる", () => {
+    const { r, sunk } = setup();
+    const g = createGraph();
+    addNode(g, { id: "c1", type: "Const", params: { value: 3 }, outputScales: { outN: 2 } });
+    addNode(g, { id: "s", type: "Sink", params: {} });
+    addConnection(g, r, conn("e1", "c1", "outN", "s", "inN"));
+    evaluate(g, r, { timeSec: 0 });
+    expect(sunk).toEqual([6]);
+  });
+
+  test("#208 倍率 1 は従来と同じ（素通し）", () => {
+    const { r, sunk } = setup();
+    const g = createGraph();
+    addNode(g, { id: "c1", type: "Const", params: { value: 5 }, outputScales: { outN: 1 } });
+    addNode(g, { id: "s", type: "Sink", params: {} });
+    addConnection(g, r, conn("e1", "c1", "outN", "s", "inN"));
+    evaluate(g, r, { timeSec: 0 });
+    expect(sunk).toEqual([5]);
+  });
+
+  test("#208 倍率は memo（getOutputs 相当）にも反映される", () => {
+    const { r } = setup();
+    const g = createGraph();
+    addNode(g, { id: "c1", type: "Const", params: { value: 4 }, outputScales: { outN: 0.5 } });
+    const memo = evaluate(g, r, { timeSec: 0 });
+    expect(memo.get("c1")).toEqual({ outN: 2 });
+  });
+
   test("getSinks は isSink と出力辺なしを sink とみなす", () => {
     const { r } = setup();
     const g = createGraph();

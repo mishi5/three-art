@@ -14,7 +14,9 @@ import {
   previewButtonRect, previewWindowRect, hasFileRow, fileRowRect, fileRowLabel,
   transportRowRect, transportLayout, seekRatioAt, formatTime, randomRowRect,
   hasSceneRow, sceneRowRect, sceneRowLabel,
+  outputScaleChipRect,
 } from "./layout";
+import { getOutputScale, setOutputScale, formatScale, DEFAULT_OUTPUT_SCALE } from "../graph/output-scale";
 import { randomInRange } from "./random-value";
 import { hitTest } from "./hit-test";
 import { tooltipForHit, tooltipBox, wrapLines, nodeMenuTooltipContent, type TooltipContent } from "./tooltip";
@@ -397,6 +399,18 @@ export class NodeEditor {
           const max = Number(n.params.max ?? 1);
           n.params[def.randomButton.paramId] = Math.round(randomInRange(min, max, Math.random()) * 1000) / 1000;
           return;
+        }
+      }
+      // #208: number 出力の倍率チップクリックで倍率入力を開く。
+      if (def) {
+        for (let oi = 0; oi < def.outputs.length; oi++) {
+          const op = def.outputs[oi]!;
+          if (op.type !== "number") continue;
+          const chip = outputScaleChipRect(hit.node, oi);
+          if (w.x >= chip.x && w.x <= chip.x + chip.w && w.y >= chip.y && w.y <= chip.y + chip.h) {
+            this.editOutputScale(hit.node, op.id, chip);
+            return;
+          }
         }
       }
       // Cmd/Ctrl+クリック = 選択トグル（ドラッグは開始しない）
@@ -957,6 +971,41 @@ export class NodeEditor {
     });
   }
 
+  /** #208: number 出力ポートの倍率チップを描く（既定 1 は控えめ、それ以外は強調）。 */
+  private drawScaleChip(rect: { x: number; y: number; w: number; h: number }, scale: number): void {
+    const ctx = this.ctx;
+    const active = scale !== DEFAULT_OUTPUT_SCALE;
+    ctx.save();
+    ctx.fillStyle = active ? "#2f5a44" : "#23272c";
+    roundRect(ctx, rect.x, rect.y, rect.w, rect.h, 4);
+    ctx.fill();
+    ctx.strokeStyle = active ? "#5cc99a" : "#3a4048";
+    ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = active ? "#bfeede" : "#5a626b";
+    ctx.font = "10px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(formatScale(scale), rect.x + rect.w / 2, rect.y + rect.h / 2);
+    ctx.restore();
+  }
+
+  /** #208: 倍率チップをクリックしたとき、数値入力オーバーレイで倍率を編集する。 */
+  private editOutputScale(node: NodeInstance, portId: string, chip: { x: number; y: number; w: number; h: number }): void {
+    const s = worldToScreen(chip.x, chip.y + chip.h / 2, this.offset, this.scale);
+    openParamInput({
+      screenX: s.x,
+      screenY: s.y - 9 * this.scale,
+      width: 64 * this.scale,
+      fontPx: 11 * this.scale,
+      value: getOutputScale(node, portId),
+      kind: "number",
+      onCommit: (v) => {
+        const next = typeof v === "number" && Number.isFinite(v) ? v : DEFAULT_OUTPUT_SCALE;
+        if (getOutputScale(node, portId) === next) return;
+        this.history.record(this.graph);
+        setOutputScale(node, portId, next);
+      },
+    });
+  }
+
   // ===== #176: ラベル（自由ラベル / ノードラベル / グループ名）=====
 
   /** world 座標 (wx,wy) にある自由ラベルを返す（テキスト矩形で簡易判定・後ろのものを優先）。 */
@@ -1245,8 +1294,15 @@ export class NodeEditor {
     def.outputs.forEach((p, i) => {
       const pos = outputPortPos(node, i);
       this.drawPort(pos.x, pos.y, p.type);
+      // #208: number 出力は右端に倍率チップを描き、ラベルはその左へ寄せて重なりを避ける。
+      let labelRight = pos.x - 10;
+      if (p.type === "number") {
+        const chip = outputScaleChipRect(node, i);
+        this.drawScaleChip(chip, getOutputScale(node, p.id));
+        labelRight = chip.x - 4;
+      }
       ctx.fillStyle = "#bbb"; ctx.textAlign = "right";
-      ctx.fillText(p.label, pos.x - 10, pos.y);
+      ctx.fillText(p.label, labelRight, pos.y);
       if (outputs) {
         const txt = formatPortValue(outputs[p.id], p.type);
         if (txt) {

@@ -67,6 +67,20 @@ export function outputPortPos(node: NodeInstance, idx: number): { x: number; y: 
   return { x: p.x + NODE_WIDTH, y: p.y + TITLE_H + idx * ROW_H + ROW_H / 2 };
 }
 
+/** #208: 出力ポート行に置く倍率チップの寸法。 */
+export const SCALE_CHIP_W = 30;
+export const SCALE_CHIP_H = 14;
+
+/**
+ * #208: number 出力ポートの倍率チップ領域（ノード内・右端寄り、ポート行の右側）。
+ * 出力ラベルはこのチップの左へ寄せて重ならないようにする。
+ */
+export function outputScaleChipRect(node: NodeInstance, idx: number): { x: number; y: number; w: number; h: number } {
+  const cy = outputPortPos(node, idx).y;
+  const p = nodePos(node);
+  return { x: p.x + NODE_WIDTH - SCALE_CHIP_W - 6, y: cy - SCALE_CHIP_H / 2, w: SCALE_CHIP_W, h: SCALE_CHIP_H };
+}
+
 /** param 行の y 中心（行クリック判定用）。 */
 export function paramRowY(node: NodeInstance, def: NodeTypeDef, i: number): number {
   const p = nodePos(node);
