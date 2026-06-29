@@ -26,9 +26,10 @@ Issue: https://github.com/mishi5/three-art/issues/206
 
 ## UI
 
-- サイドパネル `clipboardPanelDef(clipboard)`（side-dock に登録）。履歴一覧（ラベル＝ノード種別/件数＋接続数）。
+- サイドパネル `clipboardPanelDef(clipboard)`（side-dock に登録）。履歴一覧（**ミニ配置図サムネイル**＋ラベル＝ノード種別/件数＋接続数）。
   - **クリック → setCurrent**（現在項目を強調）。
   - **ドラッグ → dataTransfer に `CLIP_MIME`（application/x-node-vj-clip）＋項目 id**。
+- サムネイル `editor/clip-thumbnail.ts`: コピー時に NodeEditor が `renderClipThumbnail`（ノードの位置・サイズ・カテゴリ色＋内部接続を小 canvas に描画→data URL）を生成し `ClipItem.thumbnail` に格納。配置変換 `thumbTransform`（bbox を枠内に中央寄せ・アスペクト維持）は純関数でテスト。`CATEGORY_COLORS` は layout.ts へ移動し共有。
 - `NodeEditor`:
   - Cmd+C: `makeClipItem` → `clipboard.add`。
   - Cmd+V: `clipboard.current()` を `pasteClip` でマウス位置へ。history.record で undo 対応・貼付ノードを選択。

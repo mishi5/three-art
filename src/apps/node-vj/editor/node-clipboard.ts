@@ -17,6 +17,8 @@ export interface ClipItem {
   connections: Connection[];
   /** 一覧表示用ラベル（生成時に確定）。 */
   label: string;
+  /** #206: ミニ配置図サムネイルの data URL（生成は editor 側・任意）。 */
+  thumbnail?: string;
 }
 
 /** 貼り付け位置の指定。at（左上を合わせる world 座標）優先、無ければ offset（元位置からの平行移動）。 */

@@ -14,7 +14,7 @@ import {
   previewButtonRect, previewWindowRect, hasFileRow, fileRowRect, fileRowLabel,
   transportRowRect, transportLayout, seekRatioAt, formatTime, randomRowRect,
   hasSceneRow, sceneRowRect, sceneRowLabel,
-  outputScaleChipRect,
+  outputScaleChipRect, CATEGORY_COLORS,
 } from "./layout";
 import { getOutputScale, setOutputScale, formatScale, DEFAULT_OUTPUT_SCALE } from "../graph/output-scale";
 import { randomInRange } from "./random-value";
@@ -24,6 +24,7 @@ import { screenToWorld, worldToScreen, zoomAt } from "./viewport";
 import { groupNodesByCategory } from "./node-menu";
 import { duplicateNodes } from "../graph/duplicate";
 import { CLIP_MIME, makeClipItem, pasteClip, type NodeClipboard } from "./node-clipboard";
+import { renderClipThumbnail } from "./clip-thumbnail";
 import type { History } from "../graph/history";
 import { nodesInRect, normRect } from "./selection";
 import { backgroundPointerDrag } from "./pan-policy";
@@ -49,10 +50,6 @@ const PORT_COLORS: Record<PortType, string> = {
   pose: "#ff9af0", signal: "#ffec7f", texture: "#c79aff", trigger: "#ff7f7f",
   points: "#7fffd4", audio: "#ffb37f",
 };
-const CATEGORY_COLORS: Record<string, string> = {
-  input: "#2a4a6a", process: "#3a5a3a", visual: "#5a3a5a", effect: "#3a4a5a", output: "#5a3a3a",
-};
-
 type Drag =
   // 選択グループの一括移動。anchors は各ノードの「カーソル→ノード位置」オフセット。
   | { kind: "group"; anchors: Map<string, { dx: number; dy: number }>; moved: boolean }
@@ -657,7 +654,10 @@ export class NodeEditor {
     if ((e.metaKey || e.ctrlKey) && e.key === "c" && this.selectedIds.size > 0 && this.clipboard) {
       e.preventDefault();
       const item = makeClipItem(this.graph, this.selectedIds, genId);
-      if (item) this.clipboard.add(item);
+      if (item) {
+        item.thumbnail = renderClipThumbnail(item.nodes, item.connections, this.registry); // #206: ミニ配置図
+        this.clipboard.add(item);
+      }
     }
     // #206: Cmd/Ctrl+V で現在のクリップ項目をマウス位置へ貼り付け、貼付ノードを選択状態にする。
     if ((e.metaKey || e.ctrlKey) && e.key === "v" && this.clipboard) {

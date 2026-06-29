@@ -53,6 +53,21 @@ function mountClipboardPanel(host: HTMLElement, clipboard: NodeClipboard): void 
       `background:${isCurrent ? "#243042" : "#16161c"};` +
       (isCurrent ? "border-color:#4a6a8a;" : "");
 
+    // ミニ配置図サムネイル（無ければアイコン）。
+    const thumb = document.createElement("div");
+    thumb.style.cssText =
+      "flex:0 0 auto;width:58px;height:28px;border-radius:3px;background:#0e0e13;border:1px solid #333;" +
+      "display:flex;align-items:center;justify-content:center;overflow:hidden;color:#556;";
+    if (item.thumbnail) {
+      const img = document.createElement("img");
+      img.src = item.thumbnail;
+      img.style.cssText = "width:100%;height:100%;object-fit:contain;display:block;";
+      thumb.appendChild(img);
+    } else {
+      thumb.innerHTML = CLIP_ICON;
+    }
+    row.appendChild(thumb);
+
     const info = document.createElement("div");
     info.style.cssText = "flex:1 1 auto;min-width:0;";
     const label = document.createElement("div");
