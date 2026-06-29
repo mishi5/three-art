@@ -92,6 +92,38 @@ describe("SceneManager", () => {
     expect(m.outputId()).toBe("s0");
   });
 
+  // #201 全シーン差し替え（プロジェクト読込）
+  test("replaceAll で全シーン・activeId・outputId を差し替え・永続化・通知", () => {
+    const { m, store } = mgr();
+    let fired = 0;
+    m.onChange(() => { fired++; });
+    const set = {
+      version: 1,
+      scenes: [
+        { id: "p1", name: "P1", graph: createGraph() },
+        { id: "p2", name: "P2", graph: createGraph() },
+      ],
+      activeId: "p2",
+      outputId: "p1",
+    };
+    m.replaceAll(set);
+    expect(m.list().map((s) => s.id)).toEqual(["p1", "p2"]);
+    expect(m.activeId()).toBe("p2");
+    expect(m.outputId()).toBe("p1");
+    expect(store.load()?.scenes.length).toBe(2);
+    expect(fired).toBe(1);
+  });
+  test("replaceAll: activeId 不正は先頭へ・outputId 不正は null", () => {
+    const { m } = mgr();
+    m.replaceAll({ version: 1, scenes: [{ id: "p1", name: "P1", graph: createGraph() }], activeId: "x", outputId: "y" });
+    expect(m.activeId()).toBe("p1");
+    expect(m.outputId()).toBeNull();
+  });
+  test("replaceAll: 空 scenes は throw", () => {
+    const { m } = mgr();
+    expect(() => m.replaceAll({ version: 1, scenes: [], activeId: "x" })).toThrow();
+  });
+
   test("rename / updateActiveGraph / onChange / 永続化", () => {
     const { m, store } = mgr();
     let fired = 0;

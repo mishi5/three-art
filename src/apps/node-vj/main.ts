@@ -24,6 +24,7 @@ import { assetDropTarget, nodeTypeForKind } from "./asset/asset-drop";
 import { collectAssetRefs } from "./asset/asset-refs";
 import { SceneStore } from "./scene/scene-store";
 import { SceneManager, singleSceneSet } from "./scene/scene-manager";
+import { serializeProject, deserializeProject, projectFileName } from "./scene/project-file";
 import { wouldCreateSceneCycle } from "./scene/scene-refs";
 import { scenePanelDef, type ScenePanelActions } from "./scene/scene-panel";
 import { buildSideDock } from "./editor/side-dock";
@@ -255,8 +256,11 @@ function snapshotActiveScene(): void {
   sceneManager.updateActiveGraph(graph);
 }
 
-/** 新アクティブシーンの内容を共有グラフへ反映し、履歴トラック切替・state 再同期・アセット復元する。 */
-function reflectActiveScene(): void {
+/**
+ * 新アクティブシーンの内容を共有グラフへ反映し、履歴トラック切替・state 再同期・アセット復元する。
+ * アセット復元（restoreAssets）の Promise を返すので、読込直後に再生停止する等の後処理を連鎖できる。
+ */
+function reflectActiveScene(): Promise<void> {
   const act = sceneManager.active();
   // #174: 切替前に state を移譲（破棄しない）。pin 中に編集シーンを切り替えても、
   // 出力/参照先として再生継続中の動画/音声がシーク位置を保つ（replaceGraph より前に呼ぶ）。
@@ -266,7 +270,15 @@ function reflectActiveScene(): void {
   runtime.resumeAudio();   // user gesture 由来の切替で共有 AudioContext を起こす
   runtime.ensureStates();  // 移譲後の state を新グラフへ整合（不足ノードのみ生成・余剰のみ破棄）
   wireSceneProvider();     // #152: 新しいアクティブシーン id を runtime に反映
-  void restoreAssets();    // 新シーンの assetId をライブラリから復元（読込済みはスキップ）
+  return restoreAssets();  // 新シーンの assetId をライブラリから復元（読込済みはスキップ）
+}
+
+/** #201: 現アクティブグラフの Video/AudioFileInput を停止状態にする（プロジェクト読込直後など）。 */
+function pauseActivePlayback(): void {
+  for (const node of graph.nodes) {
+    const s = runtime.getState(node.id) as Partial<PlaybackControl> | undefined;
+    if (s?.isPlaying?.() && s.togglePlay) s.togglePlay(); // 再生中のみ停止（loadFile は自動再生のため）
+  }
 }
 
 const sceneActions: ScenePanelActions = {
@@ -276,23 +288,23 @@ const sceneActions: ScenePanelActions = {
     if (id === sceneManager.activeId()) return;
     snapshotActiveScene();       // 現シーンの編集を保存
     sceneManager.setActive(id);
-    reflectActiveScene();
+    void reflectActiveScene();
   },
   add: () => {
     snapshotActiveScene();
     sceneManager.add();          // 空シーンを作り active に
-    reflectActiveScene();
+    void reflectActiveScene();
   },
   duplicate: (id) => {
     snapshotActiveScene();
     sceneManager.duplicate(id);  // 複製を active に
-    reflectActiveScene();
+    void reflectActiveScene();
   },
   remove: (id) => {
     const wasActive = id === sceneManager.activeId();
     history.removeScene(id);
     sceneManager.remove(id);     // 最後の1つは消えない・active が変わりうる
-    if (wasActive && sceneManager.activeId() !== id) reflectActiveScene();
+    if (wasActive && sceneManager.activeId() !== id) void reflectActiveScene();
   },
   rename: (id, name) => sceneManager.rename(id, name),
   onChange: (cb) => sceneManager.onChange(cb),
@@ -309,7 +321,27 @@ window.addEventListener("beforeunload", () => snapshotActiveScene());
 
 // グラフ保存/読込バー（#65）。読込は replaceGraph で同一参照のまま反映される。
 // #154: 読込完了後に restoreAssets でアセットを自動復元する。
-buildGraphIoBar(graph, registry, new GraphStore(localStorageAdapter()), history, () => { void restoreAssets(); });
+// #201: プロジェクト（全シーン状態）保存/読込フックを併設する。
+buildGraphIoBar(
+  graph, registry, new GraphStore(localStorageAdapter()), history,
+  () => { void restoreAssets(); },
+  {
+    // 保存: 編集中グラフをアクティブシーンへ書き戻してから全シーンを YAML 化。
+    serialize: () => { snapshotActiveScene(); return serializeProject(sceneManager.toSceneSet()); },
+    // 読込: 現在の状態を破棄して復元。失敗時は throw（UI が toast 表示）。
+    apply: (text) => {
+      const { project, warnings } = deserializeProject(text, registry);
+      history.clear();                 // 旧シーンの履歴トラックを捨てる（読込は全置換）
+      sceneManager.replaceAll(project); // onChange でシーンパネル再描画
+      // 共有 graph 反映・state 再同期・restoreAssets。復元完了後に Video/Audio を停止状態にする
+      // （loadFile は自動再生するため、読込直後は止めておく）。
+      void reflectActiveScene().catch(() => { /* 復元失敗時も停止は試みる */ }).then(() => pauseActivePlayback());
+      syncOutputScene();               // #174 出力シーン id を runtime へ反映
+      return warnings;
+    },
+    downloadName: () => projectFileName(new Date()),
+  },
+);
 
 // 入力起動コントロール（mic/camera/display は user gesture 必須のためボタンから start）。
 // #99: ファイル選択はノード上の「ファイル行」クリックに移行（共有ファイル input は撤去）。

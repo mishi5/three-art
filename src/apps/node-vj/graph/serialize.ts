@@ -90,7 +90,8 @@ export function deserializeGraph(text: string, registry: NodeRegistry): Deserial
       id: c.id, from: { node: c.from.node, port: c.from.port }, to: { node: c.to.node, port: c.to.port },
     });
     if (!res.ok) {
-      warnings.push(`connection ${c.id} を捨てました（${res.reason}）`);
+      // どのポート間の接続が落ちたかを併記して原因を追えるようにする（例: 削除されたポートへの接続）。
+      warnings.push(`connection ${c.id} を捨てました（${res.reason}: ${c.from.node}.${c.from.port} → ${c.to.node}.${c.to.port}）`);
     }
   }
 
