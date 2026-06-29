@@ -1,5 +1,5 @@
 import { expect, test, describe } from "bun:test";
-import { tooltipForHit, tooltipBox, wrapLines } from "./tooltip";
+import { tooltipForHit, tooltipBox, wrapLines, nodeMenuTooltipContent } from "./tooltip";
 import { NodeRegistry, type NodeTypeDef } from "../graph/node-type";
 import type { NodeInstance } from "../graph/graph-doc";
 import type { HitResult } from "./hit-test";
@@ -123,5 +123,45 @@ describe("wrapLines", () => {
   test("折り返した行に空白を含む語が混在しても各行が幅以内", () => {
     const lines = wrapLines("abc あいうえおかきくけこさしすせそ xyz", 100, measure);
     for (const ln of lines) expect(measure(ln)).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("nodeMenuTooltipContent (#203 ノード追加メニューのツールチップ)", () => {
+  const def: NodeTypeDef = {
+    type: "Add",
+    description: "2 入力を足す",
+    inputs: [
+      { id: "a", label: "a", type: "number" },
+      { id: "b", label: "b", type: "number" },
+    ],
+    outputs: [{ id: "out", label: "a+b", type: "number" }],
+    params: [],
+    evaluate: () => ({}),
+  };
+
+  test("description と入出力ポート（label:type）を返す", () => {
+    const c = nodeMenuTooltipContent(def);
+    expect(c?.title).toBe("Add");
+    expect(c?.body).toBe("2 入力を足す");
+    expect(c?.ports).toBe("in a:number, b:number   out a+b:number");
+  });
+
+  test("def が undefined なら null", () => {
+    expect(nodeMenuTooltipContent(undefined)).toBeNull();
+  });
+
+  test("description が無くてもポートがあれば返す（body は空）", () => {
+    const noDesc: NodeTypeDef = {
+      type: "Cam", inputs: [], outputs: [{ id: "tex", label: "tex", type: "texture" }],
+      params: [], evaluate: () => ({}),
+    };
+    const c = nodeMenuTooltipContent(noDesc);
+    expect(c?.body).toBe("");
+    expect(c?.ports).toBe("out tex:texture");
+  });
+
+  test("description もポートも無ければ null", () => {
+    const empty: NodeTypeDef = { type: "X", inputs: [], outputs: [], params: [], evaluate: () => ({}) };
+    expect(nodeMenuTooltipContent(empty)).toBeNull();
   });
 });

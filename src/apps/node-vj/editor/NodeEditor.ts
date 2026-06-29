@@ -17,7 +17,7 @@ import {
 } from "./layout";
 import { randomInRange } from "./random-value";
 import { hitTest } from "./hit-test";
-import { tooltipForHit, tooltipBox, wrapLines, type TooltipContent } from "./tooltip";
+import { tooltipForHit, tooltipBox, wrapLines, nodeMenuTooltipContent, type TooltipContent } from "./tooltip";
 import { screenToWorld, worldToScreen, zoomAt } from "./viewport";
 import { groupNodesByCategory } from "./node-menu";
 import { duplicateNodes } from "../graph/duplicate";
@@ -77,6 +77,8 @@ const DRAG_THRESHOLD = 3;
 
 /** #114: ホバー開始からツールチップ表示までの待ち時間 (ms)。 */
 const TOOLTIP_DELAY_MS = 450;
+// #203: ノード追加メニュー項目の hover ツールチップ表示までの待ち時間。
+const MENU_TOOLTIP_DELAY_MS = 500;
 
 let idCounter = 0;
 function genId(prefix: string): string { return `${prefix}${Date.now().toString(36)}_${++idCounter}`; }
@@ -105,6 +107,9 @@ export class NodeEditor {
   private submenu: HTMLDivElement | null = null;
   /** #166: 現在のメニューを開いたトグルボタン。再押下クローズの判定に使う（右クリックメニューは null）。 */
   private menuAnchor: HTMLElement | null = null;
+  // #203: ノード追加メニュー項目のホバー説明ツールチップ（DOM・遅延表示）。
+  private menuTooltipEl: HTMLDivElement | null = null;
+  private menuTooltipTimer: number | null = null;
   /** 出力ポート横のライブ値表示（デバッグ用）。既定 OFF、ツールバーで切替。 */
   private showOutputValues = false;
   /** #154: アセットパネルから canvas へ D&D されたときのコールバック（world 座標）。任意。 */
@@ -710,14 +715,64 @@ export class NodeEditor {
     for (const o of opts) this.addMenuItem(menu, o.name, () => this.sceneSelect?.choose(nodeId, o.id));
   }
 
-  private addMenuItem(menu: HTMLElement, text: string, onClick: () => void): void {
+  private addMenuItem(menu: HTMLElement, text: string, onClick: () => void, tooltipType?: string): void {
     const item = document.createElement("div");
     item.textContent = text;
     item.style.cssText = "padding:4px 10px;border-radius:4px;cursor:pointer;white-space:nowrap;";
-    item.addEventListener("mouseenter", () => { item.style.background = "#2a2a36"; });
-    item.addEventListener("mouseleave", () => { item.style.background = "transparent"; });
+    item.addEventListener("mouseenter", () => {
+      item.style.background = "#2a2a36";
+      if (tooltipType) this.scheduleMenuTooltip(item, tooltipType); // #203: ノード説明
+    });
+    item.addEventListener("mouseleave", () => {
+      item.style.background = "transparent";
+      this.hideMenuTooltip();
+    });
     item.addEventListener("click", () => { this.closeContextMenu(); onClick(); });
     menu.appendChild(item);
+  }
+
+  /** #203: メニュー項目に一定時間 hover でノードの説明ツールチップを出す（DOM・画面端回避）。 */
+  private scheduleMenuTooltip(item: HTMLElement, type: string): void {
+    this.hideMenuTooltip();
+    this.menuTooltipTimer = window.setTimeout(() => this.showMenuTooltip(item, type), MENU_TOOLTIP_DELAY_MS);
+  }
+
+  private showMenuTooltip(item: HTMLElement, type: string): void {
+    const content = nodeMenuTooltipContent(this.registry.get(type));
+    if (!content) return;
+    const el = document.createElement("div");
+    el.style.cssText =
+      "position:fixed;z-index:400;max-width:280px;background:#0d0d12;border:1px solid #555;" +
+      "border-radius:6px;padding:6px 8px;font:12px system-ui;color:#ccc;pointer-events:none;" +
+      "box-shadow:0 4px 16px rgba(0,0,0,0.6);white-space:normal;line-height:1.45;";
+    const title = document.createElement("div");
+    title.textContent = content.title;
+    title.style.cssText = "color:#e8c34a;font-weight:600;margin-bottom:2px;";
+    el.appendChild(title);
+    if (content.body) {
+      const body = document.createElement("div");
+      body.textContent = content.body;
+      el.appendChild(body);
+    }
+    if (content.ports) {
+      const ports = document.createElement("div");
+      ports.textContent = content.ports;
+      ports.style.cssText = "color:#888;margin-top:3px;font-size:11px;";
+      el.appendChild(ports);
+    }
+    document.body.appendChild(el);
+    // 項目の右上を基準に、画面端を避けて配置（tooltipBox 純関数を流用）。
+    const r = item.getBoundingClientRect();
+    const b = el.getBoundingClientRect();
+    const box = tooltipBox(r.right, r.top, b.width, b.height, window.innerWidth, window.innerHeight, 6, 6);
+    el.style.left = `${box.x}px`;
+    el.style.top = `${box.y}px`;
+    this.menuTooltipEl = el;
+  }
+
+  private hideMenuTooltip(): void {
+    if (this.menuTooltipTimer !== null) { window.clearTimeout(this.menuTooltipTimer); this.menuTooltipTimer = null; }
+    if (this.menuTooltipEl) { this.menuTooltipEl.remove(); this.menuTooltipEl = null; }
   }
 
   /** 階層メニューのカテゴリ行（ホバーで型のサブメニューを開く）。 */
@@ -746,7 +801,7 @@ export class NodeEditor {
       "border:1px solid #444;border-radius:6px;padding:4px;font:12px system-ui;color:#ddd;" +
       "max-height:80vh;overflow:auto;box-shadow:0 4px 16px rgba(0,0,0,0.5);min-width:120px;";
     for (const type of types) {
-      this.addMenuItem(sub, "+ " + type, () => this.addNodeOfType(type, worldPos));
+      this.addMenuItem(sub, "+ " + type, () => this.addNodeOfType(type, worldPos), type);
     }
     this.submenu = sub;
     document.body.appendChild(sub);
@@ -780,7 +835,7 @@ export class NodeEditor {
     // #166: このボタン上の pointerdown では closeOnOutside で閉じず、click のトグルに委ねる。
     this.menuAnchor = anchor;
     for (const type of group.types) {
-      this.addMenuItem(menu, "+ " + type, () => this.addNodeOfType(type));
+      this.addMenuItem(menu, "+ " + type, () => this.addNodeOfType(type), type);
     }
   }
 
@@ -829,6 +884,7 @@ export class NodeEditor {
   };
 
   private closeSubmenu(): void {
+    this.hideMenuTooltip(); // #203: サブメニュー消滅時にツールチップも消す
     if (!this.submenu) return;
     this.submenu.remove();
     this.submenu = null;

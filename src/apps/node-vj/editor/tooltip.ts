@@ -1,7 +1,7 @@
 // #114: ノード/param/ポートのマウスオーバー説明ツールチップ。
 // ヒット結果→表示テキストの解決と、画面端を避ける配置・テキスト折り返しを純関数で持つ。
 // 描画とホバー判定タイミングは NodeEditor 側（canvas 直描画・ズーム非依存のスクリーン座標）。
-import type { NodeRegistry } from "../graph/node-type";
+import type { NodeRegistry, NodeTypeDef } from "../graph/node-type";
 import type { HitResult } from "./hit-test";
 
 export interface TooltipContent {
@@ -42,6 +42,31 @@ export function tooltipForHit(hit: HitResult, registry: NodeRegistry): TooltipCo
   }
 
   return null;
+}
+
+/** #203: メニュー用ツールチップの内容（title=ノード type / body=description / ports=入出力概要）。 */
+export interface NodeMenuTooltip {
+  title: string;
+  body: string;
+  ports: string;
+}
+
+/**
+ * #203: ノード追加メニュー項目のツールチップ内容。ノード type を見出し、description を本文に、
+ * 入出力ポートを「in <label:type, …>   out <label:type, …>」で併記する。
+ * description もポートも無ければ null（出すものが無い）。
+ */
+export function nodeMenuTooltipContent(def: NodeTypeDef | undefined): NodeMenuTooltip | null {
+  if (!def) return null;
+  const fmt = (ps: ReadonlyArray<{ label: string; type: string }>): string =>
+    ps.map((p) => `${p.label}:${p.type}`).join(", ");
+  const segs: string[] = [];
+  if (def.inputs.length) segs.push(`in ${fmt(def.inputs)}`);
+  if (def.outputs.length) segs.push(`out ${fmt(def.outputs)}`);
+  const ports = segs.join("   ");
+  const body = def.description ?? "";
+  if (!body && !ports) return null;
+  return { title: def.type, body, ports };
 }
 
 export interface TooltipBox {
