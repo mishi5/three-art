@@ -198,7 +198,12 @@ export function buildGraphIoBar(
         try {
           const warnings = project.apply(text);
           for (const w of warnings) console.warn(`[project-io] ${w}`);
-          toast(warnings.length ? `${file.name}: 読込（警告 ${warnings.length} 件）` : `${file.name}: 読込完了`);
+          toast(
+            warnings.length
+              ? `${file.name}: 読込（警告 ${warnings.length} 件・詳細はコンソール [project-io]）`
+              : `${file.name}: 読込完了`,
+            warnings.length > 0,
+          );
         } catch (e) {
           console.warn("[project-io] load failed:", e);
           toast(`${file.name}: 読込失敗（${e instanceof Error ? e.message : "不明なエラー"}）`, true);
