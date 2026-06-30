@@ -12,8 +12,12 @@ export interface PadOverlayDeps {
   play: (nodeId: string, padIndex: number) => void;
   /** 発音中の音をすべて止める。 */
   stop: (nodeId: string) => void;
+  /** 指定パッドで発音中の音だけ止める（個別停止）。 */
+  stopVoice: (nodeId: string, padIndex: number) => void;
   /** パッド index へ音声ファイルを（再）割り当てる（ファイルダイアログを開く）。 */
   assign: (nodeId: string, padIndex: number) => void;
+  /** パッド index の割当を解除する（空に戻す）。 */
+  unassign: (nodeId: string, padIndex: number) => void;
   /** パッドの状態（割当済みか・短縮ラベル）を引く。 */
   info: (nodeId: string, padIndex: number) => { filled: boolean; label: string | null } | undefined;
 }
@@ -50,7 +54,7 @@ export function openPadOverlay(nodeId: string, deps: PadOverlayDeps): void {
     "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:6px;padding:8px 16px;cursor:pointer;font:14px system-ui;";
   closeBtn.addEventListener("click", () => closePadOverlay());
   const hint = document.createElement("span");
-  hint.textContent = "クリック=発音 / Shift+クリック=音声を再割り当て";
+  hint.textContent = "クリック=発音 / Cmd+クリック=停止 / Shift+クリック=再割り当て / Alt+クリック=解除";
   hint.style.cssText = "color:#888;";
   bar.append(stopBtn, closeBtn, hint);
 
@@ -68,7 +72,7 @@ export function openPadOverlay(nodeId: string, deps: PadOverlayDeps): void {
       const filled = info?.filled ?? false;
       const label = filled ? (info?.label ?? null) : null;
       btn.textContent = label ?? String(i + 1);
-      btn.title = filled ? "クリックで発音 / Shift+クリックで再割り当て" : "クリックで音声を割り当て";
+      btn.title = filled ? "クリックで発音 / Cmd+クリックで停止 / Shift+クリックで再割り当て / Alt+クリックで解除" : "クリックで音声を割り当て";
       btn.style.cssText =
         "border-radius:10px;cursor:pointer;font:16px system-ui;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:6px;" +
         (filled
@@ -79,9 +83,12 @@ export function openPadOverlay(nodeId: string, deps: PadOverlayDeps): void {
     refresh.push(sync);
     btn.addEventListener("click", (e) => {
       const filled = deps.info(nodeId, i)?.filled ?? false;
-      if (filled && !e.shiftKey) deps.play(nodeId, i);
+      if (filled && (e.metaKey || e.ctrlKey)) deps.stopVoice(nodeId, i);
+      else if (filled && e.altKey) deps.unassign(nodeId, i);
+      else if (filled && !e.shiftKey) deps.play(nodeId, i);
       else deps.assign(nodeId, i);
-      // 割当はダイアログ非同期なので、戻った後に表示を更新できるよう少し遅らせて再同期。
+      // 割当/解除後に表示を更新（割当はダイアログ非同期なので少し遅らせて再同期）。
+      refresh.forEach((f) => f());
       setTimeout(() => refresh.forEach((f) => f()), 400);
     });
     gridEl.appendChild(btn);

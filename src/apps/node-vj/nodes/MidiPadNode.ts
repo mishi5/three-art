@@ -26,8 +26,8 @@ export class MidiPadRuntime {
   readonly mixGain: GainNode;
   private buffers: (AudioBuffer | null)[] = new Array(PAD_COUNT).fill(null);
   private fileNames: (string | null)[] = new Array(PAD_COUNT).fill(null);
-  /** 発音中のソース集合（dispose / stopAll で全停止）。 */
-  private active = new Set<AudioBufferSourceNode>();
+  /** 発音中のソース → 鳴っているパッド index（dispose / stopAll で全停止・stopPad で個別停止）。 */
+  private active = new Map<AudioBufferSourceNode, number>();
   /** #205: いずれかのパッドが押された（playPad された）ことを示すラッチ。evaluate で消費し 1 フレームだけ true を返す。 */
   private pressed = false;
 
@@ -73,8 +73,26 @@ export class MidiPadRuntime {
       try { src.disconnect(); } catch { /* already disconnected */ }
       this.active.delete(src);
     };
-    this.active.add(src);
+    this.active.set(src, index);
     src.start(0);
+  }
+
+  /** #205: 指定パッドで発音中の音だけを停止する（再割当/解除のタイミングで古い音を切る）。 */
+  stopPad(index: number): void {
+    for (const [src, pad] of this.active) {
+      if (pad !== index) continue;
+      try { src.stop(); } catch { /* already stopped */ }
+      try { src.disconnect(); } catch { /* ignore */ }
+      this.active.delete(src);
+    }
+  }
+
+  /** #205: パッドの割当を解除する（発音中の音を止め、buffer/ラベルを空に戻す）。padAssets は呼び出し側で消す。 */
+  clearPad(index: number): void {
+    if (index < 0 || index >= PAD_COUNT) return;
+    this.stopPad(index);
+    this.buffers[index] = null;
+    this.fileNames[index] = null;
   }
 
   /** master volume（0..1）を設定する。 */
@@ -96,7 +114,7 @@ export class MidiPadRuntime {
    * #205: 発音中の全ソースを停止・解放する（Stop ボタン）。mixGain は残すので以後も発音できる。
    */
   stopAll(): void {
-    for (const src of this.active) {
+    for (const src of this.active.keys()) {
       try { src.stop(); } catch { /* already stopped */ }
       try { src.disconnect(); } catch { /* ignore */ }
     }
@@ -105,7 +123,7 @@ export class MidiPadRuntime {
 
   /** 全発音停止・接続解放。 */
   dispose(): void {
-    for (const src of this.active) {
+    for (const src of this.active.keys()) {
       try { src.stop(); } catch { /* already stopped */ }
       try { src.disconnect(); } catch { /* ignore */ }
     }

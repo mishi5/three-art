@@ -121,6 +121,10 @@ export class NodeEditor {
   onHitPad?: (nodeId: string, padIndex: number) => void;
   /** #205: 空パッドのクリック / Shift+クリック（ファイル割当ダイアログ）。任意。 */
   onAssignPad?: (nodeId: string, padIndex: number) => void;
+  /** #205: 音入りパッドの Alt+クリック（割当解除＝空に戻す）。任意。 */
+  onUnassignPad?: (nodeId: string, padIndex: number) => void;
+  /** #205: 音入りパッドの Cmd/Ctrl+クリック（そのパッドの発音中の音だけ止める）。任意。 */
+  onStopPadVoice?: (nodeId: string, padIndex: number) => void;
   /** #205: パッドの状態（割当済みか・短縮ラベル）を引く。任意。 */
   padCellInfo?: (nodeId: string, padIndex: number) => { filled: boolean; label: string | null } | undefined;
   /** #205: 拡大表示ボタン（⛶）。画面全体のパッドオーバーレイを開く。任意。 */
@@ -410,12 +414,14 @@ export class NodeEditor {
           return;
         }
       }
-      // #205: パッドグリッドのクリック。音入り→発音、空 or Shift→割当ダイアログ（pointerdown の user gesture 内）。
+      // #205: パッドグリッドのクリック。音入り→発音、Cmd→個別停止、Shift→再割当、Alt→解除、空→割当。
       if (def?.padGrid) {
         const idx = padIndexAt(hit.node, def, w.x, w.y);
         if (idx !== null) {
           const filled = this.padCellInfo?.(hit.node.id, idx)?.filled ?? false;
-          if (filled && !e.shiftKey) this.onHitPad?.(hit.node.id, idx);
+          if (filled && (e.metaKey || e.ctrlKey)) this.onStopPadVoice?.(hit.node.id, idx);
+          else if (filled && e.altKey) this.onUnassignPad?.(hit.node.id, idx);
+          else if (filled && !e.shiftKey) this.onHitPad?.(hit.node.id, idx);
           else this.onAssignPad?.(hit.node.id, idx);
           return;
         }

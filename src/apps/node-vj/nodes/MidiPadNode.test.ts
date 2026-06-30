@@ -79,11 +79,37 @@ describe("#205 MidiPadRuntime stopAll", () => {
     (rt as unknown as { buffers: unknown[] }).buffers[0] = {};
     rt.playPad(0);
     rt.playPad(0);
-    const active = (rt as unknown as { active: Set<unknown> }).active;
+    const active = (rt as unknown as { active: Map<unknown, number> }).active;
     expect(active.size).toBe(2);
     rt.stopAll();
     expect(active.size).toBe(0);
     // mixGain は残るので以後も発音できる。
     expect(rt.mixGain).toBeDefined();
+  });
+});
+
+describe("#205 MidiPadRuntime stopPad / clearPad", () => {
+  test("stopPad は指定パッドの音だけ止める（他パッドは残る）", () => {
+    const rt = new MidiPadRuntime(fakeAudioContext());
+    const buffers = (rt as unknown as { buffers: unknown[] }).buffers;
+    buffers[0] = {}; buffers[1] = {};
+    rt.playPad(0); rt.playPad(0); rt.playPad(1);
+    const active = (rt as unknown as { active: Map<unknown, number> }).active;
+    expect(active.size).toBe(3);
+    rt.stopPad(0);
+    expect(active.size).toBe(1); // パッド1 の 1 本だけ残る
+  });
+
+  test("clearPad は割当を解除し（hasPad=false）そのパッドの音を止める", () => {
+    const rt = new MidiPadRuntime(fakeAudioContext());
+    (rt as unknown as { buffers: unknown[] }).buffers[2] = {};
+    rt.playPad(2);
+    expect(rt.hasPad(2)).toBe(true);
+    const active = (rt as unknown as { active: Map<unknown, number> }).active;
+    expect(active.size).toBe(1);
+    rt.clearPad(2);
+    expect(rt.hasPad(2)).toBe(false);
+    expect(rt.padLabel(2)).toBeNull();
+    expect(active.size).toBe(0);
   });
 });
