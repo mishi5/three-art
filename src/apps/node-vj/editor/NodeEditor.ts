@@ -414,16 +414,12 @@ export class NodeEditor {
           return;
         }
       }
-      // #205: パッドグリッドのクリック。音入り→発音、Cmd→個別停止、Shift→再割当、Alt→解除、空→割当。
+      // #205: パッドグリッドの左クリックは発音のみ（音入りパッド）。割当/停止/解除は右クリックメニュー。
       if (def?.padGrid) {
         const idx = padIndexAt(hit.node, def, w.x, w.y);
         if (idx !== null) {
-          const filled = this.padCellInfo?.(hit.node.id, idx)?.filled ?? false;
-          if (filled && (e.metaKey || e.ctrlKey)) this.onStopPadVoice?.(hit.node.id, idx);
-          else if (filled && e.altKey) this.onUnassignPad?.(hit.node.id, idx);
-          else if (filled && !e.shiftKey) this.onHitPad?.(hit.node.id, idx);
-          else this.onAssignPad?.(hit.node.id, idx);
-          return;
+          if (this.padCellInfo?.(hit.node.id, idx)?.filled) this.onHitPad?.(hit.node.id, idx);
+          return; // パッド上クリックはノードドラッグへ流さない
         }
       }
       // #99: ファイル行クリックで OS ファイルダイアログを開く（pointerdown の user gesture 内）。
@@ -764,9 +760,29 @@ export class NodeEditor {
     if (lab) { this.showLabelMenu(e.clientX, e.clientY, lab); return; }
     const hit = hitTest(this.graph.nodes, this.registry, w.x, w.y);
     if (hit && hit.kind !== "port") {
+      // #205: MidiPad のパッド上で右クリックしたらパッド操作メニュー（割当/停止/解除）。
+      const def = this.registry.get(hit.node.type);
+      if (def?.padGrid) {
+        const idx = padIndexAt(hit.node, def, w.x, w.y);
+        if (idx !== null) { this.showPadMenu(e.clientX, e.clientY, hit.node.id, idx); return; }
+      }
       this.showNodeMenu(e.clientX, e.clientY, hit.node);
     } else {
       this.showAddMenu(e.clientX, e.clientY, w);
+    }
+  }
+
+  /** #205: パッドの右クリックメニュー。空=割当 / 音入り=再生・停止・再割当・解除。 */
+  private showPadMenu(screenX: number, screenY: number, nodeId: string, padIndex: number): void {
+    const menu = this.buildMenu(screenX, screenY);
+    const filled = this.padCellInfo?.(nodeId, padIndex)?.filled ?? false;
+    if (filled) {
+      this.addMenuItem(menu, "▶ 再生", () => this.onHitPad?.(nodeId, padIndex));
+      this.addMenuItem(menu, "■ このパッドを停止", () => this.onStopPadVoice?.(nodeId, padIndex));
+      this.addMenuItem(menu, "↻ 音声を再割り当て", () => this.onAssignPad?.(nodeId, padIndex));
+      this.addMenuItem(menu, "✕ 割り当てを解除", () => this.onUnassignPad?.(nodeId, padIndex));
+    } else {
+      this.addMenuItem(menu, "＋ 音声を割り当て", () => this.onAssignPad?.(nodeId, padIndex));
     }
   }
 

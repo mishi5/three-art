@@ -44,17 +44,19 @@ export function openPadOverlay(nodeId: string, deps: PadOverlayDeps): void {
   const bar = document.createElement("div");
   bar.style.cssText = "display:flex;gap:12px;align-items:center;";
   const stopBtn = document.createElement("button");
+  stopBtn.type = "button";
   stopBtn.textContent = "■ Stop";
   stopBtn.style.cssText =
     "background:#3a2a2a;color:#e9a0a0;border:1px solid #5a3a3a;border-radius:6px;padding:8px 16px;cursor:pointer;font:14px system-ui;";
   stopBtn.addEventListener("click", () => deps.stop(nodeId));
   const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
   closeBtn.textContent = "✕ 閉じる (Esc)";
   closeBtn.style.cssText =
     "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:6px;padding:8px 16px;cursor:pointer;font:14px system-ui;";
   closeBtn.addEventListener("click", () => closePadOverlay());
   const hint = document.createElement("span");
-  hint.textContent = "クリック=発音 / Cmd+クリック=停止 / Shift+クリック=再割り当て / Alt+クリック=解除";
+  hint.textContent = "クリック=発音 / 右クリック=操作メニュー（割当・停止・再割当・解除）";
   hint.style.cssText = "color:#888;";
   bar.append(stopBtn, closeBtn, hint);
 
@@ -65,14 +67,19 @@ export function openPadOverlay(nodeId: string, deps: PadOverlayDeps): void {
     `display:grid;grid-template-columns:repeat(${cols}, ${cell});grid-template-rows:repeat(${rows}, ${cell});gap:14px;`;
 
   const refresh: (() => void)[] = [];
+  const refreshAll = (): void => {
+    refresh.forEach((f) => f());
+    setTimeout(() => refresh.forEach((f) => f()), 400); // 割当はダイアログ非同期なので遅延再同期
+  };
   for (let i = 0; i < count; i++) {
     const btn = document.createElement("button");
+    btn.type = "button"; // 既定 submit を避ける
     const sync = (): void => {
       const info = deps.info(nodeId, i);
       const filled = info?.filled ?? false;
       const label = filled ? (info?.label ?? null) : null;
       btn.textContent = label ?? String(i + 1);
-      btn.title = filled ? "クリックで発音 / Cmd+クリックで停止 / Shift+クリックで再割り当て / Alt+クリックで解除" : "クリックで音声を割り当て";
+      btn.title = filled ? "クリックで発音 / 右クリックで操作（停止・再割当・解除）" : "右クリックで音声を割り当て";
       btn.style.cssText =
         "border-radius:10px;cursor:pointer;font:16px system-ui;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:6px;" +
         (filled
@@ -81,15 +88,14 @@ export function openPadOverlay(nodeId: string, deps: PadOverlayDeps): void {
     };
     sync();
     refresh.push(sync);
-    btn.addEventListener("click", (e) => {
-      const filled = deps.info(nodeId, i)?.filled ?? false;
-      if (filled && (e.metaKey || e.ctrlKey)) deps.stopVoice(nodeId, i);
-      else if (filled && e.altKey) deps.unassign(nodeId, i);
-      else if (filled && !e.shiftKey) deps.play(nodeId, i);
-      else deps.assign(nodeId, i);
-      // 割当/解除後に表示を更新（割当はダイアログ非同期なので少し遅らせて再同期）。
-      refresh.forEach((f) => f());
-      setTimeout(() => refresh.forEach((f) => f()), 400);
+    // 左クリックは発音のみ（空パッドは何もしない）。
+    btn.addEventListener("click", () => {
+      if (deps.info(nodeId, i)?.filled) deps.play(nodeId, i);
+    });
+    // 右クリックでパッド操作メニュー（割当/再割当/停止/解除）。
+    btn.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      showPadCtxMenu(e.clientX, e.clientY, nodeId, i, deps, refreshAll);
     });
     gridEl.appendChild(btn);
   }
@@ -103,11 +109,58 @@ export function openPadOverlay(nodeId: string, deps: PadOverlayDeps): void {
 }
 
 function onOverlayKey(e: KeyboardEvent): void {
-  if (e.key === "Escape") closePadOverlay();
+  if (e.key === "Escape") { if (currentCtxMenu) closePadCtxMenu(); else closePadOverlay(); }
 }
 
 /** オーバーレイを閉じる（開いていなければ no-op）。 */
 export function closePadOverlay(): void {
+  closePadCtxMenu();
   window.removeEventListener("keydown", onOverlayKey);
   if (currentOverlay) { currentOverlay.remove(); currentOverlay = null; }
+}
+
+// --- パッド右クリックメニュー（オーバーレイ上の DOM メニュー） ---
+let currentCtxMenu: HTMLDivElement | null = null;
+
+function onCtxOutside(e: PointerEvent): void {
+  if (currentCtxMenu && !currentCtxMenu.contains(e.target as Node)) closePadCtxMenu();
+}
+
+function closePadCtxMenu(): void {
+  window.removeEventListener("pointerdown", onCtxOutside, true);
+  if (currentCtxMenu) { currentCtxMenu.remove(); currentCtxMenu = null; }
+}
+
+/** パッドの右クリックメニューを cursor 位置に出す（空=割当 / 音入り=再生・停止・再割当・解除）。 */
+function showPadCtxMenu(
+  x: number, y: number, nodeId: string, padIndex: number, deps: PadOverlayDeps, refreshAll: () => void,
+): void {
+  closePadCtxMenu();
+  const menu = document.createElement("div");
+  menu.style.cssText =
+    `position:fixed;left:${x}px;top:${y}px;z-index:520;background:#16161c;border:1px solid #444;` +
+    "border-radius:6px;padding:4px;font:13px system-ui;color:#ddd;box-shadow:0 4px 16px rgba(0,0,0,0.5);min-width:160px;";
+  const item = (text: string, onClick: () => void): void => {
+    const el = document.createElement("div");
+    el.textContent = text;
+    el.style.cssText = "padding:6px 10px;border-radius:4px;cursor:pointer;white-space:nowrap;";
+    el.addEventListener("mouseenter", () => { el.style.background = "#2a2a36"; });
+    el.addEventListener("mouseleave", () => { el.style.background = "transparent"; });
+    el.addEventListener("click", () => { closePadCtxMenu(); onClick(); refreshAll(); });
+    menu.appendChild(el);
+  };
+  if (deps.info(nodeId, padIndex)?.filled ?? false) {
+    item("▶ 再生", () => deps.play(nodeId, padIndex));
+    item("■ このパッドを停止", () => deps.stopVoice(nodeId, padIndex));
+    item("↻ 音声を再割り当て", () => deps.assign(nodeId, padIndex));
+    item("✕ 割り当てを解除", () => deps.unassign(nodeId, padIndex));
+  } else {
+    item("＋ 音声を割り当て", () => deps.assign(nodeId, padIndex));
+  }
+  document.body.appendChild(menu);
+  const r = menu.getBoundingClientRect();
+  if (r.right > window.innerWidth) menu.style.left = `${Math.max(4, window.innerWidth - r.width - 4)}px`;
+  if (r.bottom > window.innerHeight) menu.style.top = `${Math.max(4, window.innerHeight - r.height - 4)}px`;
+  currentCtxMenu = menu;
+  setTimeout(() => window.addEventListener("pointerdown", onCtxOutside, true), 0);
 }
