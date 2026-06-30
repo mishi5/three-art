@@ -24,6 +24,7 @@ export interface PadOverlayDeps {
 
 /** 既に開いているオーバーレイ（多重オープンを防ぐ）。 */
 let currentOverlay: HTMLDivElement | null = null;
+let currentTimer: number | null = null;
 
 /**
  * #205: 対象 MidiPad のパッドを全画面オーバーレイで開く。既に開いていれば一旦閉じてから開き直す。
@@ -105,6 +106,8 @@ export function openPadOverlay(nodeId: string, deps: PadOverlayDeps): void {
   root.addEventListener("click", (e) => { if (e.target === root) closePadOverlay(); });
   document.body.appendChild(root);
   currentOverlay = root;
+  // #205: 割当/再割当はファイル選択が非同期で後から完了するため、表示中は定期的にボタン表示を再同期する。
+  currentTimer = window.setInterval(() => refresh.forEach((f) => f()), 300);
   window.addEventListener("keydown", onOverlayKey);
 }
 
@@ -115,6 +118,7 @@ function onOverlayKey(e: KeyboardEvent): void {
 /** オーバーレイを閉じる（開いていなければ no-op）。 */
 export function closePadOverlay(): void {
   closePadCtxMenu();
+  if (currentTimer !== null) { window.clearInterval(currentTimer); currentTimer = null; }
   window.removeEventListener("keydown", onOverlayKey);
   if (currentOverlay) { currentOverlay.remove(); currentOverlay = null; }
 }
@@ -150,7 +154,6 @@ function showPadCtxMenu(
     menu.appendChild(el);
   };
   if (deps.info(nodeId, padIndex)?.filled ?? false) {
-    item("▶ 再生", () => deps.play(nodeId, padIndex));
     item("■ このパッドを停止", () => deps.stopVoice(nodeId, padIndex));
     item("↻ 音声を再割り当て", () => deps.assign(nodeId, padIndex));
     item("✕ 割り当てを解除", () => deps.unassign(nodeId, padIndex));

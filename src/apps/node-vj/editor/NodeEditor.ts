@@ -777,7 +777,6 @@ export class NodeEditor {
     const menu = this.buildMenu(screenX, screenY);
     const filled = this.padCellInfo?.(nodeId, padIndex)?.filled ?? false;
     if (filled) {
-      this.addMenuItem(menu, "▶ 再生", () => this.onHitPad?.(nodeId, padIndex));
       this.addMenuItem(menu, "■ このパッドを停止", () => this.onStopPadVoice?.(nodeId, padIndex));
       this.addMenuItem(menu, "↻ 音声を再割り当て", () => this.onAssignPad?.(nodeId, padIndex));
       this.addMenuItem(menu, "✕ 割り当てを解除", () => this.onUnassignPad?.(nodeId, padIndex));
