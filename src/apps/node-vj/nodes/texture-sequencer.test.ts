@@ -10,22 +10,32 @@ function ctx(state: TextureSequencerRuntime | undefined, inputs: Record<string, 
   return {
     timeSec: 0,
     input: (id) => inputs[id],
-    param: () => undefined,
+    param: (id) => inputs[id], // 同一 map から param も引く（random など。id は衝突しない）
     node: { id: "seq", type: "TextureSequencer", params: {} },
     state,
   };
 }
 const tex = (r: Record<string, unknown>): unknown => (r as { texture: unknown }).texture;
 
+const seqOpts = (count = 4, random = false, rng: () => number = () => 0) => ({ count, random, rng });
+
 describe("#202 sequencerStep（純関数）", () => {
   test("trigger 立ち上がりで +1・true 維持中は据え置き", () => {
-    expect(sequencerStep(0, { trigger: false, reset: false }, { trigger: true, reset: false })).toBe(1);
-    expect(sequencerStep(1, { trigger: true, reset: false }, { trigger: true, reset: false })).toBe(1);
-    expect(sequencerStep(1, { trigger: true, reset: false }, { trigger: false, reset: false })).toBe(1);
+    expect(sequencerStep(0, { trigger: false, reset: false }, { trigger: true, reset: false }, seqOpts())).toBe(1);
+    expect(sequencerStep(1, { trigger: true, reset: false }, { trigger: true, reset: false }, seqOpts())).toBe(1);
+    expect(sequencerStep(1, { trigger: true, reset: false }, { trigger: false, reset: false }, seqOpts())).toBe(1);
   });
   test("reset 立ち上がりで 0・reset 優先", () => {
-    expect(sequencerStep(5, { trigger: false, reset: false }, { trigger: false, reset: true })).toBe(0);
-    expect(sequencerStep(5, { trigger: false, reset: false }, { trigger: true, reset: true })).toBe(0);
+    expect(sequencerStep(5, { trigger: false, reset: false }, { trigger: false, reset: true }, seqOpts())).toBe(0);
+    expect(sequencerStep(5, { trigger: false, reset: false }, { trigger: true, reset: true }, seqOpts())).toBe(0);
+  });
+  test("random=true は trigger 立ち上がりで count 内のランダム位置へ（rng で決定的に検証）", () => {
+    // rng=0.5, count=4 → floor(0.5*4)=2
+    expect(sequencerStep(0, { trigger: false, reset: false }, { trigger: true, reset: false }, seqOpts(4, true, () => 0.5))).toBe(2);
+    // rng=0.99, count=3 → floor(0.99*3)=2（範囲内に収まる）
+    expect(sequencerStep(7, { trigger: false, reset: false }, { trigger: true, reset: false }, seqOpts(3, true, () => 0.99))).toBe(2);
+    // 維持中は据え置き（random でも進まない）
+    expect(sequencerStep(2, { trigger: true, reset: false }, { trigger: true, reset: false }, seqOpts(4, true, () => 0.9))).toBe(2);
   });
 });
 
@@ -53,6 +63,18 @@ describe("#202 TextureSequencerNode 定義", () => {
     expect(inIds).toEqual([...SEQ_INPUTS, "trigger", "reset"]);
     expect(TextureSequencerNode.inputs.filter((p) => p.type === "texture").length).toBe(SEQ_TEX_COUNT);
     expect(TextureSequencerNode.outputs.map((p) => `${p.id}:${p.type}`)).toEqual(["texture:texture"]);
+    // random トグル（2 値 enum）。
+    const rnd = TextureSequencerNode.params.find((p) => p.id === "random");
+    expect(rnd?.kind).toBe("enum");
+    expect(rnd?.options).toEqual(["off", "on"]);
+    expect(rnd?.default).toBe("off");
+  });
+
+  test("random=on でも接続中の texture を出力する（範囲内）", () => {
+    const s = new TextureSequencerRuntime();
+    const inputs = { tex1: "A", tex2: "B", tex3: "C", trigger: true, random: "on" } as Record<string, unknown>;
+    const out = tex(TextureSequencerNode.evaluate(ctx(s, inputs)));
+    expect(["A", "B", "C"]).toContain(out as string);
   });
 });
 

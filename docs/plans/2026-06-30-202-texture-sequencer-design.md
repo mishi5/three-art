@@ -49,3 +49,10 @@ evaluate: trigger/reset を Boolean 化し step 更新→prev 保存→接続済
 - process メニューから TextureSequencer 追加 → 複数の texture 出力（VideoFile/TextureGenerator/Camera 等）を
   tex1.. へ接続、Pulse か AudioFileInput.onset を trigger へ接続 → Screen へ出力。
 - trigger 発火ごとに映像が順番に切り替わり、末尾でループ。reset で先頭へ。
+
+## 追補: ランダム選択トグル
+
+`random` param（2 値 enum off/on＝クリックでトグルするボタン）を追加。ON のとき trigger 発火ごとに
+**接続中の texture からランダムに選ぶ**（OFF は従来どおり順送り）。`sequencerStep` に `{ count, random, rng }`
+を渡し、random 時は `floor(rng() * count)` で位置を決める（rng=Math.random・テストは決定的 rng を注入）。
+reset は引き続き先頭へ。テスト+2（決定的 rng でのランダム位置・node の random=on で接続中 texture を出力）。

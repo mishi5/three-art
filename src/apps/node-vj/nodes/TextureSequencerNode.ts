@@ -17,16 +17,20 @@ export class TextureSequencerRuntime {
 }
 
 /**
- * #202: 次の step を求める純関数。trigger 立ち上がり（false→true）で +1、
- * reset 立ち上がりで 0 に戻す（reset 優先）。エッジでなければ据え置き。
+ * #202: 次の step を求める純関数。reset 立ち上がりで 0（優先）、trigger 立ち上がりで進める。
+ * random=on のときは trigger ごとに接続数 count 内のランダムな位置へ（rng は 0..1 の乱数源）、
+ * off のときは +1（読み出し側で接続数 wrap）。エッジでなければ据え置き。
  */
 export function sequencerStep(
   step: number,
   prev: { trigger: boolean; reset: boolean },
   cur: { trigger: boolean; reset: boolean },
+  opts: { count: number; random: boolean; rng: () => number },
 ): number {
   if (cur.reset && !prev.reset) return 0;
-  if (cur.trigger && !prev.trigger) return step + 1;
+  if (cur.trigger && !prev.trigger) {
+    return opts.random ? Math.floor(opts.rng() * Math.max(1, opts.count)) : step + 1;
+  }
   return step;
 }
 
@@ -54,19 +58,26 @@ export const TextureSequencerNode: NodeTypeDef = {
     { id: "reset", label: "reset", type: "trigger", description: "立ち上がりエッジで先頭（最初の接続スロット）へ戻す。" },
   ],
   outputs: [{ id: "texture", label: "tex", type: "texture", description: "現在選択中の入力 texture（接続なしは無出力）。" }],
-  params: [],
+  params: [
+    { id: "random", label: "random", kind: "enum", default: "off", options: ["off", "on"],
+      description: "ON で trigger ごとに接続中の texture からランダムに選ぶ（OFF は順送り）。" },
+  ],
   createState: () => new TextureSequencerRuntime(),
   evaluate: (ctx) => {
     const s = ctx.state as TextureSequencerRuntime | undefined;
     if (!s) return { texture: undefined };
     const trigger = Boolean(ctx.input("trigger"));
     const reset = Boolean(ctx.input("reset"));
-    s.step = sequencerStep(s.step, { trigger: s.prevTrigger, reset: s.prevReset }, { trigger, reset });
-    s.prevTrigger = trigger;
-    s.prevReset = reset;
+    const random = ctx.param("random") === "on";
     // 接続済みスロット（ctx.input が undefined なら未接続）を定義順に集める。
     const textures = SEQ_INPUTS.map((id) => ctx.input(id));
     const connected = textures.map((t, i) => (t != null ? i : -1)).filter((i) => i >= 0);
+    s.step = sequencerStep(
+      s.step, { trigger: s.prevTrigger, reset: s.prevReset }, { trigger, reset },
+      { count: connected.length, random, rng: Math.random },
+    );
+    s.prevTrigger = trigger;
+    s.prevReset = reset;
     const port = selectSeqPort(s.step, connected);
     return { texture: port === null ? undefined : textures[port] };
   },
