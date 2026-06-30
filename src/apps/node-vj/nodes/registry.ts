@@ -25,6 +25,7 @@ import { ParticleRenderNode } from "./ParticleRenderNode";
 import { PointTransformNode } from "./PointTransformNode";
 import { EnvelopeNode } from "./EnvelopeNode";
 import { FlipFlopNode } from "./FlipFlopNode";
+import { TextureSequencerNode } from "./TextureSequencerNode";
 import { BlendNode } from "./BlendNode";
 import { KeyNode } from "./KeyNode";
 import { BlurNode } from "./BlurNode";
@@ -74,6 +75,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(PointTransformNode);
   r.register(EnvelopeNode);
   r.register(FlipFlopNode);
+  r.register(TextureSequencerNode);
   r.register(AudioMixNode);
   r.register(AudioDelayNode);
   // visual
