@@ -1,5 +1,13 @@
 import { expect, test, describe } from "bun:test";
-import { MidiPadNode, shortPadLabel, PAD_COUNT, PAD_ROWS, PAD_COLS } from "./MidiPadNode";
+import { MidiPadNode, MidiPadRuntime, shortPadLabel, PAD_COUNT, PAD_ROWS, PAD_COLS } from "./MidiPadNode";
+
+/** #205: bun には AudioContext が無いため、最小限のフェイクで Runtime を検証する。 */
+function fakeAudioContext(): AudioContext {
+  return {
+    createGain: () => ({ gain: { value: 1 }, connect() {}, disconnect() {} }),
+    createBufferSource: () => ({ buffer: null, onended: null, connect() {}, disconnect() {}, start() {}, stop() {} }),
+  } as unknown as AudioContext;
+}
 
 describe("#205 MidiPadNode 定義", () => {
   test("4×4 のパッドグリッド・input カテゴリ", () => {
@@ -9,9 +17,10 @@ describe("#205 MidiPadNode 定義", () => {
     expect(PAD_COUNT).toBe(16);
   });
 
-  test("audio 出力ポートを 1 つ持つ", () => {
-    expect(MidiPadNode.outputs.map((o) => o.id)).toEqual(["audio"]);
+  test("audio 出力と trigger 出力を持つ", () => {
+    expect(MidiPadNode.outputs.map((o) => o.id)).toEqual(["audio", "trigger"]);
     expect(MidiPadNode.outputs[0]!.type).toBe("audio");
+    expect(MidiPadNode.outputs[1]!.type).toBe("trigger");
     expect(MidiPadNode.inputs).toEqual([]);
   });
 
@@ -43,5 +52,38 @@ describe("#205 shortPadLabel", () => {
     expect(shortPadLabel("")).toBeNull();
     expect(shortPadLabel(null)).toBeNull();
     expect(shortPadLabel(undefined)).toBeNull();
+  });
+});
+
+describe("#205 MidiPadRuntime trigger ラッチ", () => {
+  test("初期は false / 押下したフレームのみ true・次フレーム false", () => {
+    const rt = new MidiPadRuntime(fakeAudioContext());
+    expect(rt.consumeTrigger()).toBe(false);
+    // パッド 0 に buffer を割り当てた体にして発音（押下）。
+    (rt as unknown as { buffers: unknown[] }).buffers[0] = {};
+    rt.playPad(0);
+    expect(rt.consumeTrigger()).toBe(true);  // 押下フレーム
+    expect(rt.consumeTrigger()).toBe(false); // 次フレームは戻る
+  });
+
+  test("未割当パッドの playPad はラッチを立てない", () => {
+    const rt = new MidiPadRuntime(fakeAudioContext());
+    rt.playPad(3); // buffer 無し
+    expect(rt.consumeTrigger()).toBe(false);
+  });
+});
+
+describe("#205 MidiPadRuntime stopAll", () => {
+  test("発音中の全ソースを止め active を空にする（mixGain は維持）", () => {
+    const rt = new MidiPadRuntime(fakeAudioContext());
+    (rt as unknown as { buffers: unknown[] }).buffers[0] = {};
+    rt.playPad(0);
+    rt.playPad(0);
+    const active = (rt as unknown as { active: Set<unknown> }).active;
+    expect(active.size).toBe(2);
+    rt.stopAll();
+    expect(active.size).toBe(0);
+    // mixGain は残るので以後も発音できる。
+    expect(rt.mixGain).toBeDefined();
   });
 });

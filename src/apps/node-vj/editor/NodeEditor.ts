@@ -15,7 +15,7 @@ import {
   transportRowRect, transportLayout, seekRatioAt, formatTime, randomRowRect,
   hasSceneRow, sceneRowRect, sceneRowLabel,
   outputScaleChipRect, CATEGORY_COLORS,
-  hasPadGrid, padRect, padIndexAt,
+  hasPadGrid, padRect, padIndexAt, padExpandButtonRect, padStopButtonRect,
 } from "./layout";
 import { getOutputScale, setOutputScale, formatScale, DEFAULT_OUTPUT_SCALE } from "../graph/output-scale";
 import { randomInRange } from "./random-value";
@@ -123,6 +123,12 @@ export class NodeEditor {
   onAssignPad?: (nodeId: string, padIndex: number) => void;
   /** #205: パッドの状態（割当済みか・短縮ラベル）を引く。任意。 */
   padCellInfo?: (nodeId: string, padIndex: number) => { filled: boolean; label: string | null } | undefined;
+  /** #205: 拡大表示ボタン（⛶）。画面全体のパッドオーバーレイを開く。任意。 */
+  onExpandPad?: (nodeId: string) => void;
+  /** #205: 全停止ボタン（■）。発音中の音をすべて止める。任意。 */
+  onStopPad?: (nodeId: string) => void;
+  /** #205: アセットをパッド上にドロップして割当（再割当も上書き）。任意。 */
+  onDropAssetToPad?: (nodeId: string, padIndex: number, assetId: string) => void;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -291,6 +297,18 @@ export class NodeEditor {
     if (!id) return;
     e.preventDefault();
     const w = screenToWorld(e.clientX, e.clientY, this.offset, this.scale);
+    // #205: MidiPad のパッド上へドロップしたら、そのパッドへ割当（再割当も上書き）。
+    const hit = hitTest(this.graph.nodes, this.registry, w.x, w.y);
+    if (hit?.kind === "node") {
+      const def = this.registry.get(hit.node.type);
+      if (def?.padGrid) {
+        const idx = padIndexAt(hit.node, def, w.x, w.y);
+        if (idx !== null) {
+          this.onDropAssetToPad?.(hit.node.id, idx, id);
+          return;
+        }
+      }
+    }
     this.onDropAsset?.(id, w.x, w.y);
   };
 
@@ -376,6 +394,19 @@ export class NodeEditor {
         const b = previewButtonRect(hit.node);
         if (w.x >= b.x && w.x <= b.x + b.w && w.y >= b.y && w.y <= b.y + b.h) {
           hit.node.preview = !hit.node.preview;
+          return;
+        }
+      }
+      // #205: MidiPad タイトルバーの拡大（⛶）/ 全停止（■）ボタン。
+      if (def?.padGrid) {
+        const eb = padExpandButtonRect(hit.node);
+        if (w.x >= eb.x && w.x <= eb.x + eb.w && w.y >= eb.y && w.y <= eb.y + eb.h) {
+          this.onExpandPad?.(hit.node.id);
+          return;
+        }
+        const sb = padStopButtonRect(hit.node);
+        if (w.x >= sb.x && w.x <= sb.x + sb.w && w.y >= sb.y && w.y <= sb.y + sb.h) {
+          this.onStopPad?.(hit.node.id);
           return;
         }
       }
@@ -1453,6 +1484,18 @@ export class NodeEditor {
     }
     // #205: パッドグリッド（4×4）。音入り=色付き＋短縮ラベル、空=暗色。
     if (hasPadGrid(def)) {
+      // タイトルバーに拡大（⛶）/ 全停止（■）ボタンを描く。
+      const eb = padExpandButtonRect(node);
+      ctx.fillStyle = "#2a2a36";
+      roundRect(ctx, eb.x, eb.y, eb.w, eb.h, 3); ctx.fill();
+      ctx.fillStyle = "#cfeede"; ctx.font = "12px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("⛶", eb.x + eb.w / 2, eb.y + eb.h / 2 + 0.5);
+      const sb = padStopButtonRect(node);
+      ctx.fillStyle = "#3a2a2a";
+      roundRect(ctx, sb.x, sb.y, sb.w, sb.h, 3); ctx.fill();
+      ctx.fillStyle = "#e9a0a0";
+      ctx.fillRect(sb.x + sb.w / 2 - 4, sb.y + sb.h / 2 - 4, 8, 8); // ■
+      ctx.textAlign = "left"; ctx.textBaseline = "middle";
       const grid = def.padGrid!;
       const count = grid.rows * grid.cols;
       ctx.font = "9px system-ui";

@@ -4,6 +4,7 @@ import {
   portIndex, nodeRect, hasRandomRow, randomRowRect,
   hasSceneRow, sceneRowRect, sceneRowLabel,
   hasPadGrid, padGridMetrics, padGridHeight, padGridRect, padRect, padIndexAt,
+  padExpandButtonRect, padStopButtonRect,
   PAD_MARGIN_X, PAD_MARGIN_TOP,
 } from "./layout";
 import type { NodeTypeDef } from "../graph/node-type";
@@ -146,5 +147,17 @@ describe("#205 padGrid layout", () => {
     expect(padIndexAt(padNode, padDef, gapX, r0.y + r0.h / 2)).toBeNull();
     // padGrid を持たない def は常に null
     expect(padIndexAt(node, def, 100, 50)).toBeNull();
+  });
+
+  test("拡大ボタンはタイトル右端・全停止ボタンはその左隣（重ならない）", () => {
+    const eb = padExpandButtonRect(padNode);
+    const sb = padStopButtonRect(padNode);
+    // タイトルバー内（y は同じ高さ・グリッドより上）。
+    expect(eb.y).toBe(50 + 4);
+    expect(sb.y).toBe(50 + 4);
+    // 拡大は右端寄り、全停止はその左。重ならない。
+    expect(eb.x).toBeGreaterThan(sb.x);
+    expect(sb.x + sb.w).toBeLessThanOrEqual(eb.x);
+    expect(eb.x + eb.w).toBeLessThanOrEqual(100 + NODE_WIDTH);
   });
 });

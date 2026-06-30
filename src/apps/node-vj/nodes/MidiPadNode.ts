@@ -26,8 +26,10 @@ export class MidiPadRuntime {
   readonly mixGain: GainNode;
   private buffers: (AudioBuffer | null)[] = new Array(PAD_COUNT).fill(null);
   private fileNames: (string | null)[] = new Array(PAD_COUNT).fill(null);
-  /** 発音中のソース集合（dispose で全停止）。 */
+  /** 発音中のソース集合（dispose / stopAll で全停止）。 */
   private active = new Set<AudioBufferSourceNode>();
+  /** #205: いずれかのパッドが押された（playPad された）ことを示すラッチ。evaluate で消費し 1 フレームだけ true を返す。 */
+  private pressed = false;
 
   constructor(ctx: AudioContext) {
     this.ctx = ctx;
@@ -62,6 +64,8 @@ export class MidiPadRuntime {
   playPad(index: number): void {
     const buffer = this.buffers[index];
     if (!buffer) return;
+    // #205: trigger 出力用に押下ラッチを立てる（次の evaluate で 1 フレーム発火）。
+    this.pressed = true;
     const src = this.ctx.createBufferSource();
     src.buffer = buffer;
     src.connect(this.mixGain);
@@ -76,6 +80,27 @@ export class MidiPadRuntime {
   /** master volume（0..1）を設定する。 */
   setVolume(v: number): void {
     this.mixGain.gain.value = Math.max(0, Math.min(1, v));
+  }
+
+  /**
+   * #205: 直近フレームに押下があったかを返し、ラッチをリセットする（trigger 出力用）。
+   * クリックは非同期・evaluate は毎フレームなので、押下→次の evaluate で 1 フレームだけ true になる。
+   */
+  consumeTrigger(): boolean {
+    const p = this.pressed;
+    this.pressed = false;
+    return p;
+  }
+
+  /**
+   * #205: 発音中の全ソースを停止・解放する（Stop ボタン）。mixGain は残すので以後も発音できる。
+   */
+  stopAll(): void {
+    for (const src of this.active) {
+      try { src.stop(); } catch { /* already stopped */ }
+      try { src.disconnect(); } catch { /* ignore */ }
+    }
+    this.active.clear();
   }
 
   /** 全発音停止・接続解放。 */
@@ -97,7 +122,11 @@ export const MidiPadNode: NodeTypeDef = {
   isSink: false,
   padGrid: { rows: PAD_ROWS, cols: PAD_COLS },
   inputs: [],
-  outputs: [SIGNAL_OUTPUT],
+  outputs: [
+    SIGNAL_OUTPUT,
+    // #205: いずれかのパッド押下時に 1 フレームだけ発火する trigger（boolean）。Envelope/Flash 等へ繋げる。
+    { id: "trigger", label: "trig", type: "trigger", description: "いずれかのパッド押下時に1フレーム発火する trigger。" },
+  ],
   params: [
     { id: "volume", label: "volume", kind: "number", default: 1, min: 0, max: 1, step: 0.01, description: "出力全体の音量（master・0〜1）。" },
     // 各パッドの割当アセット id（string[]・長さ可変・hidden）。アセットライブラリで永続化する。
@@ -108,8 +137,9 @@ export const MidiPadNode: NodeTypeDef = {
   disposeState: (state: NodeState) => (state as MidiPadRuntime).dispose(),
   evaluate: (ctx) => {
     const s = ctx.state as MidiPadRuntime | undefined;
-    if (!s) return signalOutput(null);
+    if (!s) return { ...signalOutput(null), trigger: false };
     s.setVolume(Number(ctx.param("volume") ?? 1));
-    return signalOutput(s.mixGain);
+    // #205: 押下ラッチを消費して trigger（boolean）として出力する（PulseNode と同じ表現）。
+    return { ...signalOutput(s.mixGain), trigger: s.consumeTrigger() };
   },
 };

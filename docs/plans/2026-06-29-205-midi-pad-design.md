@@ -58,3 +58,47 @@ trigger 入出力 / パッド毎の個別 volume / キーボード割当 / MIDI 
 4. MidiPad.audio → AudioOutput（または AudioMix）へ繋いで発音できる。
 5. Shift+クリックで再割当ダイアログ。
 6. リロード／プロジェクト保存・読込でパッド割当が復元される。
+
+---
+
+## 追加機能（既存 MidiPad への 5 機能追加）
+
+基本実装に対し、以下 5 機能を追加した。
+
+### 1. パッドを画面全体に拡大表示
+
+- タイトルバー右端に拡大ボタン（⛶）を追加（`layout.padExpandButtonRect`）。`NodeEditor.onExpandPad?(nodeId)` を発火。
+- `editor/pad-overlay.ts`（新規）の `openPadOverlay(nodeId, deps)` が全画面 DOM オーバーレイを開く。暗い背景・大きな 4×4 パッド・Stop ボタン・✕/Esc で閉じる。各パッド click で `deps.play`、Shift+click で `deps.assign`（再割当）。filled/label は `deps.info`。多重オープンは前回を閉じてから開く。対象ノードのみ表示。
+
+### 2. 再生した音を止める
+
+- `MidiPadRuntime.stopAll()`: active 内の全 source を `stop()`+`disconnect()`、`active.clear()`。mixGain は残すので以後も発音可能。
+- タイトルバーに全停止ボタン（■・拡大ボタンの左隣 `layout.padStopButtonRect`）。`NodeEditor.onStopPad?(nodeId)` → main で `stopAll()`。オーバーレイにも Stop ボタン。
+
+### 3. 音声ファイルを再割り当て
+
+- filled パッドへの Shift+click 割当が確実に上書きされる（`loadPadFile` は buffers/fileNames を上書き・`recordPadAsset`/ドロップ割当は `padAssets` を slice 後に上書き）。オーバーレイ内でも Shift+click で再割当可。ヒント文言・button.title に明記。
+
+### 4. アセットからドロップで割当
+
+- `NodeEditor.onDrop` を拡張: ドロップ world 位置が MidiPad のパッド上（`padIndexAt`）なら `onDropAssetToPad?(nodeId, padIndex, assetId)` を発火（generic `onDropAsset` の前に判定）。
+- main で `library.getFile(assetId)` → `loadPadFile(padIndex, file)`＋`params.padAssets[padIndex]=assetId`（slice 後に書込）。`resumeAudio`。
+
+### 5. パッド押下で発火する trigger 出力
+
+- outputs に trigger 出力ポート（`{ id:"trigger", type:"trigger" }`）を追加。
+- `MidiPadRuntime`: `playPad` で押下ラッチ `pressed` を立て、`consumeTrigger()` で読み取り＋リセット。`evaluate` が `{ ...signalOutput(mixGain), trigger: s.consumeTrigger() }` を返す。クリックは非同期・評価は毎フレームなので、押下→次の evaluate で 1 フレームだけ true。trigger は boolean 表現（PulseNode 等と同一）。単一トリガ（どのパッドでも発火）。
+
+### 追加 API
+
+- `NodeEditor`: `onExpandPad?`, `onStopPad?`, `onDropAssetToPad?`
+- `MidiPadRuntime`: `stopAll()`, `consumeTrigger()`
+- `layout`: `padExpandButtonRect`, `padStopButtonRect`
+- `editor/pad-overlay.ts`: `openPadOverlay`, `closePadOverlay`, `PadOverlayDeps`
+
+### 追加機能の手動確認項目
+
+7. ⛶ ボタンで全画面オーバーレイが開き、大きいパッドで発音・Shift+click で再割当・Stop・✕/Esc で閉じる。
+8. ■ ボタン（ノード／オーバーレイ）で発音中の音がすべて止まる。
+9. アセットパネルの項目をパッド上にドロップで割当（filled パッドは上書き）・リロードで復元。
+10. MidiPad.trig → Envelope/Flash/FlipFlop 等へ繋ぎ、パッド押下で 1 フレーム発火する。
