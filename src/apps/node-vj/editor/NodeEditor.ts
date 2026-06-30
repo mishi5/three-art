@@ -15,6 +15,7 @@ import {
   transportRowRect, transportLayout, seekRatioAt, formatTime, randomRowRect,
   hasSceneRow, sceneRowRect, sceneRowLabel,
   outputScaleChipRect, CATEGORY_COLORS,
+  hasPadGrid, padRect, padIndexAt, padExpandButtonRect, padStopButtonRect,
 } from "./layout";
 import { getOutputScale, setOutputScale, formatScale, DEFAULT_OUTPUT_SCALE } from "../graph/output-scale";
 import { randomInRange } from "./random-value";
@@ -116,6 +117,22 @@ export class NodeEditor {
   onDropAsset?: (assetId: string, worldX: number, worldY: number) => void;
   /** #206: ノードのアプリ内クリップボード（Cmd+C コピー / Cmd+V 貼付 / パネルからのドロップ貼付）。任意。 */
   clipboard?: NodeClipboard;
+  /** #205: 音入りパッドのクリック（ワンショット発音）。任意。 */
+  onHitPad?: (nodeId: string, padIndex: number) => void;
+  /** #205: 空パッドのクリック / Shift+クリック（ファイル割当ダイアログ）。任意。 */
+  onAssignPad?: (nodeId: string, padIndex: number) => void;
+  /** #205: 音入りパッドの Alt+クリック（割当解除＝空に戻す）。任意。 */
+  onUnassignPad?: (nodeId: string, padIndex: number) => void;
+  /** #205: 音入りパッドの Cmd/Ctrl+クリック（そのパッドの発音中の音だけ止める）。任意。 */
+  onStopPadVoice?: (nodeId: string, padIndex: number) => void;
+  /** #205: パッドの状態（割当済みか・短縮ラベル）を引く。任意。 */
+  padCellInfo?: (nodeId: string, padIndex: number) => { filled: boolean; label: string | null } | undefined;
+  /** #205: 拡大表示ボタン（⛶）。画面全体のパッドオーバーレイを開く。任意。 */
+  onExpandPad?: (nodeId: string) => void;
+  /** #205: 全停止ボタン（■）。発音中の音をすべて止める。任意。 */
+  onStopPad?: (nodeId: string) => void;
+  /** #205: アセットをパッド上にドロップして割当（再割当も上書き）。任意。 */
+  onDropAssetToPad?: (nodeId: string, padIndex: number, assetId: string) => void;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -284,6 +301,18 @@ export class NodeEditor {
     if (!id) return;
     e.preventDefault();
     const w = screenToWorld(e.clientX, e.clientY, this.offset, this.scale);
+    // #205: MidiPad のパッド上へドロップしたら、そのパッドへ割当（再割当も上書き）。
+    const hit = hitTest(this.graph.nodes, this.registry, w.x, w.y);
+    if (hit?.kind === "node") {
+      const def = this.registry.get(hit.node.type);
+      if (def?.padGrid) {
+        const idx = padIndexAt(hit.node, def, w.x, w.y);
+        if (idx !== null) {
+          this.onDropAssetToPad?.(hit.node.id, idx, id);
+          return;
+        }
+      }
+    }
     this.onDropAsset?.(id, w.x, w.y);
   };
 
@@ -370,6 +399,27 @@ export class NodeEditor {
         if (w.x >= b.x && w.x <= b.x + b.w && w.y >= b.y && w.y <= b.y + b.h) {
           hit.node.preview = !hit.node.preview;
           return;
+        }
+      }
+      // #205: MidiPad タイトルバーの拡大（⛶）/ 全停止（■）ボタン。
+      if (def?.padGrid) {
+        const eb = padExpandButtonRect(hit.node);
+        if (w.x >= eb.x && w.x <= eb.x + eb.w && w.y >= eb.y && w.y <= eb.y + eb.h) {
+          this.onExpandPad?.(hit.node.id);
+          return;
+        }
+        const sb = padStopButtonRect(hit.node);
+        if (w.x >= sb.x && w.x <= sb.x + sb.w && w.y >= sb.y && w.y <= sb.y + sb.h) {
+          this.onStopPad?.(hit.node.id);
+          return;
+        }
+      }
+      // #205: パッドグリッドの左クリックは発音のみ（音入りパッド）。割当/停止/解除は右クリックメニュー。
+      if (def?.padGrid) {
+        const idx = padIndexAt(hit.node, def, w.x, w.y);
+        if (idx !== null) {
+          if (this.padCellInfo?.(hit.node.id, idx)?.filled) this.onHitPad?.(hit.node.id, idx);
+          return; // パッド上クリックはノードドラッグへ流さない
         }
       }
       // #99: ファイル行クリックで OS ファイルダイアログを開く（pointerdown の user gesture 内）。
@@ -710,9 +760,28 @@ export class NodeEditor {
     if (lab) { this.showLabelMenu(e.clientX, e.clientY, lab); return; }
     const hit = hitTest(this.graph.nodes, this.registry, w.x, w.y);
     if (hit && hit.kind !== "port") {
+      // #205: MidiPad のパッド上で右クリックしたらパッド操作メニュー（割当/停止/解除）。
+      const def = this.registry.get(hit.node.type);
+      if (def?.padGrid) {
+        const idx = padIndexAt(hit.node, def, w.x, w.y);
+        if (idx !== null) { this.showPadMenu(e.clientX, e.clientY, hit.node.id, idx); return; }
+      }
       this.showNodeMenu(e.clientX, e.clientY, hit.node);
     } else {
       this.showAddMenu(e.clientX, e.clientY, w);
+    }
+  }
+
+  /** #205: パッドの右クリックメニュー。空=割当 / 音入り=再生・停止・再割当・解除。 */
+  private showPadMenu(screenX: number, screenY: number, nodeId: string, padIndex: number): void {
+    const menu = this.buildMenu(screenX, screenY);
+    const filled = this.padCellInfo?.(nodeId, padIndex)?.filled ?? false;
+    if (filled) {
+      this.addMenuItem(menu, "■ このパッドを停止", () => this.onStopPadVoice?.(nodeId, padIndex));
+      this.addMenuItem(menu, "↻ 音声を再割り当て", () => this.onAssignPad?.(nodeId, padIndex));
+      this.addMenuItem(menu, "✕ 割り当てを解除", () => this.onUnassignPad?.(nodeId, padIndex));
+    } else {
+      this.addMenuItem(menu, "＋ 音声を割り当て", () => this.onAssignPad?.(nodeId, padIndex));
     }
   }
 
@@ -1433,6 +1502,41 @@ export class NodeEditor {
       ctx.strokeStyle = "#4a5566"; ctx.lineWidth = 1; ctx.stroke();
       ctx.fillStyle = "#9ab"; ctx.textAlign = "left"; ctx.font = "11px system-ui";
       ctx.fillText(ellipsizeEnd(ctx, sceneRowLabel(name), sr.w - 24), sr.x + 12, sr.y + sr.h / 2);
+    }
+    // #205: パッドグリッド（4×4）。音入り=色付き＋短縮ラベル、空=暗色。
+    if (hasPadGrid(def)) {
+      // タイトルバーに拡大（⛶）/ 全停止（■）ボタンを描く。
+      const eb = padExpandButtonRect(node);
+      ctx.fillStyle = "#2a2a36";
+      roundRect(ctx, eb.x, eb.y, eb.w, eb.h, 3); ctx.fill();
+      ctx.fillStyle = "#cfeede"; ctx.font = "12px system-ui"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("⛶", eb.x + eb.w / 2, eb.y + eb.h / 2 + 0.5);
+      const sb = padStopButtonRect(node);
+      ctx.fillStyle = "#3a2a2a";
+      roundRect(ctx, sb.x, sb.y, sb.w, sb.h, 3); ctx.fill();
+      ctx.fillStyle = "#e9a0a0";
+      ctx.fillRect(sb.x + sb.w / 2 - 4, sb.y + sb.h / 2 - 4, 8, 8); // ■
+      ctx.textAlign = "left"; ctx.textBaseline = "middle";
+      const grid = def.padGrid!;
+      const count = grid.rows * grid.cols;
+      ctx.font = "9px system-ui";
+      for (let i = 0; i < count; i++) {
+        const pr = padRect(node, def, i);
+        if (!pr) continue;
+        const info = this.padCellInfo?.(node.id, i);
+        const filled = info?.filled ?? false;
+        ctx.fillStyle = filled ? "#2f5a44" : "#1e2228";
+        roundRect(ctx, pr.x, pr.y, pr.w, pr.h, 4);
+        ctx.fill();
+        ctx.strokeStyle = filled ? "#5cc99a" : "#3a4048";
+        ctx.lineWidth = 1; ctx.stroke();
+        const label = filled ? (info?.label ?? null) : null;
+        ctx.fillStyle = filled ? "#cfeede" : "#586068";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        const text = label ?? String(i + 1);
+        ctx.fillText(ellipsizeEnd(ctx, text, pr.w - 6), pr.x + pr.w / 2, pr.y + pr.h / 2);
+      }
+      ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.font = "11px system-ui";
     }
     // #150: 🎲ランダムボタン行。
     if (def.randomButton) {

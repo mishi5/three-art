@@ -6,6 +6,7 @@ import { createDefaultRegistry } from "./nodes/registry";
 import { addConnection, addNode, createGraph, replaceGraph } from "./graph/graph-doc";
 import { GraphRuntime } from "./graph/runtime";
 import { NodeEditor } from "./editor/NodeEditor";
+import { openPadOverlay } from "./editor/pad-overlay";
 import { buildGraphIoBar } from "./editor/graph-io-bar";
 import { GraphStore, localStorageAdapter } from "./graph/graph-store";
 import { History } from "./graph/history";
@@ -127,10 +128,57 @@ function recordAsset(nodeId: string, file: File): void {
   }).catch((e) => console.warn(`[node-vj] library.add failed for ${nodeId}:`, e));
 }
 
+/** #205: パッドへ割り当てたファイルをライブラリへ取り込み、params.padAssets[slot] に assetId を記録する。 */
+function recordPadAsset(nodeId: string, slot: number, file: File): void {
+  library.add(file).then((m) => {
+    if (!m) return;
+    const n = graph.nodes.find((x) => x.id === nodeId);
+    if (!n) return;
+    // 共有 default 配列を破壊しないよう必ず slice して自分専用の配列にしてから書き込む。
+    const prev = (n.params as Record<string, unknown>).padAssets;
+    const arr = Array.isArray(prev) ? prev.slice() : [];
+    arr[slot] = m.id;
+    (n.params as Record<string, unknown>).padAssets = arr;
+  }).catch((e) => console.warn(`[node-vj] library.add (pad) failed for ${nodeId}:`, e));
+}
+
+/** #205: パッドへの音声割当（user gesture 内でファイル選択ダイアログを開く）。 */
+function openPadFileDialog(nodeId: string, slot: number): void {
+  // #205: 再割当を始めたら、そのパッドで鳴っている音を止める（古い音源を残さない）。
+  (runtime.getState(nodeId) as PadLoadable | undefined)?.stopPad?.(slot);
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "audio/*";
+  input.style.display = "none";
+  document.body.appendChild(input);
+  input.addEventListener("change", () => {
+    const file = input.files?.[0];
+    if (file) {
+      runtime.resumeAudio();
+      const s = runtime.getState(nodeId) as PadLoadable | undefined;
+      void s?.loadPadFile?.(slot, file).catch((e) => console.warn(`[node-vj] loadPadFile failed ${nodeId}[${slot}]:`, e));
+      recordPadAsset(nodeId, slot, file);
+    }
+    input.remove();
+  });
+  input.addEventListener("cancel", () => input.remove());
+  input.click();
+}
+
 // ノードエディタ（全画面）。出力ポートのライブ値は runtime の直近評価結果から引く。
 const history = new History();
 type FileLoadable = { loadFile?: (f: File) => Promise<void> };
 type Named = { fileName?: string | null };
+// #205: MidiPad ランタイムの duck-type（パッド割当/発音/状態参照）。
+type PadLoadable = {
+  loadPadFile?: (index: number, file: File) => Promise<void>;
+  playPad?: (index: number) => void;
+  hasPad?: (index: number) => boolean;
+  padLabel?: (index: number) => string | null;
+  stopAll?: () => void;
+  stopPad?: (index: number) => void;
+  clearPad?: (index: number) => void;
+};
 const editor = new NodeEditor(
   editorCanvas, graph, registry, history,
   (id) => runtime.getOutputs(id),
@@ -187,6 +235,81 @@ function loadAssetIntoNode(nodeId: string, assetId: string, file: File): void {
 // #206: ノードのアプリ内クリップボード（Cmd+C コピー / Cmd+V 貼付 / パネルからのドロップ貼付）。
 const clipboard = new NodeClipboard();
 editor.clipboard = clipboard;
+// #205: MidiPad のパッド操作配線（発音・割当・状態参照）。
+editor.onHitPad = (id, idx) => {
+  runtime.resumeAudio(); // user gesture で共有 AudioContext を起こす
+  (runtime.getState(id) as PadLoadable | undefined)?.playPad?.(idx);
+};
+editor.onAssignPad = (id, idx) => {
+  runtime.resumeAudio();
+  openPadFileDialog(id, idx); // pointerdown の user gesture 内でダイアログを開く
+};
+editor.padCellInfo = (id, idx) => {
+  const s = runtime.getState(id) as PadLoadable | undefined;
+  if (!s || typeof s.hasPad !== "function") return undefined;
+  return { filled: s.hasPad(idx), label: s.padLabel?.(idx) ?? null };
+};
+// #205: パッドへの（再）割当を 1 か所に集約（ファイル選択ダイアログ→loadPadFile＋padAssets 上書き）。
+function assignPad(nodeId: string, slot: number): void {
+  runtime.resumeAudio();
+  openPadFileDialog(nodeId, slot);
+}
+
+/** #205: パッドの割当を解除する（鳴っている音を止め・buffer を空に・padAssets[slot] を消す）。 */
+function unassignPad(nodeId: string, slot: number): void {
+  (runtime.getState(nodeId) as PadLoadable | undefined)?.clearPad?.(slot);
+  const n = graph.nodes.find((x) => x.id === nodeId);
+  const prev = n ? (n.params as Record<string, unknown>).padAssets : undefined;
+  if (n && Array.isArray(prev)) {
+    const arr = prev.slice(); // 共有 default を壊さないよう slice
+    arr[slot] = ""; // 空文字＝未割当（collectAssetRefs は非空のみ拾う）
+    (n.params as Record<string, unknown>).padAssets = arr;
+  }
+}
+// #205: 拡大ボタン → 画面全体のパッドオーバーレイを開く（対象ノードの padGrid 寸法で）。
+editor.onExpandPad = (id) => {
+  runtime.resumeAudio();
+  const n = graph.nodes.find((x) => x.id === id);
+  const def = n ? registry.get(n.type) : undefined;
+  const grid = def?.padGrid ?? { rows: 4, cols: 4 };
+  openPadOverlay(id, {
+    rows: grid.rows, cols: grid.cols,
+    play: (nodeId, idx) => { runtime.resumeAudio(); (runtime.getState(nodeId) as PadLoadable | undefined)?.playPad?.(idx); },
+    stop: (nodeId) => (runtime.getState(nodeId) as PadLoadable | undefined)?.stopAll?.(),
+    stopVoice: (nodeId, idx) => (runtime.getState(nodeId) as PadLoadable | undefined)?.stopPad?.(idx),
+    assign: (nodeId, idx) => assignPad(nodeId, idx),
+    unassign: (nodeId, idx) => unassignPad(nodeId, idx),
+    info: (nodeId, idx) => {
+      const s = runtime.getState(nodeId) as PadLoadable | undefined;
+      if (!s || typeof s.hasPad !== "function") return undefined;
+      return { filled: s.hasPad(idx), label: s.padLabel?.(idx) ?? null };
+    },
+  });
+};
+// #205: 全停止ボタン → 発音中の音をすべて止める。
+editor.onStopPad = (id) => (runtime.getState(id) as PadLoadable | undefined)?.stopAll?.();
+// #205: 音入りパッドの Alt+クリック → 割当解除（空に戻す）。
+editor.onUnassignPad = (id, idx) => unassignPad(id, idx);
+// #205: 音入りパッドの Cmd/Ctrl+クリック → そのパッドの発音中の音だけ止める（個別停止）。
+editor.onStopPadVoice = (id, idx) => (runtime.getState(id) as PadLoadable | undefined)?.stopPad?.(idx);
+// #205: アセットをパッド上にドロップ → そのパッドへ割当（再割当も上書き）。
+editor.onDropAssetToPad = (id, idx, assetId) => {
+  runtime.resumeAudio();
+  library.getFile(assetId).then((file) => {
+    if (!file) return;
+    const s = runtime.getState(id) as PadLoadable | undefined;
+    s?.stopPad?.(idx); // 再割当時は古い音を止める
+    void s?.loadPadFile?.(idx, file).catch((e) => console.warn(`[node-vj] loadPadFile (drop) failed ${id}[${idx}]:`, e));
+    // padAssets[idx] を上書き（共有 default を壊さないよう slice してから書く・recordPadAsset と同様）。
+    const n = graph.nodes.find((x) => x.id === id);
+    if (n) {
+      const prev = (n.params as Record<string, unknown>).padAssets;
+      const arr = Array.isArray(prev) ? prev.slice() : [];
+      arr[idx] = assetId;
+      (n.params as Record<string, unknown>).padAssets = arr;
+    }
+  }).catch((e) => console.warn(`[node-vj] drop asset to pad failed ${assetId}:`, e));
+};
 editor.onDropAsset = (assetId, x, y) => {
   runtime.resumeAudio(); // #128: 読込（user gesture）で共有 AudioContext を起こす
   Promise.all([library.getFile(assetId), library.get(assetId)]).then(([file, meta]) => {
@@ -204,6 +327,15 @@ editor.onDropAsset = (assetId, x, y) => {
 /** #154: グラフ読込後、params.assetId を持つノードへライブラリからファイルを復元する。 */
 async function restoreAssets(): Promise<void> {
   for (const ref of collectAssetRefs(graph)) {
+    // #205: slot 付き参照（MidiPad のパッド）は loadPadFile で復元する。
+    if (ref.slot !== undefined) {
+      const pad = runtime.getState(ref.nodeId) as PadLoadable | undefined;
+      if (pad?.hasPad?.(ref.slot)) continue; // 既に割当済みは再読込しない
+      const file = await library.getFile(ref.assetId);
+      if (!file) { console.warn(`[node-vj] asset not found: ${ref.assetId}`); continue; }
+      await pad?.loadPadFile?.(ref.slot, file).catch((e) => console.warn(`[node-vj] pad restore failed ${ref.nodeId}[${ref.slot}]:`, e));
+      continue;
+    }
     // #174: state 移譲で既に読込済み（再生継続中）のノードは再読込しない（loadFile は先頭から再生し直すため）。
     const cur = runtime.getState(ref.nodeId) as (FileLoadable & Named) | undefined;
     if (cur?.fileName) continue;
