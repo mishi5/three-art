@@ -14,7 +14,7 @@ import { previewSize } from "./preview-size";
 import { OutputWindow, OUTPUT_RENDER_W, OUTPUT_RENDER_H } from "./output-window";
 import { Recorder, pickRecorderMimeType, recordingFileName } from "./recorder";
 import { audioOutputOptions, type AudioOutputOption } from "./scene/output-audio";
-import type { PlaybackControl } from "./nodes/playback";
+import { stopIfPlaying, type PlaybackControl } from "./nodes/playback";
 import { DEFAULT_AUDIO_FEATURES, type AudioFeatures } from "../../core/types";
 import { AssetLibrary } from "./asset/asset-library";
 import { opfsBinaryStore } from "./asset/binary-store";
@@ -343,6 +343,10 @@ async function restoreAssets(): Promise<void> {
     const file = await library.getFile(ref.assetId);
     if (!file) { console.warn(`[node-vj] asset not found: ${ref.assetId}`); continue; }
     await cur?.loadFile?.(file).catch((e) => console.warn(`[node-vj] restore failed ${ref.nodeId}:`, e));
+    // #221: 復元による新規読込は auto-play させない（loadFile は先頭から自動再生するため停止する）。
+    //       state 移譲で既読込のノードは上の cur.fileName で continue 済み＝ここには来ないので、
+    //       切替前の再生/停止状態は維持される。
+    stopIfPlaying(cur);
   }
 }
 
@@ -371,6 +375,10 @@ if (savedSceneSet) {
   const act = sceneManager.active();
   replaceGraph(graph, structuredClone(act.graph));
   history.useScene(act.id);
+  // #220: restoreAssets は runtime.getState(nodeId) 経由で loadFile を呼ぶため、先に state を生成する。
+  //       これが無いと初期表示でアセットが読み込まれず、シーン切替で戻って初めて読み込まれていた。
+  //       reflectActiveScene と手順を揃える。
+  runtime.ensureStates();
   void restoreAssets();
 } else {
   history.useScene(sceneManager.activeId());
@@ -426,8 +434,7 @@ function reflectActiveScene(): Promise<void> {
 /** #201: 現アクティブグラフの Video/AudioFileInput を停止状態にする（プロジェクト読込直後など）。 */
 function pauseActivePlayback(): void {
   for (const node of graph.nodes) {
-    const s = runtime.getState(node.id) as Partial<PlaybackControl> | undefined;
-    if (s?.isPlaying?.() && s.togglePlay) s.togglePlay(); // 再生中のみ停止（loadFile は自動再生のため）
+    stopIfPlaying(runtime.getState(node.id)); // 再生中のみ停止（loadFile は自動再生のため）
   }
 }
 
