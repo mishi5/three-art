@@ -11,6 +11,9 @@ import {
 // リングバッファ上限の算出前提（最大 windowSec × 想定 fps）。メモリ上限のためのキャップ。
 const MAX_WINDOW_SEC = 30;
 const ASSUMED_FPS = 60;
+// #217: 描画サーフェスの長辺上限（px）。Canvas2D→CanvasTexture の毎フレームアップロード負荷を
+// 抑えるため、出力/拡大表示の高解像度でもこのサイズにダウンスケールする（波形は中解像度で十分）。
+const GRAPH_MAX_DIM = 1280;
 
 interface GraphVisualState {
   surface: GraphCanvasSurface;
@@ -71,9 +74,14 @@ export const GraphVisualNode: NodeTypeDef = {
     const bgAlpha = clamp01(Number(ctx.param("bgAlpha") ?? 1));
     const zeroLineOn = String(ctx.param("zeroLine") ?? "on") !== "off";
 
-    // 描画解像度を renderer に合わせる。
-    const w = env.renderer.domElement.width;
-    const h = env.renderer.domElement.height;
+    // 描画解像度。Canvas2D→CanvasTexture を毎フレームアップロードするため、出力/拡大表示で
+    // renderer が高解像度（フルスクリーン×dpr や 1920×1080）になるとアップロードコストが激増し
+    // 実質フリーズする。波形は中解像度で十分なので、アスペクト比を保ったまま長辺を上限でキャップする。
+    const rw = env.renderer.domElement.width || 2;
+    const rh = env.renderer.domElement.height || 2;
+    const scale = Math.min(1, GRAPH_MAX_DIM / Math.max(rw, rh));
+    const w = Math.max(2, Math.round(rw * scale));
+    const h = Math.max(2, Math.round(rh * scale));
     s.surface.resize(w, h);
     const cw = s.surface.width;
     const ch = s.surface.height;
