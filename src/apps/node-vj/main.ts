@@ -25,6 +25,7 @@ import { assetDropTarget, nodeTypeForKind } from "./asset/asset-drop";
 import { collectAssetRefs } from "./asset/asset-refs";
 import { SceneStore } from "./scene/scene-store";
 import { SceneManager, singleSceneSet } from "./scene/scene-manager";
+import { sanitizeSceneSet } from "./scene/scene-sanitize";
 import { serializeProject, deserializeProject, projectFileName } from "./scene/project-file";
 import { wouldCreateSceneCycle } from "./scene/scene-refs";
 import { scenePanelDef, type ScenePanelActions } from "./scene/scene-panel";
@@ -348,7 +349,19 @@ async function restoreAssets(): Promise<void> {
 // #151: シーン管理。SceneStore から復元、無ければ既定グラフを唯一のシーンとして初期化。
 const sceneStore = new SceneStore(localStorage);
 const genSceneId = (): string => `scene-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-const savedSceneSet = sceneStore.load();
+// #213 復元した SceneSet は未知ノード型を含みうる（旧ビルド/他環境の localStorage）。
+// deserializeGraph 相当のサニタイズを通し、未知ノード/不正接続を除去してから採用する。
+// これを怠ると評価器の未知 type 参照で tick ループごとクラッシュし、localStorage 汚染で
+// 復帰不能になる。全滅時は null が返るので既定シーンへフォールバックする。
+const rawSavedSceneSet = sceneStore.load();
+let savedSceneSet = rawSavedSceneSet;
+if (rawSavedSceneSet) {
+  const sanitized = sanitizeSceneSet(rawSavedSceneSet, registry);
+  savedSceneSet = sanitized.set;
+  if (sanitized.warnings.length > 0) {
+    console.warn("[node-vj] 復元シーンをサニタイズしました:", sanitized.warnings);
+  }
+}
 const sceneManager = new SceneManager(
   { store: sceneStore, genId: genSceneId },
   savedSceneSet ?? singleSceneSet(structuredClone(graph), genSceneId(), "Scene 1"),

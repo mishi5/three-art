@@ -41,7 +41,15 @@ export function evaluate(
 
     const node = findNode(g, nodeId);
     if (!node) throw new Error(`node not found: ${nodeId}`);
-    const def = registry.require(node.type);
+    // #213 多層防御: 未知ノード型は throw せずスキップ（出力なし）。復元サニタイズを
+    // すり抜けた未知 type が残っても tick ループごとクラッシュしないようにする。
+    const def = registry.get(node.type);
+    if (!def) {
+      visiting.delete(nodeId);
+      const empty: Record<string, unknown> = {};
+      memo.set(nodeId, empty);
+      return empty;
+    }
 
     // 実効入力（signal ∪ 数値 param）を解決。接続あり→上流値、なし→手動 param（あれば）。
     const inputValues = new Map<string, unknown>();
