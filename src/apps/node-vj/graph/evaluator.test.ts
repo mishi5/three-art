@@ -131,4 +131,29 @@ describe("evaluator", () => {
     const ids = getSinks(g, r).map((n) => n.id).sort();
     expect(ids).toEqual(["c", "s"]);
   });
+
+  // #213 多層防御: 未知ノード型が残っても throw せずスキップする。
+  test("未知ノード型はスキップし throw しない（空出力）", () => {
+    const { r, sunk } = setup();
+    const g = createGraph();
+    // ghost は未登録 type。それ自体が sink（出力辺なし）としても評価対象になる。
+    addNode(g, { id: "ghost", type: "NoSuchNode", params: {} });
+    let memo!: Map<string, Record<string, unknown>>;
+    expect(() => { memo = evaluate(g, r, { timeSec: 0 }); }).not.toThrow();
+    expect(memo.get("ghost")).toEqual({});
+    expect(sunk).toEqual([]);
+  });
+
+  test("未知ノードを上流に持つ接続は undefined を渡すだけでクラッシュしない", () => {
+    const { r, sunk } = setup();
+    const g = createGraph();
+    addNode(g, { id: "ghost", type: "NoSuchNode", params: {} });
+    addNode(g, { id: "s", type: "Sink", params: {} });
+    // 未知ノードからの接続は addConnection で拒否されるため、上流未知の評価経路を
+    // 確実に通すよう接続を直接注入する（保険の多層防御を検証する）。
+    g.connections.push({ id: "c", from: { node: "ghost", port: "outN" }, to: { node: "s", port: "inN" } });
+    expect(() => evaluate(g, r, { timeSec: 0 })).not.toThrow();
+    // 未知ノードの出力は空なので inN は undefined。
+    expect(sunk).toEqual([undefined as unknown as number]);
+  });
 });
