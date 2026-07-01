@@ -8,6 +8,7 @@ import type { NodeState, NodeTypeDef } from "../graph/node-type";
 import { PREVIEW_W, PREVIEW_H } from "../graph/preview";
 import { containRect } from "../editor/fit";
 import { VideoTextureSurface } from "../graph/video-surface";
+import { sharedCamera } from "./shared-camera";
 
 /** 骨格重畳に使う主要エッジ（MediaPipe Pose の landmark index）。 */
 const SKELETON_EDGES: ReadonlyArray<[number, number]> = [
@@ -23,40 +24,33 @@ const SKELETON_EDGES: ReadonlyArray<[number, number]> = [
 type Landmark = { x: number; y: number };
 
 /**
- * CameraInput ノードの永続状態（#66）。カメラ（video/stream）を所有し、
- * 姿勢推定（MediaPipe）は poseDetect=on のときだけ遅延起動する。
+ * CameraInput ノードの永続状態（#66 / #214）。
+ * カメラ（MediaStream・隠し <video>）は共有カメラ（sharedCamera）が所有し、本 Runtime は
+ * それにアタッチするだけ（シーン切替で state が破棄されても stream は落ちない）。
+ * 姿勢推定（MediaPipe）は poseDetect=on のときだけ遅延起動する（ノード単位）。
  * カメラ起動は user gesture が必要なため start() は外部（起動ボタン）から呼ぶ。
  */
 export class CameraInputRuntime {
   readonly anchors = new JointAnchors();
-  private video: HTMLVideoElement;
-  private stream: MediaStream | null = null;
   private pose: PoseInput | null = null;
   private poseStarting = false;
   private surface = new VideoTextureSurface();
   private lastLandmarks: Landmark[] | null = null;
   private previewCanvas: HTMLCanvasElement | null = null;
-  started = false;
 
-  constructor() {
-    this.video = document.createElement("video");
-    this.video.playsInline = true;
-    this.video.muted = true;
-    this.video.autoplay = true;
-    this.video.style.display = "none";
-    document.body.appendChild(this.video);
+  /** 共有カメラの隠し <video>（複数 CameraInput ノードで共有）。 */
+  private get video(): HTMLVideoElement {
+    return sharedCamera.video;
   }
 
-  /** カメラを開始する（姿勢推定は evaluate 側で poseDetect に応じて遅延起動）。 */
+  /** カメラが稼働中か（共有カメラの状態に追従）。 */
+  get started(): boolean {
+    return sharedCamera.started;
+  }
+
+  /** カメラを開始する（共有カメラへ委譲・冪等）。姿勢推定は evaluate 側で遅延起動。 */
   async start(): Promise<void> {
-    if (this.started) return;
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: 640, height: 480 },
-      audio: false,
-    });
-    this.video.srcObject = this.stream;
-    await this.video.play();
-    this.started = true;
+    await sharedCamera.start();
   }
 
   /** poseDetect=on で呼ばれる。多重起動を防ぎつつ MediaPipe を遅延起動。 */
@@ -123,12 +117,13 @@ export class CameraInputRuntime {
     return this.previewCanvas;
   }
 
+  /**
+   * #214: state 破棄時は pose と描画資源だけ解放し、共有カメラの stream/video は止めない。
+   * カメラの停止は「入力停止」ボタン / 全シーンから CameraInput 消失時の自動停止 / unload が担う。
+   */
   dispose(): void {
     this.stopPose();
     this.surface.dispose();
-    if (this.stream) for (const t of this.stream.getTracks()) t.stop();
-    this.video.srcObject = null;
-    this.video.remove();
   }
 }
 

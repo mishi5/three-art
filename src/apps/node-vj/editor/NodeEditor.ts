@@ -133,6 +133,11 @@ export class NodeEditor {
   onStopPad?: (nodeId: string) => void;
   /** #205: アセットをパッド上にドロップして割当（再割当も上書き）。任意。 */
   onDropAssetToPad?: (nodeId: string, padIndex: number, assetId: string) => void;
+  /**
+   * #214: ノード削除など、グラフのノード構成が変わったときに呼ぶ。任意。
+   * 最後の CameraInput 削除で共有カメラを自動停止する等の判定トリガに使う。
+   */
+  onGraphMutated?: () => void;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -674,6 +679,7 @@ export class NodeEditor {
       this.history.record(this.graph);
       for (const id of this.selectedIds) removeNode(this.graph, id);
       this.selectedIds = new Set();
+      this.onGraphMutated?.(); // #214: 最後の CameraInput 削除なら共有カメラ自動停止判定
     }
     // #176: ラベル選択中の Delete で当該ラベルを削除。
     if ((e.key === "Delete" || e.key === "Backspace") && this.selectedLabelId) {
@@ -697,6 +703,7 @@ export class NodeEditor {
         // 消えたノードを選択から除外
         const alive = new Set(this.graph.nodes.map((n) => n.id));
         this.selectedIds = new Set([...this.selectedIds].filter((id) => alive.has(id)));
+        this.onGraphMutated?.(); // #214: UNDO/REDO で CameraInput が消えたら共有カメラ自動停止判定
       }
       return;
     }
@@ -962,6 +969,7 @@ export class NodeEditor {
       this.history.record(this.graph);
       for (const id of this.selectedIds) removeNode(this.graph, id);
       this.selectedIds = new Set();
+      this.onGraphMutated?.(); // #214: 最後の CameraInput 削除なら共有カメラ自動停止判定
     });
     // #176: ノード名の編集。表示位置（ノード上部）に近い位置でインライン編集する。
     this.addMenuItem(menu, node.name ? "ノード名を編集" : "ノード名を設定", () => {
