@@ -44,6 +44,13 @@ export class GraphCanvasSurface {
     if (this.canvas.width !== w || this.canvas.height !== h) {
       this.canvas.width = w;
       this.canvas.height = h;
+      // CanvasTexture は canvas リサイズで GPU テクスチャを再確保しない。大きくなった canvas を
+      // 小さいテクスチャへ sub-upload すると overflow（glCopySubTextureCHROMIUM: Offset overflows
+      // texture dimensions）して以後アップロードが止まり固まる。サイズ変更時は作り直す。
+      this.texture.dispose();
+      this.texture = new THREE.CanvasTexture(this.canvas);
+      this.material.map = this.texture;
+      this.material.needsUpdate = true;
     }
     if (this.rt.width !== w || this.rt.height !== h) this.rt.setSize(w, h);
   }
