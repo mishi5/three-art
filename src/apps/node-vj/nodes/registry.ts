@@ -41,6 +41,7 @@ import { FeedbackNode } from "./FeedbackNode";
 import { FlashNode } from "./FlashNode";
 import { TextureTransformNode } from "./TextureTransformNode";
 import { EdgeVisualNode } from "./EdgeVisualNode";
+import { GraphVisualNode } from "./GraphVisualNode";
 import { AudioMixNode } from "./AudioMixNode";
 import { AudioDelayNode } from "./AudioDelayNode";
 import { AudioOutputNode } from "./AudioOutputNode";
@@ -86,6 +87,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(BlendNode);
   r.register(KeyNode);
   r.register(EdgeVisualNode);
+  r.register(GraphVisualNode);
   // effect（texture→texture）
   r.register(BlurNode);
   r.register(BloomNode);
