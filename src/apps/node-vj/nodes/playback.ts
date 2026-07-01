@@ -11,3 +11,13 @@ export interface PlaybackControl {
   /** 指定秒へシーク。 */
   seek(t: number): void;
 }
+
+/**
+ * #221: PlaybackControl を持つ state が再生中なら停止する（duck-type）。
+ * loadFile が先頭から自動再生するため、復元/初期化で新規読込した Video/Audio を止めるのに使う。
+ * PlaybackControl でない（isPlaying/togglePlay を持たない）state は無視する。
+ */
+export function stopIfPlaying(state: unknown): void {
+  const pb = state as Partial<PlaybackControl> | undefined;
+  if (pb?.isPlaying?.() && pb.togglePlay) pb.togglePlay();
+}
