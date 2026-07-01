@@ -2,7 +2,7 @@
 // 描き、アスペクト比を保った texture として供給する（#66）。
 // 生の VideoTexture を直接流すと全面クアッドに引き伸ばされるため、入口で正規化する。
 import * as THREE from "three";
-import { containRect } from "../editor/fit";
+import { containScale } from "../editor/fit";
 
 export class VideoTextureSurface {
   private scene = new THREE.Scene();
@@ -31,8 +31,8 @@ export class VideoTextureSurface {
     const h = renderer.domElement.height;
     if (this.rt.width !== w || this.rt.height !== h) this.rt.setSize(w, h);
     // NDC 全面 (2x2) に対する contain スケール（黒帯は scene.background）
-    const fit = containRect(video.videoWidth, video.videoHeight, w, h);
-    this.mesh.scale.set(fit.w / w, fit.h / h, 1);
+    const s = containScale(video.videoWidth, video.videoHeight, w, h);
+    this.mesh.scale.set(s.x, s.y, 1);
     const prev = renderer.getRenderTarget();
     renderer.setRenderTarget(this.rt);
     renderer.clear();

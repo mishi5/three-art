@@ -2,15 +2,18 @@ import * as THREE from "three";
 import type { NodeState, NodeTypeDef } from "../graph/node-type";
 import { PREVIEW_W, PREVIEW_H } from "../graph/preview";
 import { containRect } from "../editor/fit";
+import { ImageTextureSurface } from "../graph/image-surface";
 
 /**
  * ImageFileInput ノードの永続状態（#121）。静止画ファイルを読み込んで texture を供給する。
  * ファイル選択（user gesture）から loadFile を呼ぶ。音声は持たない（VideoFileInput の簡易版）。
- * 出力は素の画像テクスチャ（アスペクト比は下流の PointShape image モード等が image.width/height から扱う）。
+ * #219: 素の画像 texture は下流の全画面描画で出力アスペクトに引き伸ばされるため、
+ * ImageTextureSurface で画面サイズ RT へ contain 描画し、アスペクト比を入口で正規化して出力する
+ * （VideoFileInput と挙動を揃える）。
  */
 export class ImageFileInputRuntime {
   private img: HTMLImageElement | null = null;
-  private tex: THREE.Texture | null = null;
+  private surface = new ImageTextureSurface();
   private objectUrl: string | null = null;
   private previewCanvas: HTMLCanvasElement | null = null;
   /** #99: ノード上に表示する現在のファイル名（未選択は null）。 */
@@ -28,17 +31,12 @@ export class ImageFileInputRuntime {
       img.src = this.objectUrl!;
     });
     this.img = img;
-    if (this.tex) this.tex.dispose();
-    this.tex = new THREE.Texture(img);
-    this.tex.colorSpace = THREE.SRGBColorSpace;
-    this.tex.minFilter = THREE.LinearFilter;
-    this.tex.magFilter = THREE.LinearFilter;
-    this.tex.needsUpdate = true;
   }
 
-  /** 読み込み済みの画像テクスチャ（未読込なら null）。 */
-  getTexture(): THREE.Texture | null {
-    return this.tex;
+  /** 画面サイズ RT へ contain 描画した texture（アスペクト比の入口正規化。未読込なら null）。 */
+  getTexture(renderer: THREE.WebGLRenderer): THREE.Texture | null {
+    if (!this.img) return null;
+    return this.surface.render(renderer, this.img);
   }
 
   previewFrame(): CanvasImageSource | null {
@@ -58,10 +56,9 @@ export class ImageFileInputRuntime {
   }
 
   dispose(): void {
-    if (this.tex) this.tex.dispose();
+    this.surface.dispose();
     if (this.objectUrl) URL.revokeObjectURL(this.objectUrl);
     this.img = null;
-    this.tex = null;
   }
 }
 
@@ -74,7 +71,7 @@ export const ImageFileInputNode: NodeTypeDef = {
   fileInput: { accept: "image/*" },
   inputs: [],
   outputs: [
-    { id: "texture", label: "tex", type: "texture", description: "読み込んだ画像のテクスチャ（素の画像。アスペクト比は下流で扱う）。" },
+    { id: "texture", label: "tex", type: "texture", description: "読み込んだ画像のテクスチャ（アスペクト比を入口で正規化済み）。" },
   ],
   params: [
     { id: "assetId", label: "asset", kind: "string", default: "", noInput: true, hidden: true,
@@ -86,7 +83,7 @@ export const ImageFileInputNode: NodeTypeDef = {
   evaluate: (ctx) => {
     const s = ctx.state as ImageFileInputRuntime | undefined;
     if (!s) return {};
-    const texture = s.getTexture() ?? undefined;
+    const texture = (ctx.env ? s.getTexture(ctx.env.renderer) : null) ?? undefined;
     return { texture };
   },
 };

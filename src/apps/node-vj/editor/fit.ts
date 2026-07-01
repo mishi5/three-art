@@ -9,3 +9,14 @@ export function containRect(srcW: number, srcH: number, dstW: number, dstH: numb
   const h = srcH * scale;
   return { x: (dstW - w) / 2, y: (dstH - h) / 2, w, h };
 }
+
+/**
+ * contain 矩形を dst で正規化した NDC スケール（#219・純粋）。
+ * 全面クアッド(2x2)を張った mesh に対する `scale.set(x, y, 1)` に使う。
+ * dst が 0 以下や不正サイズのときは全面 (1,1) にフォールバックする。
+ */
+export function containScale(srcW: number, srcH: number, dstW: number, dstH: number): { x: number; y: number } {
+  if (dstW <= 0 || dstH <= 0) return { x: 1, y: 1 };
+  const r = containRect(srcW, srcH, dstW, dstH);
+  return { x: r.w / dstW, y: r.h / dstH };
+}
