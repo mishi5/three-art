@@ -34,6 +34,8 @@ import { NodeClipboard } from "./editor/node-clipboard";
 import { clipboardPanelDef } from "./editor/clipboard-panel";
 import { sharedCamera } from "./nodes/shared-camera";
 import { shouldAutoStopCamera } from "./nodes/camera-share-logic";
+import { PrefsStore } from "./prefs";
+import { settingsPanelDef } from "./editor/settings-panel";
 
 const editorCanvas = document.getElementById("editor");
 const previewCanvas = document.getElementById("preview");
@@ -226,6 +228,10 @@ const editor = new NodeEditor(
     },
   },
 );
+
+// #229: UI 設定（操作モード等）。起動時に読み込み、エディタへ即注入する。
+const prefsStore = new PrefsStore(localStorageAdapter());
+editor.panSelectMode = prefsStore.load().panMode;
 
 // #154: canvas へドロップされたアセットを読み込む。
 // ファイル入力ノード本体に重なれば割当、空白なら種別に応じてノードを生成して割当。
@@ -492,8 +498,20 @@ const sceneActions: ScenePanelActions = {
   outputId: () => sceneManager.outputId(),
   setOutput: (id) => { sceneManager.setOutput(id); syncOutputScene(); },
 };
-// #151: VSCode 風サイドドック（最左アイコン列で アセット/シーン を切替）。
-buildSideDock([assetPanelDef(library), scenePanelDef(sceneActions), clipboardPanelDef(clipboard)]);
+// #151: VSCode 風サイドドック（最左アイコン列で アセット/シーン/クリップボード/設定 を切替）。
+// #229: 設定パネル。操作モードの切替は prefs へ保存しつつエディタへ即反映する。
+buildSideDock([
+  assetPanelDef(library),
+  scenePanelDef(sceneActions),
+  clipboardPanelDef(clipboard),
+  settingsPanelDef({
+    getPanMode: () => prefsStore.load().panMode,
+    setPanMode: (mode) => {
+      prefsStore.save({ panMode: mode });
+      editor.panSelectMode = mode;
+    },
+  }),
+]);
 
 // 自動永続化: 編集の取りこぼし防止に定期 + ページ離脱時にアクティブシーンへ書き戻して保存。
 setInterval(() => snapshotActiveScene(), 5000);
