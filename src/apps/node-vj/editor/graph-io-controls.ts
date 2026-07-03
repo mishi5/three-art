@@ -1,4 +1,6 @@
 // グラフの保存/読込 UI（#65）。named プリセット（localStorage）と YAML 書出/読込。
+// #230: 右下の固定バーからサイドドック「コントロール」パネルへ移設（縦積みレイアウト）。
+// ハンドラ/ロジック（applyYaml・一覧再構築・toast・ダウンロード）は従来のまま。
 import type { GraphDoc } from "../graph/graph-doc";
 import { replaceGraph } from "../graph/graph-doc";
 import type { NodeRegistry } from "../graph/node-type";
@@ -6,8 +8,13 @@ import { serializeGraph, deserializeGraph } from "../graph/serialize";
 import { GraphStore } from "../graph/graph-store";
 import type { History } from "../graph/history";
 
+// パネル内の行に等幅で並べるボタン/ラベル（label も button 見た目にする）。
 const BTN_CSS =
-  "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;";
+  "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;" +
+  "flex:1 1 0;text-align:center;box-sizing:border-box;font:12px system-ui;";
+const FIELD_CSS =
+  "background:#111;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 6px;" +
+  "width:100%;box-sizing:border-box;font:12px system-ui;";
 
 function toast(message: string, isError = false): void {
   const div = document.createElement("div");
@@ -20,7 +27,15 @@ function toast(message: string, isError = false): void {
   setTimeout(() => div.remove(), 2600);
 }
 
-/** #201 プロジェクト（全シーン状態）の保存/読込フック。任意。 */
+/** ボタンを等幅で横に並べる 1 行。 */
+function row(...items: HTMLElement[]): HTMLDivElement {
+  const div = document.createElement("div");
+  div.style.cssText = "display:flex;gap:6px;";
+  div.append(...items);
+  return div;
+}
+
+/** #201 プロジェクト（全シーン状態）の保存/読込フック。 */
 export interface ProjectIoHooks {
   /** 現在の全シーン状態を YAML 文字列にする（保存ボタン用）。 */
   serialize: () => string;
@@ -30,31 +45,26 @@ export interface ProjectIoHooks {
   downloadName: () => string;
 }
 
-/** 右下に保存/読込バーを作る。グラフは replaceGraph でその場置換する。 */
-export function buildGraphIoBar(
+/**
+ * #230: シーン（グラフ preset）の保存/読込コントロールを host（コントロールパネルの
+ * セクション）へ構築する。グラフは replaceGraph でその場置換する。
+ */
+export function mountGraphPresetControls(
   graph: GraphDoc,
   registry: NodeRegistry,
   store: GraphStore,
   history: History,
+  host: HTMLElement,
   /** #154: グラフ読込完了後に呼ぶ（アセットの自動復元フック）。任意。 */
   onLoad?: () => void,
-  /** #201: プロジェクト（全シーン）保存/読込。任意。 */
-  project?: ProjectIoHooks,
-): HTMLDivElement {
-  const bar = document.createElement("div");
-  // ノード追加ツールバー（上段）はノード増加で複数行に折り返すため、衝突を避けて
-  // 右下に置く（本格的なメニュー整理は #103）。
-  bar.style.cssText =
-    "position:fixed;right:12px;bottom:8px;display:flex;gap:6px;align-items:center;z-index:150;font:12px system-ui;";
-
+): void {
   const nameInput = document.createElement("input");
   nameInput.type = "text";
   nameInput.placeholder = "preset 名";
-  nameInput.style.cssText = "width:110px;background:#111;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 6px;";
-  bar.appendChild(nameInput);
+  nameInput.style.cssText = FIELD_CSS;
 
   const select = document.createElement("select");
-  select.style.cssText = BTN_CSS;
+  select.style.cssText = FIELD_CSS + "cursor:pointer;";
   const syncList = (): void => {
     select.innerHTML = "";
     const names = store.list();
@@ -99,7 +109,6 @@ export function buildGraphIoBar(
       toast(`保存失敗（${e instanceof Error ? e.message : "不明"}）`, true);
     }
   });
-  bar.appendChild(saveBtn);
 
   select.addEventListener("change", () => {
     const name = select.value;
@@ -109,7 +118,6 @@ export function buildGraphIoBar(
     nameInput.value = name;
     applyYaml(text, name);
   });
-  bar.appendChild(select);
 
   const delBtn = document.createElement("button");
   delBtn.textContent = "削除";
@@ -121,12 +129,6 @@ export function buildGraphIoBar(
     syncList();
     toast(`削除しました: ${name}`);
   });
-  bar.appendChild(delBtn);
-
-  const sep = document.createElement("span");
-  sep.textContent = "|";
-  sep.style.color = "#555";
-  bar.appendChild(sep);
 
   const exportBtn = document.createElement("button");
   exportBtn.textContent = "YAML書出";
@@ -139,7 +141,6 @@ export function buildGraphIoBar(
     a.click();
     URL.revokeObjectURL(a.href);
   });
-  bar.appendChild(exportBtn);
 
   const importLabel = document.createElement("label");
   importLabel.textContent = "YAML読込";
@@ -155,66 +156,62 @@ export function buildGraphIoBar(
     importInput.value = "";
   });
   importLabel.appendChild(importInput);
-  bar.appendChild(importLabel);
 
-  // #201: プロジェクト（全シーン状態）の保存/読込。単一グラフ書出/読込とは別機能。
-  if (project) {
-    const sep2 = document.createElement("span");
-    sep2.textContent = "|";
-    sep2.style.color = "#555";
-    bar.appendChild(sep2);
+  host.append(nameInput, row(saveBtn, delBtn), select, row(exportBtn, importLabel));
+}
 
-    const projSaveBtn = document.createElement("button");
-    projSaveBtn.textContent = "Proj保存";
-    projSaveBtn.title = "全シーンを 1 ファイル（.yaml）に保存";
-    projSaveBtn.style.cssText = BTN_CSS;
-    projSaveBtn.addEventListener("click", () => {
+/**
+ * #201/#230: プロジェクト（全シーン状態）の保存/読込コントロールを host へ構築する。
+ * 単一グラフ書出/読込（mountGraphPresetControls）とは別機能。
+ */
+export function mountProjectControls(project: ProjectIoHooks, host: HTMLElement): void {
+  const projSaveBtn = document.createElement("button");
+  projSaveBtn.textContent = "Proj保存";
+  projSaveBtn.title = "全シーンを 1 ファイル（.yaml）に保存";
+  projSaveBtn.style.cssText = BTN_CSS;
+  projSaveBtn.addEventListener("click", () => {
+    try {
+      const blob = new Blob([project.serialize()], { type: "text/yaml" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = project.downloadName();
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast("プロジェクトを保存しました");
+    } catch (e) {
+      toast(`プロジェクト保存失敗（${e instanceof Error ? e.message : "不明"}）`, true);
+    }
+  });
+
+  const projLoadLabel = document.createElement("label");
+  projLoadLabel.textContent = "Proj開く";
+  projLoadLabel.title = "プロジェクト（全シーン）を読み込み、現在の状態を置き換える";
+  projLoadLabel.style.cssText = BTN_CSS;
+  const projInput = document.createElement("input");
+  projInput.type = "file";
+  projInput.accept = ".yaml,.yml,text/yaml";
+  projInput.style.display = "none";
+  projInput.addEventListener("change", () => {
+    const file = projInput.files?.[0];
+    if (!file) return;
+    file.text().then((text) => {
       try {
-        const blob = new Blob([project.serialize()], { type: "text/yaml" });
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = project.downloadName();
-        a.click();
-        URL.revokeObjectURL(a.href);
-        toast("プロジェクトを保存しました");
+        const warnings = project.apply(text);
+        for (const w of warnings) console.warn(`[project-io] ${w}`);
+        toast(
+          warnings.length
+            ? `${file.name}: 読込（警告 ${warnings.length} 件・詳細はコンソール [project-io]）`
+            : `${file.name}: 読込完了`,
+          warnings.length > 0,
+        );
       } catch (e) {
-        toast(`プロジェクト保存失敗（${e instanceof Error ? e.message : "不明"}）`, true);
+        console.warn("[project-io] load failed:", e);
+        toast(`${file.name}: 読込失敗（${e instanceof Error ? e.message : "不明なエラー"}）`, true);
       }
     });
-    bar.appendChild(projSaveBtn);
+    projInput.value = "";
+  });
+  projLoadLabel.appendChild(projInput);
 
-    const projLoadLabel = document.createElement("label");
-    projLoadLabel.textContent = "Proj開く";
-    projLoadLabel.title = "プロジェクト（全シーン）を読み込み、現在の状態を置き換える";
-    projLoadLabel.style.cssText = BTN_CSS;
-    const projInput = document.createElement("input");
-    projInput.type = "file";
-    projInput.accept = ".yaml,.yml,text/yaml";
-    projInput.style.display = "none";
-    projInput.addEventListener("change", () => {
-      const file = projInput.files?.[0];
-      if (!file) return;
-      file.text().then((text) => {
-        try {
-          const warnings = project.apply(text);
-          for (const w of warnings) console.warn(`[project-io] ${w}`);
-          toast(
-            warnings.length
-              ? `${file.name}: 読込（警告 ${warnings.length} 件・詳細はコンソール [project-io]）`
-              : `${file.name}: 読込完了`,
-            warnings.length > 0,
-          );
-        } catch (e) {
-          console.warn("[project-io] load failed:", e);
-          toast(`${file.name}: 読込失敗（${e instanceof Error ? e.message : "不明なエラー"}）`, true);
-        }
-      });
-      projInput.value = "";
-    });
-    projLoadLabel.appendChild(projInput);
-    bar.appendChild(projLoadLabel);
-  }
-
-  document.body.appendChild(bar);
-  return bar;
+  host.append(row(projSaveBtn, projLoadLabel));
 }

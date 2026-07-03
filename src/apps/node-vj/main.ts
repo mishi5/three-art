@@ -7,7 +7,7 @@ import { addConnection, addNode, createGraph, replaceGraph, type GraphDoc } from
 import { GraphRuntime } from "./graph/runtime";
 import { NodeEditor } from "./editor/NodeEditor";
 import { openPadOverlay } from "./editor/pad-overlay";
-import { buildGraphIoBar } from "./editor/graph-io-bar";
+import { mountGraphPresetControls, mountProjectControls, type ProjectIoHooks } from "./editor/graph-io-controls";
 import { GraphStore, localStorageAdapter } from "./graph/graph-store";
 import { History } from "./graph/history";
 import { previewSize } from "./preview-size";
@@ -36,6 +36,7 @@ import { sharedCamera } from "./nodes/shared-camera";
 import { shouldAutoStopCamera } from "./nodes/camera-share-logic";
 import { PrefsStore } from "./prefs";
 import { settingsPanelDef } from "./editor/settings-panel";
+import { controlsPanelDef } from "./editor/controls-panel";
 
 const editorCanvas = document.getElementById("editor");
 const previewCanvas = document.getElementById("preview");
@@ -86,7 +87,8 @@ function applyPreviewSize(): void {
     Object.assign(preview.style, { left: "0", top: "0", right: "auto", bottom: "auto", border: "none", zIndex: "200" });
   } else {
     // 小窓: 右下 PiP に戻す（node-vj.html の既定と同じ）。
-    Object.assign(preview.style, { left: "auto", top: "auto", right: "12px", bottom: "56px", border: "1px solid rgba(255,255,255,0.25)", zIndex: "120" });
+    // #230: 下部バー撤去に伴い bottom を right と対称の 12px に（node-vj.html の既定と同じ）。
+    Object.assign(preview.style, { left: "auto", top: "auto", right: "12px", bottom: "12px", border: "1px solid rgba(255,255,255,0.25)", zIndex: "120" });
   }
   // #148/#179: 出力ウィンドウ表示中・録画中は PiP の見た目サイズに依らず高解像度で描き、
   // 出力/録画を鮮明にする（PiP は CSS で縮小表示＝同じ映像の縮小ビュー）。通常は表示サイズ×dpr。
@@ -498,14 +500,254 @@ const sceneActions: ScenePanelActions = {
   outputId: () => sceneManager.outputId(),
   setOutput: (id) => { sceneManager.setOutput(id); syncOutputScene(); },
 };
-// #151: VSCode 風サイドドック（最左アイコン列で アセット/シーン/クリップボード/設定 を切替）。
+// サイドドック（buildSideDock）はコントロールパネルの各セクション mount を定義した後、
+// ファイル末尾で構築する（#230: 下部バーのコントロールをパネルへ移設したため）。
+
+// 自動永続化: 編集の取りこぼし防止に定期 + ページ離脱時にアクティブシーンへ書き戻して保存。
+setInterval(() => snapshotActiveScene(), 5000);
+window.addEventListener("beforeunload", () => snapshotActiveScene());
+
+// グラフ保存/読込（#65）。読込は replaceGraph で同一参照のまま反映される。
+// #154: 読込完了後に restoreAssets でアセットを自動復元する。
+// #201: プロジェクト（全シーン状態）保存/読込フックを併設する。
+// #230: UI は下部バーからコントロールパネル「シーン」「プロジェクト」セクションへ移設。
+const graphPresetStore = new GraphStore(localStorageAdapter());
+const projectIo: ProjectIoHooks = {
+  // 保存: 編集中グラフをアクティブシーンへ書き戻してから全シーンを YAML 化。
+  serialize: () => { snapshotActiveScene(); return serializeProject(sceneManager.toSceneSet()); },
+  // 読込: 現在の状態を破棄して復元。失敗時は throw（UI が toast 表示）。
+  apply: (text) => {
+    const { project, warnings } = deserializeProject(text, registry);
+    history.clear();                 // 旧シーンの履歴トラックを捨てる（読込は全置換）
+    sceneManager.replaceAll(project); // onChange でシーンパネル再描画
+    // 共有 graph 反映・state 再同期・restoreAssets。復元完了後に Video/Audio を停止状態にする
+    // （loadFile は自動再生するため、読込直後は止めておく）。
+    void reflectActiveScene().catch(() => { /* 復元失敗時も停止は試みる */ }).then(() => pauseActivePlayback());
+    syncOutputScene();               // #174 出力シーン id を runtime へ反映
+    maybeAutoStopCamera();           // #214 読込後、全シーンに CameraInput が無ければ停止
+    return warnings;
+  },
+  downloadName: () => projectFileName(new Date()),
+};
+
+// 入力起動コントロール（mic/camera/display は user gesture 必須のためボタンから start）。
+// #99: ファイル選択はノード上の「ファイル行」クリックに移行（共有ファイル input は撤去）。
+// #230: 下部バーは撤去し、コントロールパネル「入力」セクションへ移設（ハンドラは従来のまま）。
+//       パネル内ボタンのクリックも user gesture なので getUserMedia / AudioContext は従来どおり起きる。
+type Startable = { start?: () => Promise<void> };
+
+// #230: パネル内で縦に積む全幅コントロールのスタイル（ボタン/セレクト共通トーン）。
+const PANEL_BTN_CSS =
+  "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:5px 8px;cursor:pointer;" +
+  "width:100%;box-sizing:border-box;text-align:left;font:12px system-ui;";
+
+/** #230: コントロールパネル「入力」セクション（旧下部バー左端の 2 ボタン）。 */
+function mountInputControls(host: HTMLElement): void {
+  const startBtn = document.createElement("button");
+  startBtn.textContent = "▶ 入力開始 (mic/camera)";
+  startBtn.style.cssText = PANEL_BTN_CSS;
+  startBtn.addEventListener("click", () => {
+    runtime.resumeAudio(); // #128: user gesture で共有 AudioContext を起こす
+    for (const n of graph.nodes) {
+      const s = runtime.getState(n.id) as Startable | undefined;
+      s?.start?.().catch((e) => console.warn(`[node-vj] start failed for ${n.id}:`, e));
+    }
+  });
+
+  // #214: 「入力開始」と対の明示停止。共有カメラ stream を止める（シーン切替では止めない方針のため）。
+  const stopBtn = document.createElement("button");
+  stopBtn.textContent = "■ 入力停止 (camera)";
+  stopBtn.style.cssText = PANEL_BTN_CSS;
+  stopBtn.addEventListener("click", () => sharedCamera.stop());
+
+  host.append(startBtn, stopBtn);
+}
+
+// #214: ページ離脱時にカメラトラックを解放（リーク防止）。beforeunload/pagehide 両方で保険。
+window.addEventListener("beforeunload", () => sharedCamera.stop());
+window.addEventListener("pagehide", () => sharedCamera.stop());
+
+/** 録画した Blob を webm としてダウンロードする。 */
+function downloadRecording(blob: Blob): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = recordingFileName(new Date());
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/**
+ * #230: コントロールパネル「出力・録画」セクション（旧下部バーの出力/録画/音声デバイス）。
+ * 状態表示の更新関数（syncOutBtn/syncRecBtn）や devicechange での select 再構築は
+ * ここで生成した要素をクロージャで参照し続けるため、移設後も従来どおり動く。
+ */
+function mountOutputControls(host: HTMLElement): void {
+  // #148: Screen 出力を別ウィンドウ（プロジェクタ/セカンドディスプレイ）へミラーするトグル。
+  const outBtn = document.createElement("button");
+  outBtn.style.cssText = PANEL_BTN_CSS;
+  function syncOutBtn(): void {
+    outBtn.textContent = output.isOpen() ? "🖥 出力ウィンドウを閉じる" : "🖥 出力ウィンドウ";
+    // #148: 出力ウィンドウ表示中は本体が隠れても描画を回し続ける（全画面で固まらないように）。
+    runtime.setKeepAliveWhileHidden(output.isOpen());
+    // #174: 出力ウィンドウ表示中だけ出力 canvas を更新する。
+    runtime.setOutputActive(output.isOpen());
+    applyPreviewSize();   // 出力状態に応じて描画解像度（高解像度⇄表示サイズ）を切り替える
+  }
+  output.onClose = syncOutBtn;
+  outBtn.addEventListener("click", () => {
+    if (output.isOpen()) output.close();
+    // #174: 出力 canvas（出力シーンを描く 2D canvas）をミラーする（編集と分離可能）。
+    else output.open(runtime.getOutputCanvas());
+    syncOutBtn();
+  });
+  syncOutBtn();
+
+  // #179: 出力（出力 canvas = 出力シーンに追従）をビデオ録画して保存する（recorder は上部で生成済み）。
+  const recBtn = document.createElement("button");
+  recBtn.style.cssText = PANEL_BTN_CSS;
+  function syncRecBtn(): void {
+    recBtn.textContent = recorder.recording ? "■ 停止（録画中）" : "● 録画";
+    recBtn.style.color = recorder.recording ? "#ff6b6b" : "#ddd";
+    recBtn.style.borderColor = recorder.recording ? "#ff6b6b" : "#444";
+  }
+  recBtn.addEventListener("click", () => {
+    if (recorder.recording) {
+      void recorder.stop().then((blob) => {
+        runtime.setRecording(false);
+        applyPreviewSize();          // #179: 録画終了で描画解像度を通常へ戻す
+        if (blob.size > 0) downloadRecording(blob);
+        syncRecBtn();
+      });
+    } else {
+      runtime.resumeAudio();        // #128: user gesture で共有 AudioContext を起こす（音声録画に必要）
+      runtime.setRecording(true);   // 録画中は出力 canvas を更新し続ける
+      // #179: 録画は高解像度（OUTPUT_RENDER_W×H）で描く。出力ウィンドウ非表示でも鮮明に録る。
+      runtime.setRenderSize(OUTPUT_RENDER_W, OUTPUT_RENDER_H, 1);
+      const mime = pickRecorderMimeType((m) => MediaRecorder.isTypeSupported(m));
+      recorder.start(runtime.getRecordingStream(30, true), mime, RECORD_VIDEO_BITRATE);  // 映像＋音声
+      syncRecBtn();
+    }
+  });
+  syncRecBtn();
+
+  // #198: 出力シーン（ピン中）の音声を別オーディオ出力デバイスへ発音する（モニター/プログラム分離）。
+  // 隠し <audio> に出力音声 stream を流し、ドロップダウンで選んだデバイスへ setSinkId で出す。
+  // ポリシー: ピン時のみ分離（追従中は編集シーンの音が既定デバイスで鳴っているため出さない）。
+  type SinkAudio = HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
+  // 隠し <audio> を 2 本（出力音声＝プログラム / モニター音声＝編集音）置き、各々別デバイスへ setSinkId で発音する。
+  const outAudioEl = document.createElement("audio") as SinkAudio;
+  outAudioEl.style.display = "none";
+  document.body.appendChild(outAudioEl);
+  const monAudioEl = document.createElement("audio") as SinkAudio;
+  monAudioEl.style.display = "none";
+  document.body.appendChild(monAudioEl);
+
+  // #230: パネル幅いっぱいに収める（旧下部バーの max-width:180px を廃止）。
+  const audioSelCss =
+    "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 6px;cursor:pointer;" +
+    "width:100%;box-sizing:border-box;font:12px system-ui;";
+  const outAudioSel = document.createElement("select");
+  outAudioSel.title = "出力シーン（ピン中）の音声を発音するデバイス";
+  outAudioSel.style.cssText = audioSelCss;
+  const monAudioSel = document.createElement("select");
+  monAudioSel.title = "編集中シーンの音声（モニター）を発音するデバイス";
+  monAudioSel.style.cssText = audioSelCss;
+
+  /** select に audiooutput 一覧を流し込む（先頭は分離なし・選択は維持）。 */
+  function fillDeviceSelect(sel: HTMLSelectElement, opts: AudioOutputOption[], noneLabel: string, prefix: string): void {
+    const prev = sel.value;
+    sel.replaceChildren();
+    const none = document.createElement("option");
+    none.value = "";
+    none.textContent = noneLabel;
+    sel.appendChild(none);
+    for (const o of opts) {
+      const el = document.createElement("option");
+      el.value = o.deviceId;
+      el.textContent = `${prefix} ${o.label}`;
+      sel.appendChild(el);
+    }
+    // 以前の選択がまだ存在すれば維持。
+    if (prev && opts.some((o) => o.deviceId === prev)) sel.value = prev;
+  }
+
+  /** enumerateDevices から audiooutput 一覧で両ドロップダウンを再構築する（選択は維持）。 */
+  async function refreshAudioOutputs(): Promise<void> {
+    let devices: MediaDeviceInfo[] = [];
+    try { devices = await navigator.mediaDevices.enumerateDevices(); } catch { /* 取得不可 */ }
+    const opts = audioOutputOptions(devices);
+    fillDeviceSelect(outAudioSel, opts, "🔈 出力音声: 分離しない", "🔈");
+    fillDeviceSelect(monAudioSel, opts, "🎧 モニター音声: 既定デバイス", "🎧");
+  }
+
+  // #198: 出力シーン（ピン中）の音声を別オーディオ出力デバイスへ発音する（プログラム側）。
+  outAudioSel.addEventListener("change", () => {
+    runtime.resumeAudio(); // user gesture で共有 AudioContext を起こす
+    const id = outAudioSel.value;
+    if (!id) {
+      // 分離しない: 隠し <audio> を停止（runtime の分岐接続は無害なまま残す）。
+      outAudioEl.pause();
+      return;
+    }
+    // 出力音声 stream を <audio> に流し、選択デバイスへ発音する。
+    if (outAudioEl.srcObject == null) outAudioEl.srcObject = runtime.getOutputAudioStream();
+    const apply = outAudioEl.setSinkId
+      ? outAudioEl.setSinkId(id).catch((e) => console.warn("[node-vj] setSinkId failed:", e))
+      : Promise.resolve(console.warn("[node-vj] setSinkId 非対応のブラウザです"));
+    void apply.then(() => outAudioEl.play().catch((e) => console.warn("[node-vj] output audio play failed:", e)));
+  });
+
+  // #198: 編集中シーンの音声（モニター）を別オーディオ出力デバイスへ発音する。編集音と出力音を独立
+  // デバイスへ振り分けられ、編集中シーンが出力から参照される構成でも重複して聞こえない（モニター/プログラム分離）。
+  monAudioSel.addEventListener("change", () => {
+    runtime.resumeAudio();
+    const id = monAudioSel.value;
+    if (!id) {
+      // 既定デバイスへ戻す（monitorBus → ctx.destination 直結。遅延が増えない）。
+      runtime.setMonitorSeparation(false);
+      monAudioEl.pause();
+      return;
+    }
+    if (monAudioEl.srcObject == null) monAudioEl.srcObject = runtime.getMonitorAudioStream();
+    const apply = monAudioEl.setSinkId
+      ? monAudioEl.setSinkId(id).catch((e) => console.warn("[node-vj] monitor setSinkId failed:", e))
+      : Promise.resolve(console.warn("[node-vj] setSinkId 非対応のブラウザです"));
+    void apply.then(() => {
+      // setSinkId 確定後にモニターバスを選択デバイスへ繋ぎ替える。
+      runtime.setMonitorSeparation(true);
+      return monAudioEl.play().catch((e) => console.warn("[node-vj] monitor audio play failed:", e));
+    });
+  });
+
+  if (navigator.mediaDevices) {
+    void refreshAudioOutputs();
+    navigator.mediaDevices.addEventListener?.("devicechange", () => void refreshAudioOutputs());
+  }
+
+  host.append(outBtn, recBtn, monAudioSel, outAudioSel);
+}
+
+// #151: VSCode 風サイドドック（最左アイコン列で アセット/シーン/クリップボード/コントロール/設定 を切替）。
 // #229: 設定パネル。操作モードの切替は prefs へ保存しつつエディタへ即反映する。
 // #228: ピン状態も prefs へ永続化（非ピン時はパネル外クリックで自動クローズ）。
+// #230: 下部バーの全コントロールを「コントロール」パネルへ移設（下部バーは撤去）。
 buildSideDock(
   [
     assetPanelDef(library),
     scenePanelDef(sceneActions),
     clipboardPanelDef(clipboard),
+    controlsPanelDef([
+      { title: "入力", mount: mountInputControls },
+      { title: "出力・録画", mount: mountOutputControls },
+      {
+        title: "シーン",
+        mount: (host) => mountGraphPresetControls(graph, registry, graphPresetStore, history, host, () => { void restoreAssets(); }),
+      },
+      { title: "プロジェクト", mount: (host) => mountProjectControls(projectIo, host) },
+    ]),
     settingsPanelDef({
       getPanMode: () => prefsStore.load().panMode,
       setPanMode: (mode) => {
@@ -519,223 +761,6 @@ buildSideDock(
     setPinned: (pinned) => prefsStore.save({ dockPinned: pinned }),
   },
 );
-
-// 自動永続化: 編集の取りこぼし防止に定期 + ページ離脱時にアクティブシーンへ書き戻して保存。
-setInterval(() => snapshotActiveScene(), 5000);
-window.addEventListener("beforeunload", () => snapshotActiveScene());
-
-// グラフ保存/読込バー（#65）。読込は replaceGraph で同一参照のまま反映される。
-// #154: 読込完了後に restoreAssets でアセットを自動復元する。
-// #201: プロジェクト（全シーン状態）保存/読込フックを併設する。
-buildGraphIoBar(
-  graph, registry, new GraphStore(localStorageAdapter()), history,
-  () => { void restoreAssets(); },
-  {
-    // 保存: 編集中グラフをアクティブシーンへ書き戻してから全シーンを YAML 化。
-    serialize: () => { snapshotActiveScene(); return serializeProject(sceneManager.toSceneSet()); },
-    // 読込: 現在の状態を破棄して復元。失敗時は throw（UI が toast 表示）。
-    apply: (text) => {
-      const { project, warnings } = deserializeProject(text, registry);
-      history.clear();                 // 旧シーンの履歴トラックを捨てる（読込は全置換）
-      sceneManager.replaceAll(project); // onChange でシーンパネル再描画
-      // 共有 graph 反映・state 再同期・restoreAssets。復元完了後に Video/Audio を停止状態にする
-      // （loadFile は自動再生するため、読込直後は止めておく）。
-      void reflectActiveScene().catch(() => { /* 復元失敗時も停止は試みる */ }).then(() => pauseActivePlayback());
-      syncOutputScene();               // #174 出力シーン id を runtime へ反映
-      maybeAutoStopCamera();           // #214 読込後、全シーンに CameraInput が無ければ停止
-      return warnings;
-    },
-    downloadName: () => projectFileName(new Date()),
-  },
-);
-
-// 入力起動コントロール（mic/camera/display は user gesture 必須のためボタンから start）。
-// #99: ファイル選択はノード上の「ファイル行」クリックに移行（共有ファイル input は撤去）。
-type Startable = { start?: () => Promise<void> };
-
-const bar = document.createElement("div");
-bar.style.cssText =
-  "position:fixed;left:8px;bottom:8px;display:flex;gap:6px;align-items:center;z-index:150;font:12px system-ui;";
-
-const startBtn = document.createElement("button");
-startBtn.textContent = "▶ 入力開始 (mic/camera)";
-startBtn.style.cssText = "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;";
-startBtn.addEventListener("click", () => {
-  runtime.resumeAudio(); // #128: user gesture で共有 AudioContext を起こす
-  for (const n of graph.nodes) {
-    const s = runtime.getState(n.id) as Startable | undefined;
-    s?.start?.().catch((e) => console.warn(`[node-vj] start failed for ${n.id}:`, e));
-  }
-});
-bar.appendChild(startBtn);
-
-// #214: 「入力開始」と対の明示停止。共有カメラ stream を止める（シーン切替では止めない方針のため）。
-const stopBtn = document.createElement("button");
-stopBtn.textContent = "■ 入力停止 (camera)";
-stopBtn.style.cssText = "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;";
-stopBtn.addEventListener("click", () => sharedCamera.stop());
-bar.appendChild(stopBtn);
-
-// #214: ページ離脱時にカメラトラックを解放（リーク防止）。beforeunload/pagehide 両方で保険。
-window.addEventListener("beforeunload", () => sharedCamera.stop());
-window.addEventListener("pagehide", () => sharedCamera.stop());
-
-// #148: Screen 出力を別ウィンドウ（プロジェクタ/セカンドディスプレイ）へミラーするトグル。
-const outBtn = document.createElement("button");
-outBtn.style.cssText = "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;";
-function syncOutBtn(): void {
-  outBtn.textContent = output.isOpen() ? "🖥 出力ウィンドウを閉じる" : "🖥 出力ウィンドウ";
-  // #148: 出力ウィンドウ表示中は本体が隠れても描画を回し続ける（全画面で固まらないように）。
-  runtime.setKeepAliveWhileHidden(output.isOpen());
-  // #174: 出力ウィンドウ表示中だけ出力 canvas を更新する。
-  runtime.setOutputActive(output.isOpen());
-  applyPreviewSize();   // 出力状態に応じて描画解像度（高解像度⇄表示サイズ）を切り替える
-}
-output.onClose = syncOutBtn;
-outBtn.addEventListener("click", () => {
-  if (output.isOpen()) output.close();
-  // #174: 出力 canvas（出力シーンを描く 2D canvas）をミラーする（編集と分離可能）。
-  else output.open(runtime.getOutputCanvas());
-  syncOutBtn();
-});
-syncOutBtn();
-bar.appendChild(outBtn);
-
-// #179: 出力（出力 canvas = 出力シーンに追従）をビデオ録画して保存する（recorder は上部で生成済み）。
-const recBtn = document.createElement("button");
-recBtn.style.cssText = "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;";
-function syncRecBtn(): void {
-  recBtn.textContent = recorder.recording ? "■ 停止（録画中）" : "● 録画";
-  recBtn.style.color = recorder.recording ? "#ff6b6b" : "#ddd";
-  recBtn.style.borderColor = recorder.recording ? "#ff6b6b" : "#444";
-}
-/** 録画した Blob を webm としてダウンロードする。 */
-function downloadRecording(blob: Blob): void {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = recordingFileName(new Date());
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-recBtn.addEventListener("click", () => {
-  if (recorder.recording) {
-    void recorder.stop().then((blob) => {
-      runtime.setRecording(false);
-      applyPreviewSize();          // #179: 録画終了で描画解像度を通常へ戻す
-      if (blob.size > 0) downloadRecording(blob);
-      syncRecBtn();
-    });
-  } else {
-    runtime.resumeAudio();        // #128: user gesture で共有 AudioContext を起こす（音声録画に必要）
-    runtime.setRecording(true);   // 録画中は出力 canvas を更新し続ける
-    // #179: 録画は高解像度（OUTPUT_RENDER_W×H）で描く。出力ウィンドウ非表示でも鮮明に録る。
-    runtime.setRenderSize(OUTPUT_RENDER_W, OUTPUT_RENDER_H, 1);
-    const mime = pickRecorderMimeType((m) => MediaRecorder.isTypeSupported(m));
-    recorder.start(runtime.getRecordingStream(30, true), mime, RECORD_VIDEO_BITRATE);  // 映像＋音声
-    syncRecBtn();
-  }
-});
-syncRecBtn();
-bar.appendChild(recBtn);
-
-// #198: 出力シーン（ピン中）の音声を別オーディオ出力デバイスへ発音する（モニター/プログラム分離）。
-// 隠し <audio> に出力音声 stream を流し、ドロップダウンで選んだデバイスへ setSinkId で出す。
-// ポリシー: ピン時のみ分離（追従中は編集シーンの音が既定デバイスで鳴っているため出さない）。
-type SinkAudio = HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
-// 隠し <audio> を 2 本（出力音声＝プログラム / モニター音声＝編集音）置き、各々別デバイスへ setSinkId で発音する。
-const outAudioEl = document.createElement("audio") as SinkAudio;
-outAudioEl.style.display = "none";
-document.body.appendChild(outAudioEl);
-const monAudioEl = document.createElement("audio") as SinkAudio;
-monAudioEl.style.display = "none";
-document.body.appendChild(monAudioEl);
-
-const audioSelCss =
-  "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 6px;cursor:pointer;max-width:180px;";
-const outAudioSel = document.createElement("select");
-outAudioSel.title = "出力シーン（ピン中）の音声を発音するデバイス";
-outAudioSel.style.cssText = audioSelCss;
-const monAudioSel = document.createElement("select");
-monAudioSel.title = "編集中シーンの音声（モニター）を発音するデバイス";
-monAudioSel.style.cssText = audioSelCss;
-
-/** select に audiooutput 一覧を流し込む（先頭は分離なし・選択は維持）。 */
-function fillDeviceSelect(sel: HTMLSelectElement, opts: AudioOutputOption[], noneLabel: string, prefix: string): void {
-  const prev = sel.value;
-  sel.replaceChildren();
-  const none = document.createElement("option");
-  none.value = "";
-  none.textContent = noneLabel;
-  sel.appendChild(none);
-  for (const o of opts) {
-    const el = document.createElement("option");
-    el.value = o.deviceId;
-    el.textContent = `${prefix} ${o.label}`;
-    sel.appendChild(el);
-  }
-  // 以前の選択がまだ存在すれば維持。
-  if (prev && opts.some((o) => o.deviceId === prev)) sel.value = prev;
-}
-
-/** enumerateDevices から audiooutput 一覧で両ドロップダウンを再構築する（選択は維持）。 */
-async function refreshAudioOutputs(): Promise<void> {
-  let devices: MediaDeviceInfo[] = [];
-  try { devices = await navigator.mediaDevices.enumerateDevices(); } catch { /* 取得不可 */ }
-  const opts = audioOutputOptions(devices);
-  fillDeviceSelect(outAudioSel, opts, "🔈 出力音声: 分離しない", "🔈");
-  fillDeviceSelect(monAudioSel, opts, "🎧 モニター音声: 既定デバイス", "🎧");
-}
-
-// #198: 出力シーン（ピン中）の音声を別オーディオ出力デバイスへ発音する（プログラム側）。
-outAudioSel.addEventListener("change", () => {
-  runtime.resumeAudio(); // user gesture で共有 AudioContext を起こす
-  const id = outAudioSel.value;
-  if (!id) {
-    // 分離しない: 隠し <audio> を停止（runtime の分岐接続は無害なまま残す）。
-    outAudioEl.pause();
-    return;
-  }
-  // 出力音声 stream を <audio> に流し、選択デバイスへ発音する。
-  if (outAudioEl.srcObject == null) outAudioEl.srcObject = runtime.getOutputAudioStream();
-  const apply = outAudioEl.setSinkId
-    ? outAudioEl.setSinkId(id).catch((e) => console.warn("[node-vj] setSinkId failed:", e))
-    : Promise.resolve(console.warn("[node-vj] setSinkId 非対応のブラウザです"));
-  void apply.then(() => outAudioEl.play().catch((e) => console.warn("[node-vj] output audio play failed:", e)));
-});
-
-// #198: 編集中シーンの音声（モニター）を別オーディオ出力デバイスへ発音する。編集音と出力音を独立
-// デバイスへ振り分けられ、編集中シーンが出力から参照される構成でも重複して聞こえない（モニター/プログラム分離）。
-monAudioSel.addEventListener("change", () => {
-  runtime.resumeAudio();
-  const id = monAudioSel.value;
-  if (!id) {
-    // 既定デバイスへ戻す（monitorBus → ctx.destination 直結。遅延が増えない）。
-    runtime.setMonitorSeparation(false);
-    monAudioEl.pause();
-    return;
-  }
-  if (monAudioEl.srcObject == null) monAudioEl.srcObject = runtime.getMonitorAudioStream();
-  const apply = monAudioEl.setSinkId
-    ? monAudioEl.setSinkId(id).catch((e) => console.warn("[node-vj] monitor setSinkId failed:", e))
-    : Promise.resolve(console.warn("[node-vj] setSinkId 非対応のブラウザです"));
-  void apply.then(() => {
-    // setSinkId 確定後にモニターバスを選択デバイスへ繋ぎ替える。
-    runtime.setMonitorSeparation(true);
-    return monAudioEl.play().catch((e) => console.warn("[node-vj] monitor audio play failed:", e));
-  });
-});
-
-if (navigator.mediaDevices) {
-  void refreshAudioOutputs();
-  navigator.mediaDevices.addEventListener?.("devicechange", () => void refreshAudioOutputs());
-}
-bar.appendChild(monAudioSel);
-bar.appendChild(outAudioSel);
-
-document.body.appendChild(bar);
 
 (window as unknown as { nodeVj: unknown }).nodeVj = { graph, registry, runtime, editor, sceneManager, recorder };
 console.log("[node-vj] editor + preview started");
