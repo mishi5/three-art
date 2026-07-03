@@ -35,7 +35,7 @@ export function shouldAutoClose(input: AutoCloseInput): boolean {
 
 const BAR_W = 40;
 const TOP = 44;     // 上部ツールバーの下
-const BOTTOM = 48;  // 下部バーの上
+const BOTTOM = 0;   // #230: 下部バー撤去に伴い最下端まで使う
 const PANEL_W = 230;
 
 const COLLAPSE_ICON =
