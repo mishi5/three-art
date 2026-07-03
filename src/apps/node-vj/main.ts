@@ -3,7 +3,7 @@
 // 既定グラフ: Number→Multiply←Number → RainVisual.baseSpeed、RainVisual.tex → Screen。
 // #98: 画面に出すには Screen への接続が必須（自動表示フォールバックは廃止）。
 import { createDefaultRegistry } from "./nodes/registry";
-import { addConnection, addNode, createGraph, replaceGraph } from "./graph/graph-doc";
+import { addConnection, addNode, createGraph, replaceGraph, type GraphDoc } from "./graph/graph-doc";
 import { GraphRuntime } from "./graph/runtime";
 import { NodeEditor } from "./editor/NodeEditor";
 import { openPadOverlay } from "./editor/pad-overlay";
@@ -32,6 +32,8 @@ import { scenePanelDef, type ScenePanelActions } from "./scene/scene-panel";
 import { buildSideDock } from "./editor/side-dock";
 import { NodeClipboard } from "./editor/node-clipboard";
 import { clipboardPanelDef } from "./editor/clipboard-panel";
+import { sharedCamera } from "./nodes/shared-camera";
+import { shouldAutoStopCamera } from "./nodes/camera-share-logic";
 
 const editorCanvas = document.getElementById("editor");
 const previewCanvas = document.getElementById("preview");
@@ -415,6 +417,25 @@ function snapshotActiveScene(): void {
 }
 
 /**
+ * #214: 全シーンの GraphDoc（アクティブは編集中の live graph、他は保持分）。
+ * 共有カメラ自動停止の判定はこの集合に対して行う。
+ */
+function allSceneGraphs(): GraphDoc[] {
+  const activeId = sceneManager.activeId();
+  return sceneManager.list().map((s) => (s.id === activeId ? graph : s.graph));
+}
+
+/**
+ * #214: 全シーンから CameraInput ノードが消えたら共有カメラを自動停止する。
+ * ノード削除・シーン切替・プロジェクト読込のたびに呼ぶ。
+ */
+function maybeAutoStopCamera(): void {
+  if (shouldAutoStopCamera(allSceneGraphs(), sharedCamera.started)) sharedCamera.stop();
+}
+// #214: ノード削除/UNDO/REDO でグラフ構成が変わったら自動停止を判定する。
+editor.onGraphMutated = () => maybeAutoStopCamera();
+
+/**
  * 新アクティブシーンの内容を共有グラフへ反映し、履歴トラック切替・state 再同期・アセット復元する。
  * アセット復元（restoreAssets）の Promise を返すので、読込直後に再生停止する等の後処理を連鎖できる。
  */
@@ -446,6 +467,7 @@ const sceneActions: ScenePanelActions = {
     snapshotActiveScene();       // 現シーンの編集を保存
     sceneManager.setActive(id);
     void reflectActiveScene();
+    maybeAutoStopCamera();       // #214: シーン切替でカメラ有無を再判定
   },
   add: () => {
     snapshotActiveScene();
@@ -462,6 +484,7 @@ const sceneActions: ScenePanelActions = {
     history.removeScene(id);
     sceneManager.remove(id);     // 最後の1つは消えない・active が変わりうる
     if (wasActive && sceneManager.activeId() !== id) void reflectActiveScene();
+    maybeAutoStopCamera();       // #214: シーン削除で最後の CameraInput が消えたら停止
   },
   rename: (id, name) => sceneManager.rename(id, name),
   onChange: (cb) => sceneManager.onChange(cb),
@@ -494,6 +517,7 @@ buildGraphIoBar(
       // （loadFile は自動再生するため、読込直後は止めておく）。
       void reflectActiveScene().catch(() => { /* 復元失敗時も停止は試みる */ }).then(() => pauseActivePlayback());
       syncOutputScene();               // #174 出力シーン id を runtime へ反映
+      maybeAutoStopCamera();           // #214 読込後、全シーンに CameraInput が無ければ停止
       return warnings;
     },
     downloadName: () => projectFileName(new Date()),
@@ -519,6 +543,17 @@ startBtn.addEventListener("click", () => {
   }
 });
 bar.appendChild(startBtn);
+
+// #214: 「入力開始」と対の明示停止。共有カメラ stream を止める（シーン切替では止めない方針のため）。
+const stopBtn = document.createElement("button");
+stopBtn.textContent = "■ 入力停止 (camera)";
+stopBtn.style.cssText = "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;";
+stopBtn.addEventListener("click", () => sharedCamera.stop());
+bar.appendChild(stopBtn);
+
+// #214: ページ離脱時にカメラトラックを解放（リーク防止）。beforeunload/pagehide 両方で保険。
+window.addEventListener("beforeunload", () => sharedCamera.stop());
+window.addEventListener("pagehide", () => sharedCamera.stop());
 
 // #148: Screen 出力を別ウィンドウ（プロジェクタ/セカンドディスプレイ）へミラーするトグル。
 const outBtn = document.createElement("button");
