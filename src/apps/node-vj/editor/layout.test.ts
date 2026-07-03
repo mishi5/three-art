@@ -6,6 +6,7 @@ import {
   hasPadGrid, padGridMetrics, padGridHeight, padGridRect, padRect, padIndexAt,
   padExpandButtonRect, padStopButtonRect,
   PAD_MARGIN_X, PAD_MARGIN_TOP,
+  hasTapRows, tapControlRowRect, tapStatusRowRect, tapControlLayout, tapStatusLabel,
 } from "./layout";
 import type { NodeTypeDef } from "../graph/node-type";
 import type { NodeInstance } from "../graph/graph-doc";
@@ -159,5 +160,56 @@ describe("#205 padGrid layout", () => {
     expect(eb.x).toBeGreaterThan(sb.x);
     expect(sb.x + sb.w).toBeLessThanOrEqual(eb.x);
     expect(eb.x + eb.w).toBeLessThanOrEqual(100 + NODE_WIDTH);
+  });
+});
+
+describe("#204 TapSequencer layout", () => {
+  // 入力なし・trigger 出力 1・params なし・tapSequencer フラグ。
+  const tapDef: NodeTypeDef = {
+    type: "TapSequencer", category: "generator",
+    inputs: [], outputs: [{ id: "trigger", label: "trig", type: "trigger" }],
+    params: [], tapSequencer: true, evaluate: () => ({}),
+  };
+  const tapNode: NodeInstance = { id: "t", type: "TapSequencer", params: {}, position: { x: 100, y: 50 } };
+
+  test("hasTapRows 判定", () => {
+    expect(hasTapRows(tapDef)).toBe(true);
+    expect(hasTapRows(def)).toBe(false);
+  });
+
+  test("nodeHeight はコントロール行＋ステータス行の 2 行ぶん増える", () => {
+    // portRows = max(0, 1) = 1・params = 0 → base + 2 行
+    const base = TITLE_H + 1 * ROW_H + 8;
+    expect(nodeHeight(tapDef)).toBe(base + 2 * ROW_H);
+  });
+
+  test("コントロール行は params 直下・ステータス行はその下（tapSequencer 無しは null）", () => {
+    const cr = tapControlRowRect(tapNode, tapDef)!;
+    expect(cr).toEqual({ x: 100, y: 50 + TITLE_H + 1 * ROW_H, w: NODE_WIDTH, h: ROW_H });
+    const sr = tapStatusRowRect(tapNode, tapDef)!;
+    expect(sr).toEqual({ x: 100, y: cr.y + ROW_H, w: NODE_WIDTH, h: ROW_H });
+    expect(tapControlRowRect(node, def)).toBeNull();
+    expect(tapStatusRowRect(node, def)).toBeNull();
+  });
+
+  test("tapControlLayout: 録音/クリアの 2 ボタンが行内に収まり重ならない", () => {
+    const cr = tapControlRowRect(tapNode, tapDef)!;
+    const { rec, clear } = tapControlLayout(cr);
+    expect(rec.x).toBeGreaterThanOrEqual(cr.x);
+    expect(rec.x + rec.w).toBeLessThanOrEqual(clear.x);
+    expect(clear.x + clear.w).toBeLessThanOrEqual(cr.x + cr.w);
+    expect(rec.y).toBeGreaterThanOrEqual(cr.y);
+    expect(rec.y + rec.h).toBeLessThanOrEqual(cr.y + cr.h);
+    expect(clear.y + clear.h).toBeLessThanOrEqual(cr.y + cr.h);
+  });
+
+  test("tapStatusLabel: フェーズごとの表示", () => {
+    expect(tapStatusLabel(undefined)).toBe("記録なし");
+    expect(tapStatusLabel({ phase: "idle", tapCount: 0, loopLenSec: 0, playPosSec: 0, recordElapsedSec: 0 }))
+      .toBe("記録なし");
+    expect(tapStatusLabel({ phase: "recording", tapCount: 3, loopLenSec: 0, playPosSec: 0, recordElapsedSec: 1.23 }))
+      .toBe("録音中 3打 1.2s");
+    expect(tapStatusLabel({ phase: "playing", tapCount: 4, loopLenSec: 2.5, playPosSec: 0.78, recordElapsedSec: 0 }))
+      .toBe("4打 / 2.5s ループ ▶0.8s");
   });
 });

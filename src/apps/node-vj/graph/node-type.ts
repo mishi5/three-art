@@ -107,6 +107,11 @@ export interface NodeTypeDef {
    * 同ノードの min/max param 範囲のランダム値に再ロールする（Number 用）。
    */
   randomButton?: { paramId: string };
+  /**
+   * #204: ノード上にタップ録音 UI（ホールド録音/クリアボタン＋ステータス行）を描く目印（TapSequencer）。
+   * ランタイム state に startRecording/stopRecording/tap/clear/status を持つ前提。
+   */
+  tapSequencer?: boolean;
   /** visual/sink ノードの初期化（THREE オブジェクト生成・scene 追加等）。1 度だけ呼ばれる。 */
   createState?(env: NodeEnv): NodeState;
   /**
