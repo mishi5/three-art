@@ -28,7 +28,7 @@ import { CLIP_MIME, makeClipItem, pasteClip, type NodeClipboard } from "./node-c
 import { renderClipThumbnail } from "./clip-thumbnail";
 import type { History } from "../graph/history";
 import { nodesInRect, normRect } from "./selection";
-import { backgroundPointerDrag } from "./pan-policy";
+import { backgroundPointerDrag, type PanSelectMode } from "./pan-policy";
 import { openParamInput } from "./param-overlay";
 import { formatPortValue } from "./port-format";
 import { containRect } from "./fit";
@@ -100,6 +100,11 @@ export class NodeEditor {
   private selectedLabelId: string | null = null;
   /** Space 押下中は常にパン（#207: 空白左ドラッグは既定でパン、Shift+左ドラッグで矩形選択）。 */
   private spaceDown = false;
+  /**
+   * #229: 空白左ドラッグの操作モード。modern（既定・#207 現行）＝パン / Shift+左で矩形選択、
+   * legacy（#207 以前）＝矩形選択（パンは Space+左・中・右ドラッグ）。設定パネルから切替。
+   */
+  panSelectMode: PanSelectMode = "modern";
   private rafId: number | null = null;
   private toolbar: HTMLDivElement;
   /** #103: 右クリック/ツールバーのコンテキストメニュー（開いていなければ null）。 */
@@ -505,8 +510,9 @@ export class NodeEditor {
       this.drag = { kind: "group", anchors, moved: false };
       return;
     }
-    // 背景（#207）: Shift+左ドラッグは矩形選択、それ以外（空白左ドラッグ）はパン。確定は up。
-    if (backgroundPointerDrag({ button: e.button, shiftKey: e.shiftKey, spaceDown: this.spaceDown }) === "rect") {
+    // 背景（#207/#229）: modern は Shift+左ドラッグのみ矩形選択（空白左ドラッグ＝パン）、
+    // legacy は空白左ドラッグ＝矩形選択。確定は up。
+    if (backgroundPointerDrag({ button: e.button, shiftKey: e.shiftKey, spaceDown: this.spaceDown, mode: this.panSelectMode }) === "rect") {
       this.drag = { kind: "rect", startX: w.x, startY: w.y };
     } else {
       this.drag = { kind: "pan", startX: e.clientX, startY: e.clientY, ox: this.offset.x, oy: this.offset.y, bySpace: false };
