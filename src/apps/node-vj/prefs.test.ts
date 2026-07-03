@@ -43,6 +43,22 @@ describe("parsePrefs (#229)", () => {
     expect(p.panMode).toBe("legacy");
     expect(Object.keys(p).sort()).toEqual(Object.keys(DEFAULT_PREFS).sort());
   });
+
+  // #228: サイドドックのピン状態
+  it("dockPinned の既定値は false", () => {
+    expect(parsePrefs(null).dockPinned).toBe(false);
+    expect(parsePrefs("{}").dockPinned).toBe(false);
+  });
+
+  it("dockPinned: true / false を読み取れる", () => {
+    expect(parsePrefs('{"dockPinned":true}').dockPinned).toBe(true);
+    expect(parsePrefs('{"dockPinned":false}').dockPinned).toBe(false);
+  });
+
+  it("dockPinned が boolean 以外なら既定（false）へフォールバック", () => {
+    expect(parsePrefs('{"dockPinned":"true"}').dockPinned).toBe(false);
+    expect(parsePrefs('{"dockPinned":1}').dockPinned).toBe(false);
+  });
 });
 
 describe("PrefsStore (#229)", () => {
@@ -73,5 +89,21 @@ describe("PrefsStore (#229)", () => {
     expect(store.load()).toEqual(DEFAULT_PREFS);
     store.save({ panMode: "legacy" });
     expect(store.load().panMode).toBe("legacy");
+  });
+
+  // #228: dockPinned の永続化と他フィールドとの独立性
+  it("dockPinned を save → load で保持する", () => {
+    const store = new PrefsStore(memoryAdapter());
+    store.save({ dockPinned: true });
+    expect(store.load().dockPinned).toBe(true);
+    store.save({ dockPinned: false });
+    expect(store.load().dockPinned).toBe(false);
+  });
+
+  it("dockPinned の保存は panMode を壊さない（部分更新）", () => {
+    const store = new PrefsStore(memoryAdapter());
+    store.save({ panMode: "legacy" });
+    store.save({ dockPinned: true });
+    expect(store.load()).toEqual({ panMode: "legacy", dockPinned: true });
   });
 });

@@ -500,18 +500,25 @@ const sceneActions: ScenePanelActions = {
 };
 // #151: VSCode 風サイドドック（最左アイコン列で アセット/シーン/クリップボード/設定 を切替）。
 // #229: 設定パネル。操作モードの切替は prefs へ保存しつつエディタへ即反映する。
-buildSideDock([
-  assetPanelDef(library),
-  scenePanelDef(sceneActions),
-  clipboardPanelDef(clipboard),
-  settingsPanelDef({
-    getPanMode: () => prefsStore.load().panMode,
-    setPanMode: (mode) => {
-      prefsStore.save({ panMode: mode });
-      editor.panSelectMode = mode;
-    },
-  }),
-]);
+// #228: ピン状態も prefs へ永続化（非ピン時はパネル外クリックで自動クローズ）。
+buildSideDock(
+  [
+    assetPanelDef(library),
+    scenePanelDef(sceneActions),
+    clipboardPanelDef(clipboard),
+    settingsPanelDef({
+      getPanMode: () => prefsStore.load().panMode,
+      setPanMode: (mode) => {
+        prefsStore.save({ panMode: mode });
+        editor.panSelectMode = mode;
+      },
+    }),
+  ],
+  {
+    getPinned: () => prefsStore.load().dockPinned,
+    setPinned: (pinned) => prefsStore.save({ dockPinned: pinned }),
+  },
+);
 
 // 自動永続化: 編集の取りこぼし防止に定期 + ページ離脱時にアクティブシーンへ書き戻して保存。
 setInterval(() => snapshotActiveScene(), 5000);
