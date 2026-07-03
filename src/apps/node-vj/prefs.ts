@@ -8,10 +8,13 @@ import type { PanSelectMode } from "./editor/pan-policy";
 export interface Prefs {
   /** #229: 空白左ドラッグの操作モード（modern=#207 現行 / legacy=#207 以前）。 */
   panMode: PanSelectMode;
+  /** #228: サイドドックのピン留め（true なら外側クリックで自動クローズしない）。 */
+  dockPinned: boolean;
 }
 
 export const DEFAULT_PREFS: Prefs = {
   panMode: "modern",
+  dockPinned: false,
 };
 
 export const PREFS_KEY = "node-vj.prefs.v1";
@@ -33,6 +36,7 @@ export function parsePrefs(raw: string | null): Prefs {
     : {};
   const prefs: Prefs = { ...DEFAULT_PREFS };
   if (src.panMode === "modern" || src.panMode === "legacy") prefs.panMode = src.panMode;
+  if (typeof src.dockPinned === "boolean") prefs.dockPinned = src.dockPinned;
   return prefs;
 }
 
