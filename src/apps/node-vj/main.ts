@@ -40,6 +40,7 @@ import { controlsPanelDef } from "./editor/controls-panel";
 import { deserializeGraph } from "./graph/serialize";
 import { createAiApi } from "./api/ai-api";
 import { installPostMessageBridge } from "./api/post-message-bridge";
+import { WsBridgeClient } from "./api/ws-bridge-client";
 
 const editorCanvas = document.getElementById("editor");
 const previewCanvas = document.getElementById("preview");
@@ -748,40 +749,9 @@ function mountOutputControls(host: HTMLElement): void {
   host.append(outBtn, recBtn, monAudioSel, outAudioSel);
 }
 
-// #151: VSCode 風サイドドック（最左アイコン列で アセット/シーン/クリップボード/コントロール/設定 を切替）。
-// #229: 設定パネル。操作モードの切替は prefs へ保存しつつエディタへ即反映する。
-// #228: ピン状態も prefs へ永続化（非ピン時はパネル外クリックで自動クローズ）。
-// #230: 下部バーの全コントロールを「コントロール」パネルへ移設（下部バーは撤去）。
-buildSideDock(
-  [
-    assetPanelDef(library),
-    scenePanelDef(sceneActions),
-    clipboardPanelDef(clipboard),
-    controlsPanelDef([
-      { title: "入力", mount: mountInputControls },
-      { title: "出力・録画", mount: mountOutputControls },
-      {
-        title: "シーン",
-        mount: (host) => mountGraphPresetControls(graph, registry, graphPresetStore, history, host, () => { void restoreAssets(); }),
-      },
-      { title: "プロジェクト", mount: (host) => mountProjectControls(projectIo, host) },
-    ]),
-    settingsPanelDef({
-      getPanMode: () => prefsStore.load().panMode,
-      setPanMode: (mode) => {
-        prefsStore.save({ panMode: mode });
-        editor.panSelectMode = mode;
-      },
-    }),
-  ],
-  {
-    getPinned: () => prefsStore.load().dockPinned,
-    setPinned: (pinned) => prefsStore.save({ dockPinned: pinned }),
-  },
-);
-
 // #177: AI 操作インターフェース。型付きコマンド API（window.nodeVj.api）と
 // postMessage 受け口（同一オリジン限定・常時有効）。依存は既存クロージャをフック注入する。
+// （#237: 設定パネルの「AI ブリッジ」が参照するため、サイドドック構築より前に作る）
 const aiApi = createAiApi({
   graph,
   registry,
@@ -808,6 +778,59 @@ const aiApi = createAiApi({
   },
 });
 installPostMessageBridge(aiApi);
+
+// #237: WS ブリッジ（ローカル中継経由で外部 AI エージェントから操作）。既定 OFF（prefs）。
+// 設定パネルの切替・URL 変更は applyWsBridgePrefs で即時反映する。
+const wsBridge = new WsBridgeClient(aiApi);
+const applyWsBridgePrefs = (): void => {
+  const p = prefsStore.load();
+  wsBridge.setConfig({ enabled: p.wsBridgeEnabled, url: p.wsBridgeUrl });
+};
+applyWsBridgePrefs();
+
+// #151: VSCode 風サイドドック（最左アイコン列で アセット/シーン/クリップボード/コントロール/設定 を切替）。
+// #229: 設定パネル。操作モードの切替は prefs へ保存しつつエディタへ即反映する。
+// #228: ピン状態も prefs へ永続化（非ピン時はパネル外クリックで自動クローズ）。
+// #230: 下部バーの全コントロールを「コントロール」パネルへ移設（下部バーは撤去）。
+buildSideDock(
+  [
+    assetPanelDef(library),
+    scenePanelDef(sceneActions),
+    clipboardPanelDef(clipboard),
+    controlsPanelDef([
+      { title: "入力", mount: mountInputControls },
+      { title: "出力・録画", mount: mountOutputControls },
+      {
+        title: "シーン",
+        mount: (host) => mountGraphPresetControls(graph, registry, graphPresetStore, history, host, () => { void restoreAssets(); }),
+      },
+      { title: "プロジェクト", mount: (host) => mountProjectControls(projectIo, host) },
+    ]),
+    settingsPanelDef({
+      getPanMode: () => prefsStore.load().panMode,
+      setPanMode: (mode) => {
+        prefsStore.save({ panMode: mode });
+        editor.panSelectMode = mode;
+      },
+      // #237: AI ブリッジ。保存して即時反映（ON で接続開始・OFF で切断・URL 変更は張り直し）。
+      getWsBridgeEnabled: () => prefsStore.load().wsBridgeEnabled,
+      setWsBridgeEnabled: (enabled) => {
+        prefsStore.save({ wsBridgeEnabled: enabled });
+        applyWsBridgePrefs();
+      },
+      getWsBridgeUrl: () => prefsStore.load().wsBridgeUrl,
+      setWsBridgeUrl: (url) => {
+        prefsStore.save({ wsBridgeUrl: url });
+        applyWsBridgePrefs();
+      },
+      getWsBridgeStatus: () => wsBridge.getStatus(),
+    }),
+  ],
+  {
+    getPinned: () => prefsStore.load().dockPinned,
+    setPinned: (pinned) => prefsStore.save({ dockPinned: pinned }),
+  },
+);
 
 (window as unknown as { nodeVj: unknown }).nodeVj = { graph, registry, runtime, editor, sceneManager, recorder, api: aiApi };
 console.log("[node-vj] editor + preview started");

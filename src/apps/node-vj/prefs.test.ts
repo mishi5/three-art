@@ -59,6 +59,37 @@ describe("parsePrefs (#229)", () => {
     expect(parsePrefs('{"dockPinned":"true"}').dockPinned).toBe(false);
     expect(parsePrefs('{"dockPinned":1}').dockPinned).toBe(false);
   });
+
+  // #237: AI ブリッジ（WS）設定
+  it("wsBridgeEnabled の既定値は false（opt-in）", () => {
+    expect(parsePrefs(null).wsBridgeEnabled).toBe(false);
+    expect(parsePrefs("{}").wsBridgeEnabled).toBe(false);
+  });
+
+  it("wsBridgeEnabled: true / false を読み取れる", () => {
+    expect(parsePrefs('{"wsBridgeEnabled":true}').wsBridgeEnabled).toBe(true);
+    expect(parsePrefs('{"wsBridgeEnabled":false}').wsBridgeEnabled).toBe(false);
+  });
+
+  it("wsBridgeEnabled が boolean 以外なら既定（false）へフォールバック", () => {
+    expect(parsePrefs('{"wsBridgeEnabled":"true"}').wsBridgeEnabled).toBe(false);
+    expect(parsePrefs('{"wsBridgeEnabled":1}').wsBridgeEnabled).toBe(false);
+  });
+
+  it("wsBridgeUrl の既定値は ws://localhost:8787", () => {
+    expect(parsePrefs(null).wsBridgeUrl).toBe("ws://localhost:8787");
+    expect(parsePrefs("{}").wsBridgeUrl).toBe("ws://localhost:8787");
+  });
+
+  it("wsBridgeUrl: 文字列を読み取れる（検証は文字列のみ）", () => {
+    expect(parsePrefs('{"wsBridgeUrl":"ws://localhost:8791"}').wsBridgeUrl).toBe("ws://localhost:8791");
+  });
+
+  it("wsBridgeUrl が空文字・文字列以外なら既定へフォールバック", () => {
+    expect(parsePrefs('{"wsBridgeUrl":""}').wsBridgeUrl).toBe("ws://localhost:8787");
+    expect(parsePrefs('{"wsBridgeUrl":123}').wsBridgeUrl).toBe("ws://localhost:8787");
+    expect(parsePrefs('{"wsBridgeUrl":null}').wsBridgeUrl).toBe("ws://localhost:8787");
+  });
 });
 
 describe("PrefsStore (#229)", () => {
@@ -104,6 +135,23 @@ describe("PrefsStore (#229)", () => {
     const store = new PrefsStore(memoryAdapter());
     store.save({ panMode: "legacy" });
     store.save({ dockPinned: true });
-    expect(store.load()).toEqual({ panMode: "legacy", dockPinned: true });
+    expect(store.load()).toEqual({ ...DEFAULT_PREFS, panMode: "legacy", dockPinned: true });
+  });
+
+  // #237: AI ブリッジ設定の永続化と他フィールドとの独立性
+  it("wsBridgeEnabled / wsBridgeUrl を save → load で保持する", () => {
+    const store = new PrefsStore(memoryAdapter());
+    store.save({ wsBridgeEnabled: true, wsBridgeUrl: "ws://localhost:8791" });
+    expect(store.load().wsBridgeEnabled).toBe(true);
+    expect(store.load().wsBridgeUrl).toBe("ws://localhost:8791");
+  });
+
+  it("wsBridge 系の保存は他フィールドを壊さない（部分更新）", () => {
+    const store = new PrefsStore(memoryAdapter());
+    store.save({ panMode: "legacy" });
+    store.save({ wsBridgeEnabled: true });
+    expect(store.load()).toEqual({
+      ...DEFAULT_PREFS, panMode: "legacy", wsBridgeEnabled: true,
+    });
   });
 });
