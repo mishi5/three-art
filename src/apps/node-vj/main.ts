@@ -37,6 +37,9 @@ import { shouldAutoStopCamera } from "./nodes/camera-share-logic";
 import { PrefsStore } from "./prefs";
 import { settingsPanelDef } from "./editor/settings-panel";
 import { controlsPanelDef } from "./editor/controls-panel";
+import { deserializeGraph } from "./graph/serialize";
+import { createAiApi } from "./api/ai-api";
+import { installPostMessageBridge } from "./api/post-message-bridge";
 
 const editorCanvas = document.getElementById("editor");
 const previewCanvas = document.getElementById("preview");
@@ -777,5 +780,34 @@ buildSideDock(
   },
 );
 
-(window as unknown as { nodeVj: unknown }).nodeVj = { graph, registry, runtime, editor, sceneManager, recorder };
+// #177: AI 操作インターフェース。型付きコマンド API（window.nodeVj.api）と
+// postMessage 受け口（同一オリジン限定・常時有効）。依存は既存クロージャをフック注入する。
+const aiApi = createAiApi({
+  graph,
+  registry,
+  history,
+  getOutputs: (id) => runtime.getOutputs(id),
+  scenes: {
+    list: () => sceneManager.list().map((s) => ({ id: s.id, name: s.name })),
+    activeId: () => sceneManager.activeId(),
+    outputId: () => sceneManager.outputId(),
+    // scene-panel の切替と同じ経路（snapshot→setActive→reflectActiveScene→カメラ判定）。
+    switchTo: (id) => sceneActions.switchTo(id),
+  },
+  // preset 読込（mountGraphPresetControls の applyYaml）と同じ適用経路。
+  // ただし履歴は clear でなく record し、AI の差し替えを Cmd+Z で戻せるようにする。
+  applyYaml: (text) => {
+    const { graph: loaded, warnings } = deserializeGraph(text, registry);
+    history.record(graph);
+    replaceGraph(graph, loaded);
+    runtime.ensureStates();      // 新ノードの state を即時生成（restoreAssets が getState 経由で読むため）
+    void restoreAssets();        // assetId を持つノードへライブラリからファイルを復元
+    maybeAutoStopCamera();       // #214: CameraInput が消えたら共有カメラ停止判定
+    for (const w of warnings) console.warn(`[ai-api] ${w}`);
+    return warnings;
+  },
+});
+installPostMessageBridge(aiApi);
+
+(window as unknown as { nodeVj: unknown }).nodeVj = { graph, registry, runtime, editor, sceneManager, recorder, api: aiApi };
 console.log("[node-vj] editor + preview started");
