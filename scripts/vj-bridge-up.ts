@@ -1,16 +1,12 @@
 // #237: AI ブリッジ一式（WS 中継 + node-vj dev サーバ）をバックグラウンド起動する。
 //   bun run bridge:up [devPort] [relayPort]   （既定 3000 / 8787）
-// 起動した PID は tmp の PID ファイルに記録し、bridge:down で停止する。
+// 起動した PID は tmp の PID ファイル（dev ポート単位）に記録し、bridge:down で停止する。
+// ポート別記録なので、別ポート指定で複数セットを同時に動かしても記録は被らない。
 // 既に対象ポートが使用中の場合は「他のサーバを殺さない」ため起動せずエラー終了する。
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { bridgePidFile, type BridgePids } from "./vj-bridge-pids";
 
-export interface BridgePids {
-  dev: { pid: number; port: number };
-  relay: { pid: number; port: number };
-}
-
-export const PID_FILE = join(tmpdir(), "node-vj-bridge.pids.json");
 const REPO_ROOT = join(import.meta.dir, "..");
 
 const portArgs = process.argv.slice(2).filter((a) => !a.startsWith("--"));
@@ -45,7 +41,9 @@ async function waitFor(cond: () => Promise<boolean>, timeoutMs: number): Promise
   return false;
 }
 
-// 既存 PID ファイルがあり、両プロセスが生きていれば二重起動しない。
+const PID_FILE = bridgePidFile(devPort);
+
+// 既存 PID ファイル（同じ dev ポート）があり、両プロセスが生きていれば二重起動しない。
 const existing = await Bun.file(PID_FILE)
   .json()
   .catch(() => null);
@@ -76,9 +74,9 @@ for (const [label, port] of [["dev", devPort], ["relay", relayPort]] as const) {
 }
 
 // 中継 → dev サーバの順に detached で起動（親が終了しても生存）。
-// 子の出力は tmp のログへ残す（起動失敗の原因調査用）。
-const relayLog = Bun.file(join(tmpdir(), "node-vj-bridge.relay.log"));
-const devLog = Bun.file(join(tmpdir(), "node-vj-bridge.dev.log"));
+// 子の出力は tmp のログへ残す（起動失敗の原因調査用・ポート別）。
+const relayLog = Bun.file(join(tmpdir(), `node-vj-bridge.${relayPort}.relay.log`));
+const devLog = Bun.file(join(tmpdir(), `node-vj-bridge.${devPort}.dev.log`));
 const relay = Bun.spawn(["bun", join(REPO_ROOT, "scripts", "vj-relay.ts"), String(relayPort)], {
   cwd: REPO_ROOT,
   stdin: "ignore",
@@ -122,4 +120,4 @@ console.log(`[bridge:up] 起動しました`);
 console.log(`  dev   : ${url}  (pid ${dev.pid})`);
 console.log(`  relay : ws://127.0.0.1:${relayPort}   (pid ${relay.pid})`);
 console.log(`  次へ  : ${noOpen ? "ブラウザで開き、" : "開いたページで"}設定パネル「AI ブリッジ」を ON（URL: ws://localhost:${relayPort}）`);
-console.log(`  停止  : bun run bridge:down`);
+console.log(`  停止  : bun run bridge:down（全セット）/ bun run bridge:down ${devPort}（このセットのみ）`);
