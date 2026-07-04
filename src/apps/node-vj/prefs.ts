@@ -10,11 +10,17 @@ export interface Prefs {
   panMode: PanSelectMode;
   /** #228: サイドドックのピン留め（true なら外側クリックで自動クローズしない）。 */
   dockPinned: boolean;
+  /** #237: AI ブリッジ（WS）を有効にするか。外部プロセスへ口を開くため既定 false（opt-in）。 */
+  wsBridgeEnabled: boolean;
+  /** #237: AI ブリッジの中継サーバ URL。 */
+  wsBridgeUrl: string;
 }
 
 export const DEFAULT_PREFS: Prefs = {
   panMode: "modern",
   dockPinned: false,
+  wsBridgeEnabled: false,
+  wsBridgeUrl: "ws://localhost:8787",
 };
 
 export const PREFS_KEY = "node-vj.prefs.v1";
@@ -37,6 +43,8 @@ export function parsePrefs(raw: string | null): Prefs {
   const prefs: Prefs = { ...DEFAULT_PREFS };
   if (src.panMode === "modern" || src.panMode === "legacy") prefs.panMode = src.panMode;
   if (typeof src.dockPinned === "boolean") prefs.dockPinned = src.dockPinned;
+  if (typeof src.wsBridgeEnabled === "boolean") prefs.wsBridgeEnabled = src.wsBridgeEnabled;
+  if (typeof src.wsBridgeUrl === "string" && src.wsBridgeUrl !== "") prefs.wsBridgeUrl = src.wsBridgeUrl;
   return prefs;
 }
 

@@ -40,6 +40,32 @@ window.postMessage({ type: "node-vj:cmd", id: "任意ID", cmd: "getScenes", args
 
 cmd 名・args は API と同一（`applyGraphYaml` は `args: { yaml }`、`setParam` は `args: { nodeId, paramId, value }`）。
 
+## WS ブリッジ経由（v2・#237）— ブラウザ操作なしで外部プロセスから叩く
+
+ユーザが普段見ているタブを Playwright/CDP なしで直接操作できる経路。プロトコル（cmd 名・args・結果形）は postMessage と完全同一。
+
+```
+[node-vj タブ] --ws--> [ローカル中継 (127.0.0.1)] <--ws-- [AI エージェント]
+```
+
+設計: `docs/plans/2026-07-04-237-ws-bridge-design.md` / 実装: `scripts/vj-relay.ts`・`src/apps/node-vj/api/ws-bridge-client.ts`
+
+### 手順
+
+1. **中継を起動**: `bun run relay`（127.0.0.1:8787。port は第 1 引数 or 環境変数 `VJ_RELAY_PORT`）
+2. **node-vj 側で有効化**: 設定パネル（サイドドック歯車）→「AI ブリッジ」→ ON（既定 OFF・URL 既定 `ws://localhost:8787`）。「接続済」表示になれば OK。設定は prefs（localStorage `node-vj.prefs.v1` の `wsBridgeEnabled` / `wsBridgeUrl`）に保存される
+3. **agent 側から接続**: 中継へ WS 接続し、まず `{ type: "node-vj:hello", role: "agent" }` を送る。以後 `{ type: "node-vj:cmd", id, cmd, args? }` を送ると `{ type: "node-vj:result", id, result }` が返る（result は全 agent へ配られるので **id で自分宛を拾う**）。app（タブ）不在時は `{ ok: false, error: "app not connected" }` が即返る
+
+### サンプルスクリプト（そのまま使える）
+
+```bash
+bun scripts/vj-agent-example.ts getStatus
+bun scripts/vj-agent-example.ts setParam '{"nodeId":"n1","paramId":"value","value":0.5}'
+bun scripts/vj-agent-example.ts --url ws://127.0.0.1:8791 applyGraphYaml '{"yaml":"version: 1\n..."}'
+```
+
+終了コード: 0 = `ok:true` / 1 = `ok:false` / 2 = 接続失敗・5s タイムアウト。
+
 ## グラフ YAML の形式（applyGraphYaml に渡すもの）
 
 ```yaml
