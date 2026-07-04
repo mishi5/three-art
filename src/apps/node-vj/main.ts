@@ -303,6 +303,21 @@ editor.onStopPad = (id) => (runtime.getState(id) as PadLoadable | undefined)?.st
 editor.onUnassignPad = (id, idx) => unassignPad(id, idx);
 // #205: 音入りパッドの Cmd/Ctrl+クリック → そのパッドの発音中の音だけ止める（個別停止）。
 editor.onStopPadVoice = (id, idx) => (runtime.getState(id) as PadLoadable | undefined)?.stopPad?.(idx);
+// #204: TapSequencer ランタイムの duck-type（ホールド録音・タップ・クリア・状態参照）。
+type TapSeqControl = {
+  startRecording?: (nowSec: number) => void;
+  stopRecording?: (nowSec: number) => void;
+  tap?: (nowSec: number) => void;
+  clear?: () => void;
+  status?: (nowSec?: number) => { phase: string; tapCount: number; loopLenSec: number; playPosSec: number; recordElapsedSec: number };
+};
+// #204: 録音系の時刻源。保持するのは相対秒だけなので wall clock（performance.now）でよい。
+const tapNowSec = (): number => performance.now() / 1000;
+editor.onTapRecordStart = (id) => (runtime.getState(id) as TapSeqControl | undefined)?.startRecording?.(tapNowSec());
+editor.onTapRecordStop = (id) => (runtime.getState(id) as TapSeqControl | undefined)?.stopRecording?.(tapNowSec());
+editor.onTap = (id) => (runtime.getState(id) as TapSeqControl | undefined)?.tap?.(tapNowSec());
+editor.onTapClear = (id) => (runtime.getState(id) as TapSeqControl | undefined)?.clear?.();
+editor.tapSeqInfo = (id) => (runtime.getState(id) as TapSeqControl | undefined)?.status?.(tapNowSec());
 // #205: アセットをパッド上にドロップ → そのパッドへ割当（再割当も上書き）。
 editor.onDropAssetToPad = (id, idx, assetId) => {
   runtime.resumeAudio();

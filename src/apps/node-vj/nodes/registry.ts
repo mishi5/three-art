@@ -2,6 +2,7 @@ import { NodeRegistry } from "../graph/node-type";
 import { NumberNode } from "./NumberNode";
 import { TimeNode } from "./TimeNode";
 import { PulseNode } from "./PulseNode";
+import { TapSequencerNode } from "./TapSequencerNode";
 import { RandomValueNode } from "./RandomValueNode";
 import { MultiplyNode } from "./MultiplyNode";
 import { AddNode } from "./AddNode";
@@ -55,6 +56,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(NumberNode);
   r.register(TimeNode);
   r.register(PulseNode);
+  r.register(TapSequencerNode);
   r.register(RandomValueNode);
   r.register(CameraInputNode);
   r.register(PoseFeaturesNode);

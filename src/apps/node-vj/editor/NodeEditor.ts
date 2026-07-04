@@ -16,6 +16,7 @@ import {
   hasSceneRow, sceneRowRect, sceneRowLabel,
   outputScaleChipRect, CATEGORY_COLORS,
   hasPadGrid, padRect, padIndexAt, padExpandButtonRect, padStopButtonRect,
+  hasTapRows, tapControlRowRect, tapStatusRowRect, tapControlLayout, tapStatusLabel,
 } from "./layout";
 import { getOutputScale, setOutputScale, formatScale, DEFAULT_OUTPUT_SCALE } from "../graph/output-scale";
 import { randomInRange } from "./random-value";
@@ -66,6 +67,8 @@ type Drag =
   | { kind: "seek"; nodeId: string; seek: { x: number; w: number }; duration: number }
   // #176: 自由ラベルのドラッグ移動。dx/dy はカーソル→ラベル原点のオフセット。
   | { kind: "label"; id: string; dx: number; dy: number; moved: boolean }
+  // #204: TapSequencer の録音ボタンをホールド中（pointerup / blur で録音停止）。
+  | { kind: "tapRecord"; nodeId: string }
   | null;
 
 /** #176: ノード名をノード上端からどれだけ上に表示するか（px・world）。グループ枠もこの分だけ上へ広げる。 */
@@ -143,6 +146,17 @@ export class NodeEditor {
    * 最後の CameraInput 削除で共有カメラを自動停止する等の判定トリガに使う。
    */
   onGraphMutated?: () => void;
+  /** #204: TapSequencer 録音開始（録音ボタン pointerdown）。任意。 */
+  onTapRecordStart?: (nodeId: string) => void;
+  /** #204: TapSequencer 録音停止（録音ボタンのホールド解除）。任意。 */
+  onTapRecordStop?: (nodeId: string) => void;
+  /** #204: TapSequencer 録音中のスペースキータップ。任意。 */
+  onTap?: (nodeId: string) => void;
+  /** #204: TapSequencer 記録クリア（クリアボタン）。任意。 */
+  onTapClear?: (nodeId: string) => void;
+  /** #204: TapSequencer の状態（録音/再生・記録数など）を引く。任意。 */
+  tapSeqInfo?: (nodeId: string) =>
+    { phase: string; tapCount: number; loopLenSec: number; playPosSec: number; recordElapsedSec: number } | undefined;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -179,6 +193,8 @@ export class NodeEditor {
     canvas.addEventListener("pointerdown", this.onDown);
     window.addEventListener("pointermove", this.onMove);
     window.addEventListener("pointerup", this.onUp);
+    // #204: 録音中のみ Space を capture で先取りする（onKey より前・録音していなければ素通し）。
+    window.addEventListener("keydown", this.onKeyCapture, true);
     window.addEventListener("keydown", this.onKey);
     window.addEventListener("keyup", this.onKeyUp);
     // #167: フォーカスが外れたら Space 押下状態をリセット（keyup 取りこぼしでパンが残る不具合の防止）。
@@ -424,6 +440,23 @@ export class NodeEditor {
           return;
         }
       }
+      // #204: TapSequencer の録音（押している間だけ記録）/クリアボタン。
+      if (def?.tapSequencer) {
+        const cr = tapControlRowRect(hit.node, def);
+        if (cr) {
+          const { rec, clear } = tapControlLayout(cr);
+          if (w.x >= rec.x && w.x <= rec.x + rec.w && w.y >= rec.y && w.y <= rec.y + rec.h) {
+            // ホールド録音: pointerdown で開始し、onUp（離した時点）で停止する。
+            this.onTapRecordStart?.(hit.node.id);
+            this.drag = { kind: "tapRecord", nodeId: hit.node.id };
+            return;
+          }
+          if (w.x >= clear.x && w.x <= clear.x + clear.w && w.y >= clear.y && w.y <= clear.y + clear.h) {
+            this.onTapClear?.(hit.node.id);
+            return;
+          }
+        }
+      }
       // #205: パッドグリッドの左クリックは発音のみ（音入りパッド）。割当/停止/解除は右クリックメニュー。
       if (def?.padGrid) {
         const idx = padIndexAt(hit.node, def, w.x, w.y);
@@ -603,6 +636,13 @@ export class NodeEditor {
   }
 
   private onUp = (e: PointerEvent): void => {
+    // #204: 録音ボタンのホールド解除 → 録音停止（ループ長＝押していた時間）。
+    // trackpad の pointerup 欠落は onMove の buttons===0 フォールバック（#167）がここへ来る。
+    if (this.drag?.kind === "tapRecord") {
+      this.onTapRecordStop?.(this.drag.nodeId);
+      this.drag = null;
+      return;
+    }
     // #103: 右クリック（移動なし）はコンテキストメニュー。右ドラッグはパンのまま。
     if (this.drag?.kind === "pan" && e.button === 2 &&
         Math.hypot(e.clientX - this.drag.startX, e.clientY - this.drag.startY) < DRAG_THRESHOLD) {
@@ -666,6 +706,20 @@ export class NodeEditor {
       }
     }
     this.drag = null;
+  };
+
+  /**
+   * #204: TapSequencer 録音中（録音ボタンをホールド中）だけ、Space を capture フェーズで消費して
+   * タップとして記録する。preventDefault＋stopImmediatePropagation で #167 の Space パン
+   * （onKey の spaceDown）やページスクロールへ流さない。録音していない時はグローバルキーを奪わない。
+   * e.key は IME 有効時に変わり取りこぼすため、必ず物理キー e.code で判定する（#167 と同じ）。
+   */
+  private onKeyCapture = (e: KeyboardEvent): void => {
+    if (this.drag?.kind !== "tapRecord") return;
+    if (e.code !== "Space") return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (!e.repeat) this.onTap?.(this.drag.nodeId); // キーリピートは打鍵として数えない
   };
 
   private onKey = (e: KeyboardEvent): void => {
@@ -759,6 +813,11 @@ export class NodeEditor {
   /** #167: ウィンドウ blur で Space 押下状態を解除する（keyup を取りこぼしてもパンが残らないように）。 */
   private onBlur = (): void => {
     this.spaceDown = false;
+    // #204: 録音ボタンをホールドしたままフォーカスが外れたら録音を止める（pointerup を待たない）。
+    if (this.drag?.kind === "tapRecord") {
+      this.onTapRecordStop?.(this.drag.nodeId);
+      this.drag = null;
+    }
   };
 
   private onContextMenu = (e: Event): void => {
@@ -1552,6 +1611,34 @@ export class NodeEditor {
       }
       ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.font = "11px system-ui";
     }
+    // #204: TapSequencer の録音（ホールド）/クリアボタンとステータス行。
+    if (hasTapRows(def)) {
+      const cr = tapControlRowRect(node, def)!;
+      const { rec, clear } = tapControlLayout(cr);
+      const info = this.tapSeqInfo?.(node.id);
+      const recording = info?.phase === "recording";
+      // 録音ボタン（録音中は赤く点灯）。
+      ctx.fillStyle = recording ? "#7a2430" : "#3a2a2a";
+      roundRect(ctx, rec.x, rec.y, rec.w, rec.h, 4);
+      ctx.fill();
+      ctx.strokeStyle = recording ? "#ff8f9f" : "#7a5a5a"; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = recording ? "#ffd7dd" : "#e9a0a0";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "11px system-ui";
+      ctx.fillText(recording ? "● 録音中…" : "● 録音", rec.x + rec.w / 2, rec.y + rec.h / 2);
+      // クリアボタン。
+      ctx.fillStyle = "#262630";
+      roundRect(ctx, clear.x, clear.y, clear.w, clear.h, 4);
+      ctx.fill();
+      ctx.strokeStyle = "#4a5566"; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = "#9ab";
+      ctx.fillText("✕ クリア", clear.x + clear.w / 2, clear.y + clear.h / 2);
+      // ステータス行（記録数/ループ長/再生位置）。
+      const st = tapStatusRowRect(node, def)!;
+      ctx.fillStyle = recording ? "#f9b" : "#9ab";
+      ctx.textAlign = "left"; ctx.font = "10px system-ui";
+      ctx.fillText(ellipsizeEnd(ctx, tapStatusLabel(info), st.w - 20), st.x + 10, st.y + st.h / 2);
+      ctx.font = "11px system-ui";
+    }
     // #150: 🎲ランダムボタン行。
     if (def.randomButton) {
       const rr = randomRowRect(node, def)!;
@@ -1580,6 +1667,7 @@ export class NodeEditor {
     this.canvas.removeEventListener("pointerdown", this.onDown);
     window.removeEventListener("pointermove", this.onMove);
     window.removeEventListener("pointerup", this.onUp);
+    window.removeEventListener("keydown", this.onKeyCapture, true);
     window.removeEventListener("keydown", this.onKey);
     window.removeEventListener("keyup", this.onKeyUp);
     window.removeEventListener("blur", this.onBlur);

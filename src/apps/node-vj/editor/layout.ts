@@ -65,6 +65,14 @@ export function hasSceneRow(def: NodeTypeDef): boolean {
   return !!def.sceneInput;
 }
 
+/** #204: TapSequencer のタップ録音 UI（コントロール行＋ステータス行）を出すか。 */
+export function hasTapRows(def: NodeTypeDef): boolean {
+  return !!def.tapSequencer;
+}
+
+/** #204: TapSequencer が追加する行数（録音/クリアのコントロール行＋ステータス行）。 */
+const TAP_ROWS = 2;
+
 /** #154: ノード UI に行を描く param の数（hidden を除く）。末尾の hidden param 行は詰める。 */
 export function visibleParamCount(def: NodeTypeDef): number {
   return def.params.reduce((n, p) => (p.hidden ? n : n + 1), 0);
@@ -76,7 +84,9 @@ export function nodeHeight(def: NodeTypeDef): number {
   const sceneRow = hasSceneRow(def) ? ROW_H : 0;
   // #205: パッドグリッドは params 直下に上マージン＋グリッド本体ぶん高さを足す。
   const padRows = hasPadGrid(def) ? PAD_MARGIN_TOP + padGridHeight(def) : 0;
-  return TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H + randomRow + fileRows + sceneRow + padRows + PADDING;
+  // #204: タップ録音 UI（コントロール行＋ステータス行）。
+  const tapRows = hasTapRows(def) ? TAP_ROWS * ROW_H : 0;
+  return TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H + randomRow + fileRows + sceneRow + padRows + tapRows + PADDING;
 }
 
 export function nodePos(node: NodeInstance): { x: number; y: number } {
@@ -230,6 +240,50 @@ export function padIndexAt(
     if (r && worldX >= r.x && worldX <= r.x + r.w && worldY >= r.y && worldY <= r.y + r.h) return i;
   }
   return null;
+}
+
+/** #204: タップ録音コントロール行（録音/クリアボタン）の領域（params 直下・tapSequencer 無しは null）。 */
+export function tapControlRowRect(
+  node: NodeInstance, def: NodeTypeDef,
+): { x: number; y: number; w: number; h: number } | null {
+  if (!hasTapRows(def)) return null;
+  const p = nodePos(node);
+  return { x: p.x, y: p.y + TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H, w: NODE_WIDTH, h: ROW_H };
+}
+
+/** #204: タップ録音ステータス行（記録数/ループ長/再生位置）の領域（コントロール行の直下）。 */
+export function tapStatusRowRect(
+  node: NodeInstance, def: NodeTypeDef,
+): { x: number; y: number; w: number; h: number } | null {
+  const cr = tapControlRowRect(node, def);
+  if (!cr) return null;
+  return { x: cr.x, y: cr.y + ROW_H, w: cr.w, h: ROW_H };
+}
+
+/** #204: コントロール行を「● 録音（ホールド）」と「✕ クリア」の 2 ボタンに分割する。 */
+export function tapControlLayout(rect: { x: number; y: number; w: number; h: number }): {
+  rec: { x: number; y: number; w: number; h: number };
+  clear: { x: number; y: number; w: number; h: number };
+} {
+  const pad = 6, gap = 6;
+  const inner = rect.w - 2 * pad;
+  const recW = Math.round(inner * 0.56); // 録音を広め（主操作）
+  const rec = { x: rect.x + pad, y: rect.y + 2, w: recW, h: rect.h - 4 };
+  const clear = { x: rec.x + recW + gap, y: rect.y + 2, w: inner - recW - gap, h: rect.h - 4 };
+  return { rec, clear };
+}
+
+/**
+ * #204: ステータス行のラベル。recording は打数＋経過秒、playing は打数/ループ長＋再生位置、
+ * それ以外（idle・state 未生成）は「記録なし」。
+ */
+export function tapStatusLabel(
+  s: { phase: string; tapCount: number; loopLenSec: number; playPosSec: number; recordElapsedSec: number } | null | undefined,
+): string {
+  if (!s) return "記録なし";
+  if (s.phase === "recording") return `録音中 ${s.tapCount}打 ${s.recordElapsedSec.toFixed(1)}s`;
+  if (s.phase === "playing") return `${s.tapCount}打 / ${s.loopLenSec.toFixed(1)}s ループ ▶${s.playPosSec.toFixed(1)}s`;
+  return "記録なし";
 }
 
 /** #152: シーン選択行の領域（params 直下・sceneInput 無しは null）。 */
