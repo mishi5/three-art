@@ -46,6 +46,7 @@ export const AudioReverbNode: NodeTypeDef = {
   inputs: [{ id: "audio", label: "audio", type: "audio", description: "残響を付ける実音声信号。" }],
   outputs: [SIGNAL_OUTPUT],
   params: [
+    { id: "enabled", label: "enabled", kind: "enum", default: "on", options: ["on", "off"], description: "エフェクトの有効/無効。off で入力をそのまま出力（パススルー）。" },
     { id: "decay", label: "decay", kind: "number", default: 2, min: REVERB_DECAY_MIN, max: REVERB_DECAY_MAX, step: 0.1, description: "残響の長さ（秒）。変更時にインパルス応答を再生成する。" },
     { id: "mix", label: "mix", kind: "number", default: 0.3, min: 0, max: 1, step: 0.01, description: "dry/wet バランス（0=原音のみ, 1=残響のみ）。" },
   ],
@@ -74,12 +75,16 @@ export const AudioReverbNode: NodeTypeDef = {
     const st = ctx.state as AudioReverbState | undefined;
     if (!st) return signalOutput(null);
     // 入力が変わったときだけ繋ぎ替える（論理切断＝物理 disconnect・#198）。
+    // enabled=off はエフェクトへ繋がず（残響テールも止まる）、入力をそのまま出力するパススルー。
+    const enabled = ctx.param("enabled") !== "off";
     const node = asAudioNode(ctx.input("audio"));
-    if (node !== st.connected) {
+    const target = enabled ? node : null;
+    if (target !== st.connected) {
       if (st.connected) { try { st.connected.disconnect(st.inGain); } catch { /* ignore */ } }
-      if (node) node.connect(st.inGain);
-      st.connected = node;
+      if (target) target.connect(st.inGain);
+      st.connected = target;
     }
+    if (!enabled) return signalOutput(node);
     // decay が実質的に変わったときだけ IR を再生成する（AudioBuffer 生成は重いので毎フレームは不可）。
     const decay = readNumberParam(ctx.param("decay"), REVERB_DECAY_MIN, REVERB_DECAY_MAX, 2);
     if (st.lastDecay === null || Math.abs(decay - st.lastDecay) >= REVERB_REGEN_EPSILON) {

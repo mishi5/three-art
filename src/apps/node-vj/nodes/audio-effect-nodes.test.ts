@@ -75,9 +75,9 @@ const outputNode = (def: NodeTypeDef, ctx: EvalContext): unknown =>
 
 describe("音声エフェクトノード定義 (#239)", () => {
   const cases: Array<[NodeTypeDef, string[]]> = [
-    [AudioFilterNode, ["type", "frequency", "Q"]],
-    [AudioGainNode, ["gain"]],
-    [AudioReverbNode, ["decay", "mix"]],
+    [AudioFilterNode, ["enabled", "type", "frequency", "Q"]],
+    [AudioGainNode, ["enabled", "gain"]],
+    [AudioReverbNode, ["enabled", "decay", "mix"]],
   ];
 
   for (const [def, ids] of cases) {
@@ -276,4 +276,47 @@ describe("AudioReverb 評価 (#239)", () => {
     AudioReverbNode.evaluate(makeCtx(AudioReverbNode, st, {}, { mix: 0.3 }));
     expect(st.convolver.buffer!.length).toBe(8000 * 2);
   });
+});
+
+// ---------------------------------------------------------------------------
+// enabled トグル（off でパススルー・エフェクトから物理切断）
+// ---------------------------------------------------------------------------
+
+describe("enabled トグル (#239)", () => {
+  const cases: Array<[NodeTypeDef, (state: unknown) => MockAudioNode]> = [
+    [AudioFilterNode, (st) => (st as { filter: MockAudioNode }).filter],
+    [AudioGainNode, (st) => (st as { gain: MockAudioNode }).gain],
+    [AudioReverbNode, (st) => (st as { inGain: MockAudioNode }).inGain],
+  ];
+
+  for (const [def, entryOf] of cases) {
+    test(`${def.type}: enabled は enum on/off（既定 on・先頭 param）`, () => {
+      const e = def.params[0];
+      expect([e?.id, e?.kind, e?.default]).toEqual(["enabled", "enum", "on"]);
+      expect(e?.options).toEqual(["on", "off"]);
+    });
+
+    test(`${def.type}: off で入力をそのまま出力し、エフェクトから物理切断する`, () => {
+      const st = def.createState!(mockEnv());
+      const entry = entryOf(st);
+      const a = new MockAudioNode();
+      // on: エフェクト経由の出力・入口へ接続されている
+      const onOut = outputNode(def, makeCtx(def, st, { audio: audioIn(a) }, { enabled: "on" }));
+      expect(a.targets.has(entry)).toBe(true);
+      expect(onOut).not.toBe(a);
+      // off: 入力そのものを出力（パススルー）・入口から物理切断
+      const offOut = outputNode(def, makeCtx(def, st, { audio: audioIn(a) }, { enabled: "off" }));
+      expect(offOut).toBe(a as unknown as AudioNode);
+      expect(a.targets.has(entry)).toBe(false);
+      // on に戻すと再接続され、エフェクト経由に復帰する
+      const backOut = outputNode(def, makeCtx(def, st, { audio: audioIn(a) }, { enabled: "on" }));
+      expect(a.targets.has(entry)).toBe(true);
+      expect(backOut).not.toBe(a);
+    });
+
+    test(`${def.type}: off かつ入力なしは audio=undefined`, () => {
+      const st = def.createState!(mockEnv());
+      expect(outputNode(def, makeCtx(def, st, {}, { enabled: "off" }))).toBeUndefined();
+    });
+  }
 });

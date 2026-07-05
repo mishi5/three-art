@@ -24,6 +24,7 @@ export const AudioFilterNode: NodeTypeDef = {
   inputs: [{ id: "audio", label: "audio", type: "audio", description: "加工する実音声信号。" }],
   outputs: [SIGNAL_OUTPUT],
   params: [
+    { id: "enabled", label: "enabled", kind: "enum", default: "on", options: ["on", "off"], description: "エフェクトの有効/無効。off で入力をそのまま出力（パススルー）。" },
     { id: "type", label: "type", kind: "enum", default: "lowpass", options: [...FILTER_TYPES], description: "フィルタ種別（lowpass=低域通過, highpass=高域通過, bandpass=帯域通過）。" },
     { id: "frequency", label: "frequency", kind: "number", default: 1000, min: 20, max: 20000, step: 1, description: "カットオフ/中心周波数（Hz）。聴感は対数的なので低域は細かく・高域は大きく動かすとよい。" },
     { id: "Q", label: "Q", kind: "number", default: 1, min: 0.1, max: 20, step: 0.1, description: "レゾナンス（カットオフ付近の尖り）。大きいほどクセの強い音になる。" },
@@ -41,12 +42,16 @@ export const AudioFilterNode: NodeTypeDef = {
     const st = ctx.state as AudioFilterState | undefined;
     if (!st) return signalOutput(null);
     // 入力が変わったときだけ繋ぎ替える（論理切断＝物理 disconnect・#198）。
+    // enabled=off はエフェクトへ繋がず（処理も止める）、入力をそのまま出力するパススルー。
+    const enabled = ctx.param("enabled") !== "off";
     const node = asAudioNode(ctx.input("audio"));
-    if (node !== st.connected) {
+    const target = enabled ? node : null;
+    if (target !== st.connected) {
       if (st.connected) { try { st.connected.disconnect(st.filter); } catch { /* ignore */ } }
-      if (node) node.connect(st.filter);
-      st.connected = node;
+      if (target) target.connect(st.filter);
+      st.connected = target;
     }
+    if (!enabled) return signalOutput(node);
     st.filter.type = readFilterType(ctx.param("type"));
     const now = st.ctx.currentTime;
     st.lastFrequency = applySmoothParam(st.filter.frequency, st.lastFrequency, readNumberParam(ctx.param("frequency"), 20, 20000, 1000), now);
