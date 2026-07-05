@@ -1,5 +1,6 @@
 // #239: 音声リバーブ（ConvolverNode）。生成したインパルス応答（ホワイトノイズ×減衰カーブ）で
-// 残響を付ける（外部 IR ファイル不要）。dry/wet は GainNode 2 本の線形クロスフェード。
+// 残響を付ける（外部 IR ファイル不要）。dry/wet は**独立ゲイン**（センド/リターン方式の上位互換）:
+// dry=1 のまま wet だけ上げれば原音の音量を変えずに残響を足せる（実機確認でのユーザ要望）。
 //
 // 内部グラフ:
 //   in(GainNode) ─┬─ dryGain ──────────┬─ out(GainNode)
@@ -16,7 +17,6 @@ import {
   applySmoothParam,
   buildImpulseResponse,
   readNumberParam,
-  wetDryLevels,
 } from "./audio-effect-logic";
 
 interface AudioReverbState {
@@ -37,18 +37,19 @@ interface AudioReverbState {
   lastWet: number | null;
 }
 
-/** 音声リバーブノード（#239）。生成 IR の ConvolverNode で残響を付け、mix で dry/wet を調整する。 */
+/** 音声リバーブノード（#239）。生成 IR の ConvolverNode で残響を付け、dry/wet 独立ゲインで調整する。 */
 export const AudioReverbNode: NodeTypeDef = {
   type: "AudioReverb",
   category: "process",
-  description: "リバーブ。生成したインパルス応答で audio に残響を付ける。decay で残響の長さ、mix で原音との混ざり具合を調整。",
+  description: "リバーブ。生成したインパルス応答で audio に残響を付ける。decay で残響の長さ、dry/wet は独立（dry=1 のまま wet を上げると原音の音量を変えずに残響が足せる）。",
   isSink: false,
   inputs: [{ id: "audio", label: "audio", type: "audio", description: "残響を付ける実音声信号。" }],
   outputs: [SIGNAL_OUTPUT],
   params: [
     { id: "enabled", label: "enabled", kind: "enum", default: "on", options: ["on", "off"], description: "エフェクトの有効/無効。off で入力をそのまま出力（パススルー）。" },
     { id: "decay", label: "decay", kind: "number", default: 2, min: REVERB_DECAY_MIN, max: REVERB_DECAY_MAX, step: 0.1, description: "残響の長さ（秒）。変更時にインパルス応答を再生成する。" },
-    { id: "mix", label: "mix", kind: "number", default: 0.3, min: 0, max: 1, step: 0.01, description: "dry/wet バランス（0=原音のみ, 1=残響のみ）。" },
+    { id: "dry", label: "dry", kind: "number", default: 1, min: 0, max: 1, step: 0.01, description: "原音の音量。1 のままなら原音は変わらない（0 で残響のみ）。" },
+    { id: "wet", label: "wet", kind: "number", default: 0.5, min: 0, max: 2, step: 0.01, description: "付加する残響の量（センド量）。原音とは独立に調整できる。" },
   ],
   createState(env: NodeEnv): AudioReverbState {
     const ctx = env.audioContext;
@@ -94,7 +95,9 @@ export const AudioReverbNode: NodeTypeDef = {
       st.convolver.buffer = buf;
       st.lastDecay = decay;
     }
-    const { dry, wet } = wetDryLevels(ctx.param("mix"));
+    // dry/wet は独立ゲイン（クロスフェードしない）。既定 dry=1 で原音の音量は不変。
+    const dry = readNumberParam(ctx.param("dry"), 0, 1, 1);
+    const wet = readNumberParam(ctx.param("wet"), 0, 2, 0.5);
     const now = st.ctx.currentTime;
     st.lastDry = applySmoothParam(st.dryGain.gain, st.lastDry, dry, now);
     st.lastWet = applySmoothParam(st.wetGain.gain, st.lastWet, wet, now);

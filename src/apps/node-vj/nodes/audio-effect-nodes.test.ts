@@ -77,7 +77,7 @@ describe("音声エフェクトノード定義 (#239)", () => {
   const cases: Array<[NodeTypeDef, string[]]> = [
     [AudioFilterNode, ["enabled", "type", "frequency", "Q"]],
     [AudioGainNode, ["enabled", "gain"]],
-    [AudioReverbNode, ["enabled", "decay", "mix"]],
+    [AudioReverbNode, ["enabled", "decay", "dry", "wet"]],
   ];
 
   for (const [def, ids] of cases) {
@@ -123,11 +123,13 @@ describe("音声エフェクトノード定義 (#239)", () => {
     expect(g?.noInput).toBeUndefined();
   });
 
-  test("AudioReverb: decay 0.1..8 既定 2 / mix 0..1 既定 0.3（number 駆動可）", () => {
+  test("AudioReverb: decay 0.1..8 既定 2 / dry 0..1 既定 1 / wet 0..2 既定 0.5（number 駆動可）", () => {
     const d = AudioReverbNode.params.find((p) => p.id === "decay");
     expect([d?.kind, d?.default, d?.min, d?.max]).toEqual(["number", 2, 0.1, 8]);
-    const m = AudioReverbNode.params.find((p) => p.id === "mix");
-    expect([m?.kind, m?.default, m?.min, m?.max]).toEqual(["number", 0.3, 0, 1]);
+    const dry = AudioReverbNode.params.find((p) => p.id === "dry");
+    expect([dry?.kind, dry?.default, dry?.min, dry?.max]).toEqual(["number", 1, 0, 1]);
+    const wet = AudioReverbNode.params.find((p) => p.id === "wet");
+    expect([wet?.kind, wet?.default, wet?.min, wet?.max]).toEqual(["number", 0.5, 0, 2]);
   });
 });
 
@@ -240,21 +242,33 @@ describe("AudioReverb 評価 (#239)", () => {
     expect(st.convolver.targets.has(st.wetGain)).toBe(true);
     expect(st.dryGain.targets.has(st.outGain)).toBe(true);
     expect(st.wetGain.targets.has(st.outGain)).toBe(true);
-    expect(outputNode(AudioReverbNode, makeCtx(AudioReverbNode, st, {}, { decay: 2, mix: 0.3 }))).toBe(st.outGain);
+    expect(outputNode(AudioReverbNode, makeCtx(AudioReverbNode, st, {}, { decay: 2 }))).toBe(st.outGain);
   });
 
-  test("mix から dry/wet ゲインを適用（線形クロスフェード・平滑化）", () => {
+  test("dry/wet を独立に適用（クロスフェードしない・平滑化・同値は積まない）", () => {
     const st = AudioReverbNode.createState!(mockEnv()) as { dryGain: MockGainNode; wetGain: MockGainNode };
-    AudioReverbNode.evaluate(makeCtx(AudioReverbNode, st, {}, { decay: 2, mix: 0.25 }));
-    expect(st.dryGain.gain.calls).toEqual([0.75]);
-    expect(st.wetGain.gain.calls).toEqual([0.25]);
-    AudioReverbNode.evaluate(makeCtx(AudioReverbNode, st, {}, { decay: 2, mix: 0.25 }));
+    // dry を触らず wet だけ上げる＝原音の音量は不変のまま残響を足せる（センド/リターン相当）
+    AudioReverbNode.evaluate(makeCtx(AudioReverbNode, st, {}, { decay: 2, dry: 1, wet: 0.8 }));
+    expect(st.dryGain.gain.calls).toEqual([1]);
+    expect(st.wetGain.gain.calls).toEqual([0.8]);
+    AudioReverbNode.evaluate(makeCtx(AudioReverbNode, st, {}, { decay: 2, dry: 1, wet: 0.8 }));
     expect(st.dryGain.gain.calls.length).toBe(1);
+    // wet だけ変えても dry は再スケジュールされない
+    AudioReverbNode.evaluate(makeCtx(AudioReverbNode, st, {}, { decay: 2, dry: 1, wet: 1.5 }));
+    expect(st.dryGain.gain.calls.length).toBe(1);
+    expect(st.wetGain.gain.calls).toEqual([0.8, 1.5]);
+  });
+
+  test("dry/wet 未指定は既定（dry=1・wet=0.5）", () => {
+    const st = AudioReverbNode.createState!(mockEnv()) as { dryGain: MockGainNode; wetGain: MockGainNode };
+    AudioReverbNode.evaluate(makeCtx(AudioReverbNode, st, {}, { decay: 2 }));
+    expect(st.dryGain.gain.calls).toEqual([1]);
+    expect(st.wetGain.gain.calls).toEqual([0.5]);
   });
 
   test("初回評価で IR を生成（長さ = sampleRate × decay・2ch）", () => {
     const st = AudioReverbNode.createState!(mockEnv()) as { convolver: MockConvolverNode };
-    AudioReverbNode.evaluate(makeCtx(AudioReverbNode, st, {}, { decay: 2, mix: 0.3 }));
+    AudioReverbNode.evaluate(makeCtx(AudioReverbNode, st, {}, { decay: 2 }));
     expect(st.convolver.buffer).not.toBeNull();
     expect(st.convolver.buffer!.length).toBe(8000 * 2);
     expect(st.convolver.buffer!.numberOfChannels).toBe(2);
@@ -262,18 +276,18 @@ describe("AudioReverb 評価 (#239)", () => {
 
   test("decay 変更で IR を再生成・微小変化（<0.01s）では再生成しない", () => {
     const st = AudioReverbNode.createState!(mockEnv()) as { convolver: MockConvolverNode };
-    AudioReverbNode.evaluate(makeCtx(AudioReverbNode, st, {}, { decay: 2, mix: 0.3 }));
+    AudioReverbNode.evaluate(makeCtx(AudioReverbNode, st, {}, { decay: 2 }));
     const first = st.convolver.buffer;
-    AudioReverbNode.evaluate(makeCtx(AudioReverbNode, st, {}, { decay: 2.005, mix: 0.3 }));
+    AudioReverbNode.evaluate(makeCtx(AudioReverbNode, st, {}, { decay: 2.005 }));
     expect(st.convolver.buffer).toBe(first);
-    AudioReverbNode.evaluate(makeCtx(AudioReverbNode, st, {}, { decay: 4, mix: 0.3 }));
+    AudioReverbNode.evaluate(makeCtx(AudioReverbNode, st, {}, { decay: 4 }));
     expect(st.convolver.buffer).not.toBe(first);
     expect(st.convolver.buffer!.length).toBe(8000 * 4);
   });
 
   test("decay 非数は既定 2 秒で生成", () => {
     const st = AudioReverbNode.createState!(mockEnv()) as { convolver: MockConvolverNode };
-    AudioReverbNode.evaluate(makeCtx(AudioReverbNode, st, {}, { mix: 0.3 }));
+    AudioReverbNode.evaluate(makeCtx(AudioReverbNode, st, {}, {}));
     expect(st.convolver.buffer!.length).toBe(8000 * 2);
   });
 });

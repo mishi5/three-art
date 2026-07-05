@@ -8,7 +8,6 @@ import {
   buildImpulseResponse,
   readFilterType,
   readNumberParam,
-  wetDryLevels,
 } from "./audio-effect-logic";
 
 /** 決定的な擬似乱数（テスト再現性用）。 */
@@ -46,23 +45,6 @@ describe("readFilterType (#239)", () => {
     expect(readFilterType("notch")).toBe("lowpass");
     expect(readFilterType(undefined)).toBe("lowpass");
     expect(readFilterType(42)).toBe("lowpass");
-  });
-});
-
-describe("wetDryLevels (#239)", () => {
-  test("mix=0.3 → dry 0.7 / wet 0.3", () => {
-    const { dry, wet } = wetDryLevels(0.3);
-    expect(dry).toBeCloseTo(0.7);
-    expect(wet).toBeCloseTo(0.3);
-  });
-  test("0/1 の端で完全 dry / 完全 wet", () => {
-    expect(wetDryLevels(0)).toEqual({ dry: 1, wet: 0 });
-    expect(wetDryLevels(1)).toEqual({ dry: 0, wet: 1 });
-  });
-  test("範囲外はクランプ・非数は既定 0.3", () => {
-    expect(wetDryLevels(2)).toEqual({ dry: 0, wet: 1 });
-    expect(wetDryLevels(-1)).toEqual({ dry: 1, wet: 0 });
-    expect(wetDryLevels(undefined).wet).toBeCloseTo(0.3);
   });
 });
 

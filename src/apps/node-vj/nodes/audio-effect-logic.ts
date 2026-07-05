@@ -21,12 +21,6 @@ export function readFilterType(v: unknown): FilterType {
   return (FILTER_TYPES as readonly unknown[]).includes(v) ? (v as FilterType) : "lowpass";
 }
 
-/** mix（0=dry のみ〜1=wet のみ・非数は既定 0.3）から dry/wet ゲイン値の組を返す（線形クロスフェード）。 */
-export function wetDryLevels(mix: unknown): { dry: number; wet: number } {
-  const m = readNumberParam(mix, 0, 1, 0.3);
-  return { dry: 1 - m, wet: m };
-}
-
 /** setTargetAtTime を受けられる最小の AudioParam 型（テストでモック差し替え可能に）。 */
 export interface SmoothableParam {
   setTargetAtTime(value: number, startTime: number, timeConstant: number): unknown;
