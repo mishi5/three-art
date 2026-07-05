@@ -30,6 +30,10 @@ node-vj は `window.nodeVj.api`（型付きコマンド API）と postMessage �
 | `applyGraphYaml(yaml)` | `{ ok, warnings: string[] }` | グラフを YAML で**丸ごと差し替え**。History に積まれ Cmd+Z で取消可 |
 | `setParam(nodeId, paramId, value)` | `{ ok }` | パラメータ 1 個の変更（min/max クランプ・enum 検証つき）。ライブ操作向け |
 | `switchScene(sceneId)` | `{ ok }` | アクティブシーン切替 |
+| `addScene(name?)` | `{ ok, sceneId }` | 新規シーンを作成してアクティブ化（シーンパネルの「＋」と同経路）。name 省略時は `Scene N`。続けて `applyGraphYaml` すれば UI なしで新シーンにグラフを構築できる |
+| `renameScene(sceneId, name)` | `{ ok }` | シーン改名（name は trim・空はエラー） |
+| `removeScene(sceneId)` | `{ ok }` | シーン削除。最後の 1 枚は `{ ok: false, error }`。アクティブ削除時は隣のシーンへフォールバック（UI と同挙動） |
+| `setOutputScene(sceneId \| null)` | `{ ok }` | 出力シーンのピン留め。`null` で解除（編集に追従）。不在 id はエラー。postMessage/WS では `args: { sceneId }` キー必須（null を明示） |
 
 ## postMessage（別コンテキスト/拡張から）
 

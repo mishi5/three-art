@@ -65,6 +65,25 @@ export function dispatchCommand(api: AiApi, cmd: string, args: Record<string, un
     case "switchScene":
       if (typeof args.sceneId !== "string") return badArgs("switchScene は { sceneId: string } が必要です");
       return api.switchScene(args.sceneId);
+    // #245: シーン管理
+    case "addScene":
+      if (args.name !== undefined && typeof args.name !== "string") {
+        return badArgs("addScene は { name?: string } が必要です");
+      }
+      return api.addScene(args.name);
+    case "renameScene":
+      if (typeof args.sceneId !== "string") return badArgs("renameScene は { sceneId: string } が必要です");
+      if (typeof args.name !== "string") return badArgs("renameScene は { name: string } が必要です");
+      return api.renameScene(args.sceneId, args.name);
+    case "removeScene":
+      if (typeof args.sceneId !== "string") return badArgs("removeScene は { sceneId: string } が必要です");
+      return api.removeScene(args.sceneId);
+    case "setOutputScene":
+      // null（ピン解除）を明示させるため sceneId キー自体を必須にする。
+      if (!("sceneId" in args) || (args.sceneId !== null && typeof args.sceneId !== "string")) {
+        return badArgs("setOutputScene は { sceneId: string | null } が必要です");
+      }
+      return api.setOutputScene(args.sceneId);
     default:
       return { ok: false, error: `unknown cmd: ${cmd}` };
   }

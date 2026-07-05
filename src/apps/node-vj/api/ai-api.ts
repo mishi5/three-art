@@ -58,6 +58,11 @@ export interface AiApi {
   applyGraphYaml(yaml: string): { ok: true; warnings: string[] } | ApiError;
   setParam(nodeId: string, paramId: string, value: unknown): { ok: true } | ApiError;
   switchScene(sceneId: string): { ok: true } | ApiError;
+  // #245: シーン管理（scene-panel と同経路の hooks を通す＝UI と副作用が一致する）
+  addScene(name?: string): { ok: true; sceneId: string } | ApiError;
+  renameScene(sceneId: string, name: string): { ok: true } | ApiError;
+  removeScene(sceneId: string): { ok: true } | ApiError;
+  setOutputScene(sceneId: string | null): { ok: true } | ApiError;
 }
 
 /** main.ts から注入する依存（既存クロージャの薄いラッパ）。 */
@@ -76,6 +81,15 @@ export interface AiApiHooks {
     outputId(): string | null;
     /** シーン切替（scene-panel の切替と同じ経路。main.ts の sceneActions.switchTo）。 */
     switchTo(id: string): void;
+    // #245: 以下も main.ts の sceneActions（ScenePanelActions）を通す。UI の「＋/改名/削除/出力ピン」
+    // と同じクロージャなので snapshot→reflectActiveScene→カメラ判定→syncOutputScene の副作用が揃う。
+    /** 空シーンを作成してアクティブ化し、新シーンの id を返す（sceneActions.add）。 */
+    add(name?: string): string;
+    rename(id: string, name: string): void;
+    /** 存在検証・最後の 1 枚拒否は呼び出し側（ai-api）で済ませてから呼ぶ。 */
+    remove(id: string): void;
+    /** 出力シーンのピン留め（null で編集に追従へ戻す。sceneActions.setOutput）。 */
+    setOutput(id: string | null): void;
   };
   /**
    * YAML を検証してワークスペースへ適用し warnings を返す（不正 YAML は throw）。
@@ -275,6 +289,67 @@ export function createAiApi(hooks: AiApiHooks): AiApi {
           return { ok: false, error: `scene が見つかりません: ${sceneId}` };
         }
         hooks.scenes.switchTo(sceneId);
+        return { ok: true };
+      } catch (e) {
+        return fail(e);
+      }
+    },
+
+    // ---- #245: シーン管理 ----
+
+    addScene(name) {
+      try {
+        // UI の改名と同じく trim（「＋」は name 無しだが API は初期名を指定できる）。
+        let trimmed: string | undefined;
+        if (name !== undefined) {
+          if (typeof name !== "string") return { ok: false, error: "name は string である必要があります" };
+          trimmed = name.trim();
+          if (trimmed === "") return { ok: false, error: "name が空です" };
+        }
+        return { ok: true, sceneId: hooks.scenes.add(trimmed) };
+      } catch (e) {
+        return fail(e);
+      }
+    },
+
+    renameScene(sceneId, name) {
+      try {
+        if (!hooks.scenes.list().some((s) => s.id === sceneId)) {
+          return { ok: false, error: `scene が見つかりません: ${sceneId}` };
+        }
+        // scene-panel のダブルクリック改名と同じく trim・空は拒否。
+        const trimmed = typeof name === "string" ? name.trim() : "";
+        if (trimmed === "") return { ok: false, error: "name が空です" };
+        hooks.scenes.rename(sceneId, trimmed);
+        return { ok: true };
+      } catch (e) {
+        return fail(e);
+      }
+    },
+
+    removeScene(sceneId) {
+      try {
+        const list = hooks.scenes.list();
+        if (!list.some((s) => s.id === sceneId)) {
+          return { ok: false, error: `scene が見つかりません: ${sceneId}` };
+        }
+        // sceneManager.remove は静かに no-op するため、API では明示エラーにする（UI の disabled と同義）。
+        if (list.length <= 1) return { ok: false, error: "最後の 1 シーンは削除できません" };
+        // アクティブ削除時のフォールバック・出力ピン先削除時の追従(null)復帰は sceneActions.remove（UI と同挙動）。
+        hooks.scenes.remove(sceneId);
+        return { ok: true };
+      } catch (e) {
+        return fail(e);
+      }
+    },
+
+    setOutputScene(sceneId) {
+      try {
+        // 不在 id は sceneManager が静かに null へフォールバックするため、API では明示エラーにする。
+        if (sceneId !== null && !hooks.scenes.list().some((s) => s.id === sceneId)) {
+          return { ok: false, error: `scene が見つかりません: ${sceneId}` };
+        }
+        hooks.scenes.setOutput(sceneId);
         return { ok: true };
       } catch (e) {
         return fail(e);

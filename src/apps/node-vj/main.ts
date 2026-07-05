@@ -502,10 +502,12 @@ const sceneActions: ScenePanelActions = {
     void reflectActiveScene();
     maybeAutoStopCamera();       // #214: シーン切替でカメラ有無を再判定
   },
-  add: () => {
+  // #245: AI API からは name 指定・戻り値（新シーン）を使う。UI の「＋」は従来どおり add() で呼ぶ。
+  add: (name) => {
     snapshotActiveScene();
-    sceneManager.add();          // 空シーンを作り active に
+    const scene = sceneManager.add(name); // 空シーンを作り active に
     void reflectActiveScene();
+    return scene;
   },
   duplicate: (id) => {
     snapshotActiveScene();
@@ -769,6 +771,12 @@ const aiApi = createAiApi({
     outputId: () => sceneManager.outputId(),
     // scene-panel の切替と同じ経路（snapshot→setActive→reflectActiveScene→カメラ判定）。
     switchTo: (id) => sceneActions.switchTo(id),
+    // #245: シーン管理も scene-panel の「＋/改名/削除/出力ピン」と同じクロージャを通す
+    // （add は snapshot→reflectActiveScene、setOutput は syncOutputScene 込み）。
+    add: (name) => sceneActions.add(name).id,
+    rename: (id, name) => sceneActions.rename(id, name),
+    remove: (id) => sceneActions.remove(id),
+    setOutput: (id) => sceneActions.setOutput(id),
   },
   // preset 読込（mountGraphPresetControls の applyYaml）と同じ適用経路。
   // ただし履歴は clear でなく record し、AI の差し替えを Cmd+Z で戻せるようにする。
