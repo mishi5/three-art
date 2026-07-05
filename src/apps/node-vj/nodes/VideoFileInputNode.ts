@@ -11,6 +11,7 @@ import {
   audioFeatureOutputs, readOnsetParams,
 } from "./audio-feature-logic";
 import { SIGNAL_OUTPUT, signalOutput } from "../graph/audio-signal";
+import { FADE_PARAM, FADE_SMOOTH_TIME, clampFade, readFade } from "./video-fade-logic";
 
 /**
  * VideoFileInput ノードの永続状態（#66）。動画ファイルをループ再生して texture を供給する。
@@ -36,6 +37,8 @@ export class VideoFileInputRuntime implements PlaybackControl {
   private onset = new OnsetTracker();
   /** 現在 audio 抽出が有効か（gain/muted の状態と一致）。 */
   private audioActive = false;
+  /** #241: 現在の音声フェード目標値（gain へ反映済みの値。重複スケジュールを避ける）。 */
+  private audioFadeTarget = 1;
 
   constructor(ctx?: AudioContext) {
     // #127/#128: 共有 AudioContext（未指定は後方互換で遅延自前生成）。
@@ -100,6 +103,20 @@ export class VideoFileInputRuntime implements PlaybackControl {
     keep.connect(ctx.destination);
   }
 
+  /**
+   * #241: 音声フェード（0=無音、1=そのまま）。出力 gain（=signal 出力ノード）へ
+   * setTargetAtTime で滑らかに反映し、急変時のクリックノイズを避ける。
+   * 音響特徴量は gain より上流（analyzer.input）で解析するため影響を受けない。
+   * 音声グラフ未構築（extractAudio=off 等）のときは no-op。
+   */
+  setAudioFade(fade: number): void {
+    if (!this.gain || !this.audioCtx) return;
+    const f = clampFade(fade);
+    if (f === this.audioFadeTarget) return;
+    this.audioFadeTarget = f;
+    this.gain.gain.setTargetAtTime(f, this.audioCtx.currentTime, FADE_SMOOTH_TIME);
+  }
+
   /** #128: audioSignal 出力用の AudioNode（audio=off / 未構築なら null）。 */
   audioSignalNode(): AudioNode | null {
     return this.audioActive ? this.gain : null;
@@ -140,10 +157,13 @@ export class VideoFileInputRuntime implements PlaybackControl {
     this.video.currentTime = d > 0 ? Math.max(0, Math.min(t, d - 1e-3)) : 0;
   }
 
-  /** 画面サイズ RT へ contain 描画した texture（アスペクト比の入口正規化）。 */
-  getTexture(renderer: THREE.WebGLRenderer): THREE.Texture | null {
+  /**
+   * 画面サイズ RT へ contain 描画した texture（アスペクト比の入口正規化）。
+   * fade は #241 の黒フェード量（省略時 1=従来と同一）。
+   */
+  getTexture(renderer: THREE.WebGLRenderer, fade = 1): THREE.Texture | null {
     if (!this.started) return null;
-    return this.surface.render(renderer, this.video);
+    return this.surface.render(renderer, this.video, fade);
   }
 
   previewFrame(): CanvasImageSource | null {
@@ -188,6 +208,7 @@ export const VideoFileInputNode: NodeTypeDef = {
   ],
   params: [
     { id: "loop", label: "loop", kind: "enum", default: "on", options: ["on", "off"], description: "ループ再生の ON/OFF。" },
+    FADE_PARAM,
     { id: "extractAudio", label: "extractAudio", kind: "enum", default: "off", options: ["off", "on"], description: "動画音声の抽出 ON/OFF。ON で音響特徴量(signal)と実音声(audio)を出力（発音は Audio 出力ノードへ繋いだとき）。既定 OFF=無音・映像のみ。" },
     ...ONSET_PARAMS,
     { id: "assetId", label: "asset", kind: "string", default: "", noInput: true, hidden: true,
@@ -202,7 +223,10 @@ export const VideoFileInputNode: NodeTypeDef = {
     if (!s) return { ...audioFeatureOutputs(DEFAULT_AUDIO_FEATURES, false), audio: undefined };
     s.setLoop(ctx.param("loop") !== "off");
     s.setAudioEnabled(audioOn);
-    const texture = (ctx.env ? s.getTexture(ctx.env.renderer) : null) ?? undefined;
+    // #241: fade は映像（texture 輝度）と音声（出力 gain）へ同時に掛ける。
+    const fade = readFade(ctx.param);
+    s.setAudioFade(fade);
+    const texture = (ctx.env ? s.getTexture(ctx.env.renderer, fade) : null) ?? undefined;
     if (!audioOn) return { texture, ...audioFeatureOutputs(DEFAULT_AUDIO_FEATURES, false), audio: undefined };
     const audio = s.readAudio();
     const { threshold, cooldown } = readOnsetParams(ctx.param);
