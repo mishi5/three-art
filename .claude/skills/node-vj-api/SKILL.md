@@ -52,7 +52,7 @@ cmd 名・args は API と同一（`applyGraphYaml` は `args: { yaml }`、`setP
 
 ### 手順
 
-1. **一式を起動**: `bun run bridge:up [devPort] [relayPort]`（既定 3000/8787。中継＋dev サーバをバックグラウンド起動し PID を dev ポート単位で記録、macOS ではブラウザでページまで自動で開く（`--no-open` で抑止）。**対象ポートが使用中なら既存サーバに触れず中止**する。ポートを変えれば複数セット同時起動も可）。停止は `bun run bridge:down`（記録した全セット）/ `bun run bridge:down <devPort>`（そのセットのみ）。中継単体なら `bun run relay`（127.0.0.1:8787。port は第 1 引数 or 環境変数 `VJ_RELAY_PORT`）
+1. **一式を起動**: `bun run bridge:up [devPort] [relayPort]`（既定 3000/8787。中継＋dev サーバをバックグラウンド起動し PID を dev ポート単位で記録、macOS ではブラウザでページまで自動で開く（`--no-open` で抑止）。**同じ dev ポートの記録済みセットは自動で停止して入れ替える**（worktree を移って起動し直すと古いサーバが自動で消える）。**PID 記録の無いサーバが対象ポートを使用中なら触れずに中止**する。ポートを変えれば複数セット同時起動も可）。停止は `bun run bridge:down`（記録した全セット）/ `bun run bridge:down <devPort>`（そのセットのみ）。中継単体なら `bun run relay`（127.0.0.1:8787。port は第 1 引数 or 環境変数 `VJ_RELAY_PORT`）
 2. **node-vj 側で有効化**: 設定パネル（サイドドック歯車）→「AI ブリッジ」→ ON（既定 OFF・URL 既定 `ws://localhost:8787`）。「接続済」表示になれば OK。設定は prefs（localStorage `node-vj.prefs.v1` の `wsBridgeEnabled` / `wsBridgeUrl`）に保存される
 3. **agent 側から接続**: 中継へ WS 接続し、まず `{ type: "node-vj:hello", role: "agent" }` を送る。以後 `{ type: "node-vj:cmd", id, cmd, args? }` を送ると `{ type: "node-vj:result", id, result }` が返る（result は全 agent へ配られるので **id で自分宛を拾う**）。app（タブ）不在時は `{ ok: false, error: "app not connected" }` が即返る
 

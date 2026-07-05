@@ -5,6 +5,7 @@
 // 既に対象ポートが使用中の場合は「他のサーバを殺さない」ため起動せずエラー終了する。
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { unlink } from "node:fs/promises";
 import { bridgePidFile, type BridgePids } from "./vj-bridge-pids";
 
 const REPO_ROOT = join(import.meta.dir, "..");
@@ -43,25 +44,34 @@ async function waitFor(cond: () => Promise<boolean>, timeoutMs: number): Promise
 
 const PID_FILE = bridgePidFile(devPort);
 
-// 既存 PID ファイル（同じ dev ポート）があり、両プロセスが生きていれば二重起動しない。
-const existing = await Bun.file(PID_FILE)
-  .json()
-  .catch(() => null);
-if (existing) {
-  const alive = (pid: number): boolean => {
-    try {
-      process.kill(pid, 0);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-  const e = existing as BridgePids;
-  if (alive(e.dev.pid) && alive(e.relay.pid)) {
-    console.log(`[bridge:up] 既に起動中です (dev pid=${e.dev.pid} port=${e.dev.port} / relay pid=${e.relay.pid} port=${e.relay.port})`);
-    console.log(`[bridge:up] 停止は: bun run bridge:down`);
-    process.exit(0);
+/** pid が生きているか。 */
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
   }
+}
+
+// 既存 PID ファイル（同じ dev ポート）があれば、その**記録済みプロセスを停止してから**起動し直す。
+// worktree を移って bridge:up し直すと古いコードのサーバが自動で入れ替わる。
+// PID 記録の無い（＝ユーザ管理の）サーバは下のポートチェックで従来どおり中止し、決して殺さない。
+const existing = (await Bun.file(PID_FILE)
+  .json()
+  .catch(() => null)) as Partial<BridgePids> | null;
+if (existing) {
+  for (const [label, rec] of Object.entries(existing)) {
+    if (!rec || typeof rec.pid !== "number" || !alive(rec.pid)) continue;
+    process.kill(rec.pid, "SIGTERM");
+    const start = Date.now();
+    while (alive(rec.pid) && Date.now() - start < 5000) await Bun.sleep(200);
+    if (alive(rec.pid)) process.kill(rec.pid, "SIGKILL");
+    console.log(`[bridge:up] 既存セットの ${label} (pid ${rec.pid}, port ${rec.port}) を停止しました`);
+  }
+  await unlink(PID_FILE).catch(() => {});
+  // 停止直後はポート解放に少し掛かることがあるので、空くのを待ってから下のチェックへ。
+  await waitFor(async () => !(await portInUse(devPort)) && !(await portInUse(relayPort)), 3000);
 }
 
 // ポート使用中なら起動しない（ユーザ管理のサーバを巻き込まない）。
