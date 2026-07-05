@@ -251,6 +251,10 @@ export const CATALOG = {
   "node.tap.clearBtn": { ja: "✕ クリア", en: "✕ Clear" },
   "node.randomBtn": { ja: "🎲 ランダム", en: "🎲 Random" },
   "label.default": { ja: "ラベル", en: "Label" },
+
+  // --- 音声出力デバイス名のフォールバック（scene/output-audio） ---
+  "audio.device.systemDefault": { ja: "システム既定", en: "System default" },
+  "audio.device.fallback": { ja: "音声出力 {n}", en: "Audio output {n}" },
 } as const satisfies Catalog;
 
 /** カタログのキー型（t のタイプミスをコンパイル時に検出する）。 */

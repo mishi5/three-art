@@ -35,7 +35,7 @@ import { clipboardPanelDef } from "./editor/clipboard-panel";
 import { sharedCamera } from "./nodes/shared-camera";
 import { shouldAutoStopCamera } from "./nodes/camera-share-logic";
 import { PrefsStore } from "./prefs";
-import { setLang } from "./i18n";
+import { setLang, t } from "./i18n";
 import { settingsPanelDef } from "./editor/settings-panel";
 import { controlsPanelDef } from "./editor/controls-panel";
 import { nodeAddPanelDef, nodeAddViewRect } from "./editor/node-add-panel";
@@ -233,7 +233,7 @@ const editor = new NodeEditor(
       const n = graph.nodes.find((x) => x.id === nodeId);
       const sid = (n?.params as Record<string, unknown> | undefined)?.sceneId;
       if (typeof sid !== "string" || !sid) return null;
-      return sceneManager.list().find((s) => s.id === sid)?.name ?? "(不明なシーン)";
+      return sceneManager.list().find((s) => s.id === sid)?.name ?? t("node.scene.unknown");
     },
     choose: (nodeId, sceneId) => {
       const n = graph.nodes.find((x) => x.id === nodeId);
@@ -569,7 +569,7 @@ const PANEL_BTN_CSS =
 /** #230: コントロールパネル「入力」セクション（旧下部バー左端の 2 ボタン）。 */
 function mountInputControls(host: HTMLElement): void {
   const startBtn = document.createElement("button");
-  startBtn.textContent = "▶ 入力開始 (mic/camera)";
+  startBtn.textContent = t("controls.inputStart");
   startBtn.style.cssText = PANEL_BTN_CSS;
   startBtn.addEventListener("click", () => {
     runtime.resumeAudio(); // #128: user gesture で共有 AudioContext を起こす
@@ -581,7 +581,7 @@ function mountInputControls(host: HTMLElement): void {
 
   // #214: 「入力開始」と対の明示停止。共有カメラ stream を止める（シーン切替では止めない方針のため）。
   const stopBtn = document.createElement("button");
-  stopBtn.textContent = "■ 入力停止 (camera)";
+  stopBtn.textContent = t("controls.inputStop");
   stopBtn.style.cssText = PANEL_BTN_CSS;
   stopBtn.addEventListener("click", () => sharedCamera.stop());
 
@@ -614,7 +614,7 @@ function mountOutputControls(host: HTMLElement): void {
   const outBtn = document.createElement("button");
   outBtn.style.cssText = PANEL_BTN_CSS;
   function syncOutBtn(): void {
-    outBtn.textContent = output.isOpen() ? "🖥 出力ウィンドウを閉じる" : "🖥 出力ウィンドウ";
+    outBtn.textContent = output.isOpen() ? t("controls.outputWindow.close") : t("controls.outputWindow.open");
     // #148: 出力ウィンドウ表示中は本体が隠れても描画を回し続ける（全画面で固まらないように）。
     runtime.setKeepAliveWhileHidden(output.isOpen());
     // #174: 出力ウィンドウ表示中だけ出力 canvas を更新する。
@@ -634,7 +634,7 @@ function mountOutputControls(host: HTMLElement): void {
   const recBtn = document.createElement("button");
   recBtn.style.cssText = PANEL_BTN_CSS;
   function syncRecBtn(): void {
-    recBtn.textContent = recorder.recording ? "■ 停止（録画中）" : "● 録画";
+    recBtn.textContent = recorder.recording ? t("controls.recordStop") : t("controls.record");
     recBtn.style.color = recorder.recording ? "#ff6b6b" : "#ddd";
     recBtn.style.borderColor = recorder.recording ? "#ff6b6b" : "#444";
   }
@@ -675,10 +675,10 @@ function mountOutputControls(host: HTMLElement): void {
     "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 6px;cursor:pointer;" +
     "width:100%;box-sizing:border-box;font:12px system-ui;";
   const outAudioSel = document.createElement("select");
-  outAudioSel.title = "出力シーン（ピン中）の音声を発音するデバイス";
+  outAudioSel.title = t("controls.outAudio.title");
   outAudioSel.style.cssText = audioSelCss;
   const monAudioSel = document.createElement("select");
-  monAudioSel.title = "編集中シーンの音声（モニター）を発音するデバイス";
+  monAudioSel.title = t("controls.monAudio.title");
   monAudioSel.style.cssText = audioSelCss;
 
   /** select に audiooutput 一覧を流し込む（先頭は分離なし・選択は維持）。 */
@@ -704,8 +704,8 @@ function mountOutputControls(host: HTMLElement): void {
     let devices: MediaDeviceInfo[] = [];
     try { devices = await navigator.mediaDevices.enumerateDevices(); } catch { /* 取得不可 */ }
     const opts = audioOutputOptions(devices);
-    fillDeviceSelect(outAudioSel, opts, "🔈 出力音声: 分離しない", "🔈");
-    fillDeviceSelect(monAudioSel, opts, "🎧 モニター音声: 既定デバイス", "🎧");
+    fillDeviceSelect(outAudioSel, opts, t("controls.outAudio.none"), "🔈");
+    fillDeviceSelect(monAudioSel, opts, t("controls.monAudio.none"), "🎧");
   }
 
   // #198: 出力シーン（ピン中）の音声を別オーディオ出力デバイスへ発音する（プログラム側）。
@@ -809,13 +809,13 @@ buildSideDock(
       onAdd: (type) => editor.addNodeAtViewCenter(type, nodeAddViewRect(window.innerWidth, window.innerHeight)),
     }),
     controlsPanelDef([
-      { title: "入力", mount: mountInputControls },
-      { title: "出力・録画", mount: mountOutputControls },
+      { title: t("controls.section.input"), mount: mountInputControls },
+      { title: t("controls.section.output"), mount: mountOutputControls },
       {
-        title: "シーン",
+        title: t("controls.section.scene"),
         mount: (host) => mountGraphPresetControls(graph, registry, graphPresetStore, history, host, () => { void restoreAssets(); }),
       },
-      { title: "プロジェクト", mount: (host) => mountProjectControls(projectIo, host) },
+      { title: t("controls.section.project"), mount: (host) => mountProjectControls(projectIo, host) },
     ]),
     settingsPanelDef({
       getPanMode: () => prefsStore.load().panMode,
