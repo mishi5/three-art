@@ -45,6 +45,9 @@ import { EdgeVisualNode } from "./EdgeVisualNode";
 import { GraphVisualNode } from "./GraphVisualNode";
 import { AudioMixNode } from "./AudioMixNode";
 import { AudioDelayNode } from "./AudioDelayNode";
+import { AudioFilterNode } from "./AudioFilterNode";
+import { AudioGainNode } from "./AudioGainNode";
+import { AudioReverbNode } from "./AudioReverbNode";
 import { AudioOutputNode } from "./AudioOutputNode";
 import { ScreenNode } from "./ScreenNode";
 import { SceneInputNode } from "./SceneInputNode";
@@ -81,6 +84,9 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(TextureSequencerNode);
   r.register(AudioMixNode);
   r.register(AudioDelayNode);
+  r.register(AudioFilterNode);
+  r.register(AudioGainNode);
+  r.register(AudioReverbNode);
   // visual
   r.register(TextureGeneratorNode);
   r.register(PointCloudVisualNode);
