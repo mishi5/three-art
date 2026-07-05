@@ -37,6 +37,7 @@ import { shouldAutoStopCamera } from "./nodes/camera-share-logic";
 import { PrefsStore } from "./prefs";
 import { settingsPanelDef } from "./editor/settings-panel";
 import { controlsPanelDef } from "./editor/controls-panel";
+import { nodeAddPanelDef, nodeAddViewRect } from "./editor/node-add-panel";
 import { deserializeGraph } from "./graph/serialize";
 import { createAiApi } from "./api/ai-api";
 import { installPostMessageBridge } from "./api/post-message-bridge";
@@ -788,7 +789,7 @@ const applyWsBridgePrefs = (): void => {
 };
 applyWsBridgePrefs();
 
-// #151: VSCode 風サイドドック（最左アイコン列で アセット/シーン/クリップボード/コントロール/設定 を切替）。
+// #151: VSCode 風サイドドック（最左アイコン列で アセット/シーン/クリップボード/ノード追加/コントロール/設定 を切替）。
 // #229: 設定パネル。操作モードの切替は prefs へ保存しつつエディタへ即反映する。
 // #228: ピン状態も prefs へ永続化（非ピン時はパネル外クリックで自動クローズ）。
 // #230: 下部バーの全コントロールを「コントロール」パネルへ移設（下部バーは撤去）。
@@ -797,6 +798,11 @@ buildSideDock(
     assetPanelDef(library),
     scenePanelDef(sceneActions),
     clipboardPanelDef(clipboard),
+    // #243: ノード追加（旧ツールバーのカテゴリボタン群）。クリックでビューポート中央の空きへ追加。
+    nodeAddPanelDef({
+      defs: () => registry.list(),
+      onAdd: (type) => editor.addNodeAtViewCenter(type, nodeAddViewRect(window.innerWidth, window.innerHeight)),
+    }),
     controlsPanelDef([
       { title: "入力", mount: mountInputControls },
       { title: "出力・録画", mount: mountOutputControls },
