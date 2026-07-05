@@ -12,7 +12,8 @@ export interface ScenePanelActions {
   list(): Scene[];
   activeId(): string;
   switchTo(id: string): void;
-  add(): void;
+  // #245: name 省略時は "Scene N"。作成したシーンを返す（AI API が sceneId を使う。UI は戻り値を無視）。
+  add(name?: string): Scene;
   duplicate(id: string): void;
   remove(id: string): void;
   rename(id: string, name: string): void;

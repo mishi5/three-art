@@ -42,6 +42,21 @@ function miniRegistry(): NodeRegistry {
   return r;
 }
 
+/** scenes フックのフェイク（#245: シーン管理コマンド追加でメンバが増えたため helper 化）。 */
+function fakeSceneHooks(over: Partial<AiApiHooks["scenes"]> = {}): AiApiHooks["scenes"] {
+  return {
+    list: () => [{ id: "s1", name: "Scene 1" }],
+    activeId: () => "s1",
+    outputId: () => null,
+    switchTo: () => {},
+    add: () => "s-new",
+    rename: () => {},
+    remove: () => {},
+    setOutput: () => {},
+    ...over,
+  };
+}
+
 function fakeHooks(over: Partial<AiApiHooks> = {}): AiApiHooks {
   const graph = createGraph();
   return {
@@ -49,12 +64,7 @@ function fakeHooks(over: Partial<AiApiHooks> = {}): AiApiHooks {
     registry: miniRegistry(),
     history: new History(),
     getOutputs: () => undefined,
-    scenes: {
-      list: () => [{ id: "s1", name: "Scene 1" }],
-      activeId: () => "s1",
-      outputId: () => null,
-      switchTo: () => {},
-    },
+    scenes: fakeSceneHooks(),
     applyYaml: () => [],
     ...over,
   };
@@ -200,12 +210,9 @@ describe("createAiApi 読取", () => {
 
   test("getScenes は active / 実効 output フラグを付ける（ピン無しはアクティブが出力）", () => {
     const hooks = fakeHooks({
-      scenes: {
+      scenes: fakeSceneHooks({
         list: () => [{ id: "s1", name: "A" }, { id: "s2", name: "B" }],
-        activeId: () => "s1",
-        outputId: () => null,
-        switchTo: () => {},
-      },
+      }),
     });
     const res = createAiApi(hooks).getScenes();
     expect(res).toEqual({
@@ -219,12 +226,10 @@ describe("createAiApi 読取", () => {
 
   test("getScenes: 出力ピン中はピン先が output", () => {
     const hooks = fakeHooks({
-      scenes: {
+      scenes: fakeSceneHooks({
         list: () => [{ id: "s1", name: "A" }, { id: "s2", name: "B" }],
-        activeId: () => "s1",
         outputId: () => "s2",
-        switchTo: () => {},
-      },
+      }),
     });
     const res = createAiApi(hooks).getScenes();
     if (res.ok) {
@@ -388,17 +393,139 @@ describe("createAiApi switchScene", () => {
   test("既存シーンなら switchTo を呼ぶ・不在ならエラーで呼ばない", () => {
     const calls: string[] = [];
     const hooks = fakeHooks({
-      scenes: {
+      scenes: fakeSceneHooks({
         list: () => [{ id: "s1", name: "A" }, { id: "s2", name: "B" }],
-        activeId: () => "s1",
-        outputId: () => null,
         switchTo: (id) => calls.push(id),
-      },
+      }),
     });
     const api = createAiApi(hooks);
     expect(api.switchScene("s2")).toEqual({ ok: true });
     expect(calls).toEqual(["s2"]);
     expect(api.switchScene("ghost").ok).toBe(false);
     expect(calls).toEqual(["s2"]);
+  });
+});
+
+// ---- createAiApi: シーン管理（#245） ----
+
+/**
+ * ステートフルなフェイク scenes フック。main.ts の sceneActions（sceneManager）と同じ
+ * 表面挙動（add は新シーンをアクティブ化・remove のフォールバック）を最小再現し、呼び出しを記録する。
+ */
+function statefulScenes(initial: { id: string; name: string }[]) {
+  const scenes = initial.map((s) => ({ ...s }));
+  let activeId = scenes[0]!.id;
+  let outputId: string | null = null;
+  let seq = 0;
+  const calls: unknown[][] = [];
+  const hooks: AiApiHooks["scenes"] = {
+    list: () => scenes.map((s) => ({ ...s })),
+    activeId: () => activeId,
+    outputId: () => outputId,
+    switchTo: (id) => { calls.push(["switchTo", id]); activeId = id; },
+    add: (name) => {
+      calls.push(["add", name]);
+      const id = `new-${++seq}`;
+      scenes.push({ id, name: name ?? `Scene ${scenes.length + 1}` });
+      activeId = id; // UI の「＋」と同じく新シーンをアクティブ化
+      return id;
+    },
+    rename: (id, name) => { calls.push(["rename", id, name]); scenes.find((s) => s.id === id)!.name = name; },
+    remove: (id) => {
+      calls.push(["remove", id]);
+      const idx = scenes.findIndex((s) => s.id === id);
+      scenes.splice(idx, 1);
+      if (activeId === id) activeId = scenes[Math.min(idx, scenes.length - 1)]!.id;
+      if (outputId === id) outputId = null;
+    },
+    setOutput: (id) => { calls.push(["setOutput", id]); outputId = id; },
+  };
+  return { hooks, calls, state: { get activeId() { return activeId; }, get outputId() { return outputId; } } };
+}
+
+describe("createAiApi addScene", () => {
+  test("新シーンを作成してアクティブ化し sceneId を返す（name 省略可）", () => {
+    const { hooks, calls, state } = statefulScenes([{ id: "s1", name: "A" }]);
+    const api = createAiApi(fakeHooks({ scenes: hooks }));
+    const res = api.addScene();
+    expect(res).toEqual({ ok: true, sceneId: "new-1" });
+    expect(calls).toEqual([["add", undefined]]);
+    expect(state.activeId).toBe("new-1"); // UI の「＋」と同経路＝新シーンがアクティブ
+  });
+
+  test("name 指定は trim して渡す・空白のみはエラー", () => {
+    const { hooks, calls } = statefulScenes([{ id: "s1", name: "A" }]);
+    const api = createAiApi(fakeHooks({ scenes: hooks }));
+    expect(api.addScene("  Intro  ")).toEqual({ ok: true, sceneId: "new-1" });
+    expect(calls).toEqual([["add", "Intro"]]);
+    const bad = api.addScene("   ");
+    expect(bad.ok).toBe(false);
+    expect(calls.length).toBe(1); // エラー時はフックを呼ばない
+  });
+});
+
+describe("createAiApi renameScene", () => {
+  test("既存シーンを trim 済み name で改名する", () => {
+    const { hooks, calls } = statefulScenes([{ id: "s1", name: "A" }, { id: "s2", name: "B" }]);
+    const api = createAiApi(fakeHooks({ scenes: hooks }));
+    expect(api.renameScene("s2", "  Drop  ")).toEqual({ ok: true });
+    expect(calls).toEqual([["rename", "s2", "Drop"]]);
+  });
+
+  test("不在 id / 空 name はエラーで呼ばない", () => {
+    const { hooks, calls } = statefulScenes([{ id: "s1", name: "A" }]);
+    const api = createAiApi(fakeHooks({ scenes: hooks }));
+    const ghost = api.renameScene("ghost", "X");
+    expect(ghost.ok).toBe(false);
+    if (!ghost.ok) expect(ghost.error).toContain("ghost");
+    expect(api.renameScene("s1", "   ").ok).toBe(false);
+    expect(calls).toEqual([]);
+  });
+});
+
+describe("createAiApi removeScene", () => {
+  test("既存シーンを削除できる（アクティブ削除は UI と同じフォールバック）", () => {
+    const { hooks, calls, state } = statefulScenes([{ id: "s1", name: "A" }, { id: "s2", name: "B" }]);
+    const api = createAiApi(fakeHooks({ scenes: hooks }));
+    expect(api.removeScene("s1")).toEqual({ ok: true });
+    expect(calls).toEqual([["remove", "s1"]]);
+    expect(state.activeId).toBe("s2");
+  });
+
+  test("最後の 1 枚は削除不可（ok:false・フックを呼ばない）", () => {
+    const { hooks, calls } = statefulScenes([{ id: "s1", name: "A" }]);
+    const api = createAiApi(fakeHooks({ scenes: hooks }));
+    const res = api.removeScene("s1");
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toContain("最後");
+    expect(calls).toEqual([]);
+  });
+
+  test("不在 id はエラー", () => {
+    const { hooks, calls } = statefulScenes([{ id: "s1", name: "A" }, { id: "s2", name: "B" }]);
+    const api = createAiApi(fakeHooks({ scenes: hooks }));
+    expect(api.removeScene("ghost").ok).toBe(false);
+    expect(calls).toEqual([]);
+  });
+});
+
+describe("createAiApi setOutputScene", () => {
+  test("既存シーンをピン留め・null で解除できる", () => {
+    const { hooks, calls, state } = statefulScenes([{ id: "s1", name: "A" }, { id: "s2", name: "B" }]);
+    const api = createAiApi(fakeHooks({ scenes: hooks }));
+    expect(api.setOutputScene("s2")).toEqual({ ok: true });
+    expect(state.outputId).toBe("s2");
+    expect(api.setOutputScene(null)).toEqual({ ok: true });
+    expect(state.outputId).toBe(null);
+    expect(calls).toEqual([["setOutput", "s2"], ["setOutput", null]]);
+  });
+
+  test("不在 id はエラーで呼ばない（sceneManager の静かな null フォールバックに任せない）", () => {
+    const { hooks, calls } = statefulScenes([{ id: "s1", name: "A" }]);
+    const api = createAiApi(fakeHooks({ scenes: hooks }));
+    const res = api.setOutputScene("ghost");
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toContain("ghost");
+    expect(calls).toEqual([]);
   });
 });

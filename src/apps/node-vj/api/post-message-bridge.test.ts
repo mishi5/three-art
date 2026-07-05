@@ -57,6 +57,11 @@ function fakeApi(): { api: AiApi; calls: unknown[][] } {
     applyGraphYaml: record("applyGraphYaml", { ok: true, warnings: [] }),
     setParam: record("setParam", { ok: true }),
     switchScene: record("switchScene", { ok: true }),
+    // #245: シーン管理
+    addScene: record("addScene", { ok: true, sceneId: "new-1" }),
+    renameScene: record("renameScene", { ok: true }),
+    removeScene: record("removeScene", { ok: true }),
+    setOutputScene: record("setOutputScene", { ok: true }),
   } as unknown as AiApi;
   return { api, calls };
 }
@@ -91,6 +96,37 @@ describe("dispatchCommand", () => {
     const { api: api2, calls } = fakeApi();
     dispatchCommand(api2, "setParam", { nodeId: "n", paramId: "p", value: false });
     expect(calls).toEqual([["setParam", "n", "p", false]]);
+  });
+
+  // #245: シーン管理コマンド
+  test("addScene は name 省略可・型不正はエラー", () => {
+    const { api, calls } = fakeApi();
+    expect((dispatchCommand(api, "addScene", {}) as { ok: boolean }).ok).toBe(true);
+    dispatchCommand(api, "addScene", { name: "Intro" });
+    expect(calls).toEqual([["addScene", undefined], ["addScene", "Intro"]]);
+    expect((dispatchCommand(api, "addScene", { name: 5 }) as { ok: boolean }).ok).toBe(false);
+    expect(calls.length).toBe(2); // 不正 args は API 本体に届かない
+  });
+
+  test("renameScene / removeScene は sceneId・name を検証して渡す", () => {
+    const { api, calls } = fakeApi();
+    dispatchCommand(api, "renameScene", { sceneId: "s2", name: "Drop" });
+    dispatchCommand(api, "removeScene", { sceneId: "s2" });
+    expect(calls).toEqual([["renameScene", "s2", "Drop"], ["removeScene", "s2"]]);
+    expect((dispatchCommand(api, "renameScene", { sceneId: "s2" }) as { ok: boolean }).ok).toBe(false);
+    expect((dispatchCommand(api, "renameScene", { name: "X" }) as { ok: boolean }).ok).toBe(false);
+    expect((dispatchCommand(api, "removeScene", {}) as { ok: boolean }).ok).toBe(false);
+    expect(calls.length).toBe(2);
+  });
+
+  test("setOutputScene は sceneId キー必須（string | null）", () => {
+    const { api, calls } = fakeApi();
+    dispatchCommand(api, "setOutputScene", { sceneId: "s2" });
+    dispatchCommand(api, "setOutputScene", { sceneId: null }); // null＝ピン解除を明示できる
+    expect(calls).toEqual([["setOutputScene", "s2"], ["setOutputScene", null]]);
+    expect((dispatchCommand(api, "setOutputScene", {}) as { ok: boolean }).ok).toBe(false);
+    expect((dispatchCommand(api, "setOutputScene", { sceneId: 1 }) as { ok: boolean }).ok).toBe(false);
+    expect(calls.length).toBe(2);
   });
 
   test("args 型不正・未知 cmd は { ok:false, error }（throw しない）", () => {
