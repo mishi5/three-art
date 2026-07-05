@@ -30,6 +30,7 @@ import { renderClipThumbnail } from "./clip-thumbnail";
 import type { History } from "../graph/history";
 import { nodesInRect, normRect } from "./selection";
 import { backgroundPointerDrag, type PanSelectMode } from "./pan-policy";
+import { HelpPopup } from "./help-popup";
 import { openParamInput } from "./param-overlay";
 import { formatPortValue } from "./port-format";
 import { containRect } from "./fit";
@@ -110,6 +111,8 @@ export class NodeEditor {
   panSelectMode: PanSelectMode = "modern";
   private rafId: number | null = null;
   private toolbar: HTMLDivElement;
+  /** #242: 操作方法のヘルプポップアップ（? ボタンで開閉・モードは開くたびに参照）。 */
+  private helpPopup = new HelpPopup(() => this.panSelectMode);
   /** #103: 右クリック/ツールバーのコンテキストメニュー（開いていなければ null）。 */
   private contextMenu: HTMLDivElement | null = null;
   /** #103: 開いているフライアウトサブメニュー（カテゴリ → 型一覧）。 */
@@ -245,10 +248,16 @@ export class NodeEditor {
     syncDbg();
     dbg.addEventListener("click", () => { this.showOutputValues = !this.showOutputValues; syncDbg(); });
     bar.appendChild(dbg);
-    const hint = document.createElement("span");
-    hint.textContent = "  右クリック=メニュー / 空白ドラッグ=パン / Shift+ドラッグ=矩形選択 / Space・右ドラッグ=パン / ホイール=ズーム / 0=ズーム100% / Cmd+C=コピー / Cmd+V=貼付 / Del=削除";
-    hint.style.cssText = "color:#888;align-self:center;";
-    bar.appendChild(hint);
+    // #242: 操作方法の常時表示テキストは撤去し、右端の「?」からヘルプポップアップで表示する
+    // （本文は help-content.ts のデータ。#229 の操作モードに応じて記述を差し替え）。
+    const help = document.createElement("button");
+    help.textContent = "?";
+    help.title = "操作方法";
+    help.style.cssText =
+      "margin-left:auto;background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;" +
+      "padding:4px 10px;cursor:pointer;";
+    help.addEventListener("click", () => this.helpPopup.toggle(help));
+    bar.appendChild(help);
     document.body.appendChild(bar);
     return bar;
   }
