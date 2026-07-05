@@ -24,18 +24,21 @@ import { hitTest } from "./hit-test";
 import { tooltipForHit, tooltipBox, wrapLines, nodeMenuTooltipContent, type TooltipContent } from "./tooltip";
 import { screenToWorld, worldToScreen, zoomAt } from "./viewport";
 import { groupNodesByCategory } from "./node-menu";
+import { findFreeSpot, viewCenter, type ViewRect } from "./node-add-panel";
 import { duplicateNodes } from "../graph/duplicate";
 import { CLIP_MIME, makeClipItem, pasteClip, type NodeClipboard } from "./node-clipboard";
 import { renderClipThumbnail } from "./clip-thumbnail";
 import type { History } from "../graph/history";
 import { nodesInRect, normRect } from "./selection";
 import { backgroundPointerDrag, type PanSelectMode } from "./pan-policy";
+import { HelpPopup } from "./help-popup";
 import { openParamInput } from "./param-overlay";
 import { formatPortValue } from "./port-format";
 import { containRect } from "./fit";
 import { absoluteSliderValue, scrubValue, fillRatio, isAbsoluteSlider } from "./slider-logic";
 import { isToggleParam, toggleOnValue, toggledValue } from "./toggle-param";
 import type { ParamDef } from "../graph/node-type";
+import { t } from "../i18n";
 
 /** スライダドラッグで編集できる param（数値のみ。enum/boolean/string はクリック編集）。 */
 function isParamEditableBySlider(pd: ParamDef): boolean {
@@ -110,12 +113,12 @@ export class NodeEditor {
   panSelectMode: PanSelectMode = "modern";
   private rafId: number | null = null;
   private toolbar: HTMLDivElement;
+  /** #242: 操作方法のヘルプポップアップ（? ボタンで開閉・モードは開くたびに参照）。 */
+  private helpPopup = new HelpPopup(() => this.panSelectMode);
   /** #103: 右クリック/ツールバーのコンテキストメニュー（開いていなければ null）。 */
   private contextMenu: HTMLDivElement | null = null;
   /** #103: 開いているフライアウトサブメニュー（カテゴリ → 型一覧）。 */
   private submenu: HTMLDivElement | null = null;
-  /** #166: 現在のメニューを開いたトグルボタン。再押下クローズの判定に使う（右クリックメニューは null）。 */
-  private menuAnchor: HTMLElement | null = null;
   // #203: ノード追加メニュー項目のホバー説明ツールチップ（DOM・遅延表示）。
   private menuTooltipEl: HTMLDivElement | null = null;
   private menuTooltipTimer: number | null = null;
@@ -225,19 +228,12 @@ export class NodeEditor {
     bar.style.cssText =
       "position:fixed;left:8px;right:8px;top:8px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;z-index:150;" +
       "font:12px system-ui;";
-    // #103: カテゴリボタン → クリックでそのカテゴリの型ドロップダウンを開く（階層化）。
-    for (const group of groupNodesByCategory(this.registry.list())) {
-      const btn = document.createElement("button");
-      btn.textContent = group.category + " ▾";
-      btn.style.cssText =
-        "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 10px;cursor:pointer;text-transform:capitalize;";
-      btn.addEventListener("click", () => this.showCategoryDropdown(btn, group));
-      bar.appendChild(btn);
-    }
+    // #243: ノード追加のカテゴリボタン群（#103）はサイドドック「ノード追加」パネルへ移設した
+    // （右クリックの追加メニューは showAddMenu のまま）。ツールバーはデバッグトグルと ? だけ残す。
     // デバッグ: 出力ポート横のライブ値表示トグル（既定 OFF）。
     const dbg = document.createElement("button");
     const syncDbg = (): void => {
-      dbg.textContent = `出力値: ${this.showOutputValues ? "ON" : "OFF"}`;
+      dbg.textContent = t("toolbar.outputValues", { state: this.showOutputValues ? "ON" : "OFF" });
       dbg.style.cssText =
         "background:#1c1c22;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;" +
         `color:${this.showOutputValues ? "#6c9" : "#888"};`;
@@ -245,10 +241,16 @@ export class NodeEditor {
     syncDbg();
     dbg.addEventListener("click", () => { this.showOutputValues = !this.showOutputValues; syncDbg(); });
     bar.appendChild(dbg);
-    const hint = document.createElement("span");
-    hint.textContent = "  右クリック=メニュー / 空白ドラッグ=パン / Shift+ドラッグ=矩形選択 / Space・右ドラッグ=パン / ホイール=ズーム / 0=ズーム100% / Cmd+C=コピー / Cmd+V=貼付 / Del=削除";
-    hint.style.cssText = "color:#888;align-self:center;";
-    bar.appendChild(hint);
+    // #242: 操作方法の常時表示テキストは撤去し、右端の「?」からヘルプポップアップで表示する
+    // （本文は help-content.ts のデータ。#229 の操作モードに応じて記述を差し替え）。
+    const help = document.createElement("button");
+    help.textContent = "?";
+    help.title = t("toolbar.help");
+    help.style.cssText =
+      "margin-left:auto;background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;" +
+      "padding:4px 10px;cursor:pointer;";
+    help.addEventListener("click", () => this.helpPopup.toggle(help));
+    bar.appendChild(help);
     document.body.appendChild(bar);
     return bar;
   }
@@ -280,6 +282,20 @@ export class NodeEditor {
     addNode(this.graph, node);
     this.selectedIds = new Set([node.id]);
     return node.id;
+  }
+
+  /**
+   * #243: サイドドック「ノード追加」パネルからの追加。view（スクリーン座標の可視矩形）の中央を
+   * 現在のパン/ズームで world へ変換し、既存ノードと重ならない空きへ配置する。
+   * 追加処理・履歴 record は addNodeOfType（右クリックメニューと同経路）を再利用する。
+   */
+  addNodeAtViewCenter(type: string, view: ViewRect): string {
+    const c = viewCenter(view);
+    const wc = screenToWorld(c.x, c.y, this.offset, this.scale);
+    // position はノードの左上。ノードが中央に見えるよう幅/タイトル分だけ引く。
+    const desired = { x: wc.x - NODE_WIDTH / 2, y: wc.y - TITLE_H };
+    const pos = findFreeSpot(desired, this.graph.nodes.map((n) => n.position ?? { x: 0, y: 0 }));
+    return this.addNodeOfType(type, pos);
   }
 
   // --- pointer 座標 → world 座標（#92: ズーム反映）---
@@ -849,19 +865,19 @@ export class NodeEditor {
     const menu = this.buildMenu(screenX, screenY);
     const filled = this.padCellInfo?.(nodeId, padIndex)?.filled ?? false;
     if (filled) {
-      this.addMenuItem(menu, "■ このパッドを停止", () => this.onStopPadVoice?.(nodeId, padIndex));
-      this.addMenuItem(menu, "↻ 音声を再割り当て", () => this.onAssignPad?.(nodeId, padIndex));
-      this.addMenuItem(menu, "✕ 割り当てを解除", () => this.onUnassignPad?.(nodeId, padIndex));
+      this.addMenuItem(menu, t("pad.menu.stopVoice"), () => this.onStopPadVoice?.(nodeId, padIndex));
+      this.addMenuItem(menu, t("pad.menu.reassign"), () => this.onAssignPad?.(nodeId, padIndex));
+      this.addMenuItem(menu, t("pad.menu.unassign"), () => this.onUnassignPad?.(nodeId, padIndex));
     } else {
-      this.addMenuItem(menu, "＋ 音声を割り当て", () => this.onAssignPad?.(nodeId, padIndex));
+      this.addMenuItem(menu, t("pad.menu.assign"), () => this.onAssignPad?.(nodeId, padIndex));
     }
   }
 
   /** #176: 自由ラベルの右クリックメニュー（編集/削除）。 */
   private showLabelMenu(screenX: number, screenY: number, lab: TextLabel): void {
     const menu = this.buildMenu(screenX, screenY);
-    this.addMenuItem(menu, "ラベル編集", () => this.editLabel(lab));
-    this.addMenuItem(menu, "ラベル削除", () => { this.history.record(this.graph); removeLabel(this.graph, lab.id); });
+    this.addMenuItem(menu, t("menu.label.edit"), () => this.editLabel(lab));
+    this.addMenuItem(menu, t("menu.label.delete"), () => { this.history.record(this.graph); removeLabel(this.graph, lab.id); });
   }
 
   /** メニュー DOM の土台を作る（既存メニューは閉じる）。 */
@@ -891,8 +907,8 @@ export class NodeEditor {
     const opts = this.sceneSelect?.options(nodeId) ?? [];
     const s = worldToScreen(rowWorld.x, rowWorld.y + rowWorld.h, this.offset, this.scale);
     const menu = this.buildMenu(s.x, s.y);
-    this.addMenuLabel(menu, "シーンを選択");
-    if (opts.length === 0) { this.addMenuLabel(menu, "(選べるシーンなし)"); return; }
+    this.addMenuLabel(menu, t("menu.scene.select"));
+    if (opts.length === 0) { this.addMenuLabel(menu, t("menu.scene.none")); return; }
     for (const o of opts) this.addMenuItem(menu, o.name, () => this.sceneSelect?.choose(nodeId, o.id));
   }
 
@@ -996,27 +1012,15 @@ export class NodeEditor {
   private showAddMenu(screenX: number, screenY: number, worldPos: { x: number; y: number }): void {
     const menu = this.buildMenu(screenX, screenY);
     // #176: ラベル追加（クリック位置に空ラベルを作りインライン編集）。
-    this.addMenuItem(menu, "＋ ラベル追加", () => {
+    this.addMenuItem(menu, t("menu.label.add"), () => {
       this.history.record(this.graph);
-      const lab = { id: genId("L"), x: worldPos.x, y: worldPos.y, text: "ラベル" };
+      const lab = { id: genId("L"), x: worldPos.x, y: worldPos.y, text: t("label.default") };
       addLabel(this.graph, lab);
       this.editLabel(lab);
     });
-    this.addMenuLabel(menu, "ノードを追加");
+    this.addMenuLabel(menu, t("menu.node.add"));
     for (const group of groupNodesByCategory(this.registry.list())) {
       this.addCategoryRow(menu, group, worldPos);
-    }
-  }
-
-  /** ツールバーのカテゴリボタン押下: そのカテゴリの型ドロップダウンを下に開く。 */
-  private showCategoryDropdown(anchor: HTMLElement, group: { category: string; types: string[] }): void {
-    if (this.contextMenu) { this.closeContextMenu(); return; } // 同じボタン再押下で閉じる
-    const r = anchor.getBoundingClientRect();
-    const menu = this.buildMenu(r.left, r.bottom + 4);
-    // #166: このボタン上の pointerdown では closeOnOutside で閉じず、click のトグルに委ねる。
-    this.menuAnchor = anchor;
-    for (const type of group.types) {
-      this.addMenuItem(menu, "+ " + type, () => this.addNodeOfType(type), type);
     }
   }
 
@@ -1025,19 +1029,19 @@ export class NodeEditor {
     if (!this.selectedIds.has(node.id)) this.selectedIds = new Set([node.id]);
     const menu = this.buildMenu(screenX, screenY);
     const n = this.selectedIds.size;
-    this.addMenuItem(menu, n > 1 ? `複製 (${n})` : "複製", () => {
+    this.addMenuItem(menu, n > 1 ? t("menu.duplicateN", { n }) : t("menu.duplicate"), () => {
       this.history.record(this.graph);
       const newIds = duplicateNodes(this.graph, this.selectedIds, genId, 24);
       this.selectedIds = new Set(newIds);
     });
-    this.addMenuItem(menu, n > 1 ? `削除 (${n})` : "削除", () => {
+    this.addMenuItem(menu, n > 1 ? t("menu.deleteN", { n }) : t("menu.delete"), () => {
       this.history.record(this.graph);
       for (const id of this.selectedIds) removeNode(this.graph, id);
       this.selectedIds = new Set();
       this.onGraphMutated?.(); // #214: 最後の CameraInput 削除なら共有カメラ自動停止判定
     });
     // #176: ノード名の編集。表示位置（ノード上部）に近い位置でインライン編集する。
-    this.addMenuItem(menu, node.name ? "ノード名を編集" : "ノード名を設定", () => {
+    this.addMenuItem(menu, node.name ? t("menu.nodeName.edit") : t("menu.nodeName.set"), () => {
       this.editText((node.position?.x ?? 0) + 2, (node.position?.y ?? 0) - NODE_NAME_DY, node.name ?? "", (v) => {
         const t = v.trim();
         this.history.record(this.graph);
@@ -1047,7 +1051,7 @@ export class NodeEditor {
     // #176: グループ名編集（所属グループがあるときのみ）。
     const gr = groupOfNode(this.graph, node.id);
     if (gr) {
-      this.addMenuItem(menu, "グループ名編集", () => {
+      this.addMenuItem(menu, t("menu.groupName.edit"), () => {
         this.editText((node.position?.x ?? 0), (node.position?.y ?? 0) - 6, gr.name ?? "", (v) => {
           const t = v.trim();
           this.history.record(this.graph);
@@ -1060,9 +1064,7 @@ export class NodeEditor {
   private closeOnOutside = (e: PointerEvent): void => {
     const t = e.target as Node;
     const inMenu = this.contextMenu?.contains(t) || this.submenu?.contains(t);
-    // #166: トグルボタン自身の上では閉じない（click のトグルが閉じる役を担うため・二重発火で再オープンするのを防ぐ）。
-    const onAnchor = this.menuAnchor?.contains(t) ?? false;
-    if (!inMenu && !onAnchor) this.closeContextMenu();
+    if (!inMenu) this.closeContextMenu();
   };
 
   private closeSubmenu(): void {
@@ -1078,7 +1080,6 @@ export class NodeEditor {
     window.removeEventListener("pointerdown", this.closeOnOutside, true);
     this.contextMenu.remove();
     this.contextMenu = null;
-    this.menuAnchor = null;
   }
 
   /**
@@ -1184,7 +1185,7 @@ export class NodeEditor {
     ctx.font = "13px system-ui";
     for (let i = labels.length - 1; i >= 0; i--) {
       const l = labels[i]!;
-      const w = ctx.measureText(l.text || "ラベル").width + 12;
+      const w = ctx.measureText(l.text || t("label.default")).width + 12;
       const h = 20;
       if (wx >= l.x - 6 && wx <= l.x - 6 + w && wy >= l.y - h + 4 && wy <= l.y + 4) return l;
     }
@@ -1262,7 +1263,7 @@ export class NodeEditor {
     const ctx = this.ctx;
     ctx.font = "13px system-ui"; ctx.textBaseline = "middle"; ctx.textAlign = "left";
     for (const l of labels) {
-      const text = l.text || "ラベル";
+      const text = l.text || t("label.default");
       const tw = ctx.measureText(text).width;
       const selected = this.selectedLabelId === l.id;
       // 当たり判定が分かるよう常に枠を描く。選択時はノード同様にハイライト。
@@ -1624,14 +1625,14 @@ export class NodeEditor {
       ctx.strokeStyle = recording ? "#ff8f9f" : "#7a5a5a"; ctx.lineWidth = 1; ctx.stroke();
       ctx.fillStyle = recording ? "#ffd7dd" : "#e9a0a0";
       ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "11px system-ui";
-      ctx.fillText(recording ? "● 録音中…" : "● 録音", rec.x + rec.w / 2, rec.y + rec.h / 2);
+      ctx.fillText(recording ? t("node.tap.recordingBtn") : t("node.tap.recordBtn"), rec.x + rec.w / 2, rec.y + rec.h / 2);
       // クリアボタン。
       ctx.fillStyle = "#262630";
       roundRect(ctx, clear.x, clear.y, clear.w, clear.h, 4);
       ctx.fill();
       ctx.strokeStyle = "#4a5566"; ctx.lineWidth = 1; ctx.stroke();
       ctx.fillStyle = "#9ab";
-      ctx.fillText("✕ クリア", clear.x + clear.w / 2, clear.y + clear.h / 2);
+      ctx.fillText(t("node.tap.clearBtn"), clear.x + clear.w / 2, clear.y + clear.h / 2);
       // ステータス行（記録数/ループ長/再生位置）。
       const st = tapStatusRowRect(node, def)!;
       ctx.fillStyle = recording ? "#f9b" : "#9ab";
@@ -1647,7 +1648,7 @@ export class NodeEditor {
       ctx.fill();
       ctx.strokeStyle = "#5a4a66"; ctx.lineWidth = 1; ctx.stroke();
       ctx.fillStyle = "#cbe"; ctx.textAlign = "center"; ctx.font = "11px system-ui";
-      ctx.fillText("🎲 ランダム", rr.x + rr.w / 2, rr.y + rr.h / 2);
+      ctx.fillText(t("node.randomBtn"), rr.x + rr.w / 2, rr.y + rr.h / 2);
       ctx.textAlign = "left";
     }
   }

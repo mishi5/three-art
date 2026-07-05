@@ -4,6 +4,7 @@
 // フィールド追加は Prefs 型・DEFAULT_PREFS・parsePrefs の検証を 1 行ずつ足すだけ。
 import type { KvStorage } from "./graph/graph-store";
 import type { PanSelectMode } from "./editor/pan-policy";
+import type { Lang } from "./i18n";
 
 export interface Prefs {
   /** #229: 空白左ドラッグの操作モード（modern=#207 現行 / legacy=#207 以前）。 */
@@ -14,6 +15,8 @@ export interface Prefs {
   wsBridgeEnabled: boolean;
   /** #237: AI ブリッジの中継サーバ URL。 */
   wsBridgeUrl: string;
+  /** #244: UI 言語。既定 ja（既存ユーザの見た目を変えない）。切替はリロードで反映。 */
+  lang: Lang;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -21,6 +24,7 @@ export const DEFAULT_PREFS: Prefs = {
   dockPinned: false,
   wsBridgeEnabled: false,
   wsBridgeUrl: "ws://localhost:8787",
+  lang: "ja",
 };
 
 export const PREFS_KEY = "node-vj.prefs.v1";
@@ -45,6 +49,7 @@ export function parsePrefs(raw: string | null): Prefs {
   if (typeof src.dockPinned === "boolean") prefs.dockPinned = src.dockPinned;
   if (typeof src.wsBridgeEnabled === "boolean") prefs.wsBridgeEnabled = src.wsBridgeEnabled;
   if (typeof src.wsBridgeUrl === "string" && src.wsBridgeUrl !== "") prefs.wsBridgeUrl = src.wsBridgeUrl;
+  if (src.lang === "ja" || src.lang === "en") prefs.lang = src.lang;
   return prefs;
 }
 

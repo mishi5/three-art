@@ -5,6 +5,7 @@ import type { AssetLibrary } from "./asset-library";
 import type { AssetMeta } from "./meta-store";
 import type { AssetKind } from "./asset-kind";
 import type { SidePanelDef } from "../editor/side-dock";
+import { t } from "../i18n";
 
 /** 開閉状態 → display 値（純関数・互換のため残置）。 */
 export function panelDisplay(open: boolean): "flex" | "none" {
@@ -52,7 +53,7 @@ function toast(message: string, isError = false): void {
 export function assetPanelDef(library: AssetLibrary): SidePanelDef {
   return {
     id: "asset",
-    title: "アセット",
+    title: t("panel.assets"),
     icon: ICON.sidebar,
     mount: (host) => mountAssetPanel(host, library),
   };
@@ -66,7 +67,7 @@ function mountAssetPanel(host: HTMLElement, library: AssetLibrary): void {
   host.appendChild(listEl);
 
   const addLabel = document.createElement("label");
-  addLabel.textContent = "＋ ファイル追加";
+  addLabel.textContent = t("assets.add");
   addLabel.style.cssText = BTN_CSS + "text-align:center;flex:0 0 auto;";
   const addInput = document.createElement("input");
   addInput.type = "file";
@@ -85,7 +86,7 @@ function mountAssetPanel(host: HTMLElement, library: AssetLibrary): void {
       const est = await navigator.storage?.estimate?.();
       if (est && typeof est.usage === "number") {
         const quota = typeof est.quota === "number" && est.quota > 0 ? ` / ${formatBytes(est.quota)}` : "";
-        usageEl.textContent = `使用量: ${formatBytes(est.usage)}${quota}`;
+        usageEl.textContent = t("assets.usage", { usage: `${formatBytes(est.usage)}${quota}` });
       } else {
         usageEl.textContent = "";
       }
@@ -101,7 +102,7 @@ function mountAssetPanel(host: HTMLElement, library: AssetLibrary): void {
     const items = await library.list();
     if (items.length === 0) {
       const empty = document.createElement("div");
-      empty.textContent = "（アセットなし）ファイルを D&D / 追加";
+      empty.textContent = t("assets.empty");
       empty.style.cssText = "color:#777;padding:6px 2px;";
       listEl.appendChild(empty);
     }
@@ -148,7 +149,7 @@ function mountAssetPanel(host: HTMLElement, library: AssetLibrary): void {
 
     const del = document.createElement("button");
     del.innerHTML = ICON.trash;
-    del.title = "削除";
+    del.title = t("assets.delete");
     del.style.cssText = BTN_CSS + "flex:0 0 auto;display:flex;align-items:center;justify-content:center;padding:4px 5px;";
     del.addEventListener("click", (e) => { e.stopPropagation(); void library.remove(meta.id); });
     row.appendChild(del);
@@ -165,11 +166,11 @@ function mountAssetPanel(host: HTMLElement, library: AssetLibrary): void {
     for (const file of Array.from(files)) {
       try {
         const m = await library.add(file);
-        if (!m) toast(`未対応のファイル: ${file.name}`, true);
+        if (!m) toast(t("assets.toast.unsupported", { name: file.name }), true);
       } catch (e) {
         const name = e instanceof Error ? e.name : "";
-        if (name === "QuotaExceededError") toast("ストレージ容量を超えました。不要なアセットを削除してください。", true);
-        else toast(`追加に失敗: ${file.name}`, true);
+        if (name === "QuotaExceededError") toast(t("assets.toast.quota"), true);
+        else toast(t("assets.toast.addFailed", { name: file.name }), true);
         console.warn("[asset-panel] add failed:", e);
       }
     }

@@ -2,6 +2,7 @@
 import type { NodeInstance } from "../graph/graph-doc";
 import type { NodeTypeDef } from "../graph/node-type";
 import { signalInputs, isParamInput } from "../graph/node-ports";
+import { t } from "../i18n";
 
 export const NODE_WIDTH = 168;
 export const TITLE_H = 26;
@@ -194,7 +195,7 @@ export function randomRowRect(
 
 /** #99: ファイル行のラベル。未選択（空/undefined/null）は「ファイル未選択」。 */
 export function fileRowLabel(name: string | null | undefined): string {
-  return name ? name : "ファイル未選択";
+  return name ? name : t("node.file.none");
 }
 
 /**
@@ -280,10 +281,12 @@ export function tapControlLayout(rect: { x: number; y: number; w: number; h: num
 export function tapStatusLabel(
   s: { phase: string; tapCount: number; loopLenSec: number; playPosSec: number; recordElapsedSec: number } | null | undefined,
 ): string {
-  if (!s) return "記録なし";
-  if (s.phase === "recording") return `録音中 ${s.tapCount}打 ${s.recordElapsedSec.toFixed(1)}s`;
-  if (s.phase === "playing") return `${s.tapCount}打 / ${s.loopLenSec.toFixed(1)}s ループ ▶${s.playPosSec.toFixed(1)}s`;
-  return "記録なし";
+  if (!s) return t("node.tap.none");
+  if (s.phase === "recording") return t("node.tap.recording", { n: s.tapCount, sec: s.recordElapsedSec.toFixed(1) });
+  if (s.phase === "playing") {
+    return t("node.tap.playing", { n: s.tapCount, len: s.loopLenSec.toFixed(1), pos: s.playPosSec.toFixed(1) });
+  }
+  return t("node.tap.none");
 }
 
 /** #152: シーン選択行の領域（params 直下・sceneInput 無しは null）。 */
@@ -297,7 +300,7 @@ export function sceneRowRect(
 
 /** #152: シーン選択行のラベル。未選択は「(シーン未選択)」。 */
 export function sceneRowLabel(name: string | null | undefined): string {
-  return name ? name : "(シーン未選択)";
+  return name ? name : t("node.scene.none");
 }
 
 /** transport 行を再生ボタンとシークバーに分割する（時刻表示ぶんを右に確保）。 */

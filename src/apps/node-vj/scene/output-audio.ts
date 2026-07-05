@@ -22,6 +22,8 @@ export function outputAudioSourceId(opts: {
   return effectiveOutputId;
 }
 
+import { t } from "../i18n";
+
 export interface AudioOutputOption {
   deviceId: string;
   label: string;
@@ -38,8 +40,8 @@ export function audioOutputOptions(devices: MediaDeviceInfo[]): AudioOutputOptio
     .filter((d) => d.kind === "audiooutput")
     .map((d) => {
       if (d.label) return { deviceId: d.deviceId, label: d.label };
-      if (d.deviceId === "default") return { deviceId: d.deviceId, label: "システム既定" };
+      if (d.deviceId === "default") return { deviceId: d.deviceId, label: t("audio.device.systemDefault") };
       fallbackN += 1;
-      return { deviceId: d.deviceId, label: `音声出力 ${fallbackN}` };
+      return { deviceId: d.deviceId, label: t("audio.device.fallback", { n: fallbackN }) };
     });
 }
