@@ -7,6 +7,7 @@ import type { NodeRegistry } from "../graph/node-type";
 import { serializeGraph, deserializeGraph } from "../graph/serialize";
 import { GraphStore } from "../graph/graph-store";
 import type { History } from "../graph/history";
+import { t } from "../i18n";
 
 // パネル内の行に等幅で並べるボタン/ラベル（label も button 見た目にする）。
 const BTN_CSS =
@@ -60,7 +61,7 @@ export function mountGraphPresetControls(
 ): void {
   const nameInput = document.createElement("input");
   nameInput.type = "text";
-  nameInput.placeholder = "preset 名";
+  nameInput.placeholder = t("graphIo.presetName");
   nameInput.style.cssText = FIELD_CSS;
 
   const select = document.createElement("select");
@@ -69,7 +70,7 @@ export function mountGraphPresetControls(
     select.innerHTML = "";
     const names = store.list();
     const head = document.createElement("option");
-    head.value = ""; head.textContent = names.length ? "(読込...)" : "(保存なし)";
+    head.value = ""; head.textContent = names.length ? t("graphIo.selectLoad") : t("graphIo.selectNone");
     select.appendChild(head);
     for (const n of names) {
       const o = document.createElement("option");
@@ -87,15 +88,20 @@ export function mountGraphPresetControls(
       history.clear();
       for (const w of warnings) console.warn(`[graph-io] ${w}`);
       onLoad?.();
-      toast(warnings.length ? `${sourceLabel}: 読込（警告 ${warnings.length} 件）` : `${sourceLabel}: 読込完了`);
+      toast(warnings.length
+        ? t("graphIo.toast.loadedWarn", { source: sourceLabel, n: warnings.length })
+        : t("graphIo.toast.loaded", { source: sourceLabel }));
     } catch (e) {
       console.warn("[graph-io] load failed:", e);
-      toast(`${sourceLabel}: 読込失敗（${e instanceof Error ? e.message : "不明なエラー"}）`, true);
+      toast(t("graphIo.toast.loadFailed", {
+        source: sourceLabel,
+        error: e instanceof Error ? e.message : t("error.unknown"),
+      }), true);
     }
   };
 
   const saveBtn = document.createElement("button");
-  saveBtn.textContent = "保存";
+  saveBtn.textContent = t("graphIo.save");
   saveBtn.style.cssText = BTN_CSS;
   saveBtn.addEventListener("click", () => {
     try {
@@ -104,9 +110,9 @@ export function mountGraphPresetControls(
       nameInput.value = name;
       syncList();
       select.value = name;
-      toast(`保存しました: ${name}`);
+      toast(t("graphIo.toast.saved", { name }));
     } catch (e) {
-      toast(`保存失敗（${e instanceof Error ? e.message : "不明"}）`, true);
+      toast(t("graphIo.toast.saveFailed", { error: e instanceof Error ? e.message : t("error.unknownShort") }), true);
     }
   });
 
@@ -114,24 +120,24 @@ export function mountGraphPresetControls(
     const name = select.value;
     if (!name) return;
     const text = store.load(name);
-    if (text === null) { toast(`見つかりません: ${name}`, true); return; }
+    if (text === null) { toast(t("graphIo.toast.notFound", { name }), true); return; }
     nameInput.value = name;
     applyYaml(text, name);
   });
 
   const delBtn = document.createElement("button");
-  delBtn.textContent = "削除";
+  delBtn.textContent = t("graphIo.delete");
   delBtn.style.cssText = BTN_CSS;
   delBtn.addEventListener("click", () => {
     const name = select.value || nameInput.value.trim();
-    if (!name) { toast("削除する preset を選択してください", true); return; }
+    if (!name) { toast(t("graphIo.toast.selectDelete"), true); return; }
     store.remove(name);
     syncList();
-    toast(`削除しました: ${name}`);
+    toast(t("graphIo.toast.deleted", { name }));
   });
 
   const exportBtn = document.createElement("button");
-  exportBtn.textContent = "YAML書出";
+  exportBtn.textContent = t("graphIo.exportYaml");
   exportBtn.style.cssText = BTN_CSS;
   exportBtn.addEventListener("click", () => {
     const blob = new Blob([serializeGraph(graph)], { type: "text/yaml" });
@@ -143,7 +149,7 @@ export function mountGraphPresetControls(
   });
 
   const importLabel = document.createElement("label");
-  importLabel.textContent = "YAML読込";
+  importLabel.textContent = t("graphIo.importYaml");
   importLabel.style.cssText = BTN_CSS;
   const importInput = document.createElement("input");
   importInput.type = "file";
@@ -166,8 +172,8 @@ export function mountGraphPresetControls(
  */
 export function mountProjectControls(project: ProjectIoHooks, host: HTMLElement): void {
   const projSaveBtn = document.createElement("button");
-  projSaveBtn.textContent = "Proj保存";
-  projSaveBtn.title = "全シーンを 1 ファイル（.yaml）に保存";
+  projSaveBtn.textContent = t("project.save");
+  projSaveBtn.title = t("project.saveTitle");
   projSaveBtn.style.cssText = BTN_CSS;
   projSaveBtn.addEventListener("click", () => {
     try {
@@ -177,15 +183,15 @@ export function mountProjectControls(project: ProjectIoHooks, host: HTMLElement)
       a.download = project.downloadName();
       a.click();
       URL.revokeObjectURL(a.href);
-      toast("プロジェクトを保存しました");
+      toast(t("project.toast.saved"));
     } catch (e) {
-      toast(`プロジェクト保存失敗（${e instanceof Error ? e.message : "不明"}）`, true);
+      toast(t("project.toast.saveFailed", { error: e instanceof Error ? e.message : t("error.unknownShort") }), true);
     }
   });
 
   const projLoadLabel = document.createElement("label");
-  projLoadLabel.textContent = "Proj開く";
-  projLoadLabel.title = "プロジェクト（全シーン）を読み込み、現在の状態を置き換える";
+  projLoadLabel.textContent = t("project.open");
+  projLoadLabel.title = t("project.openTitle");
   projLoadLabel.style.cssText = BTN_CSS;
   const projInput = document.createElement("input");
   projInput.type = "file";
@@ -200,13 +206,16 @@ export function mountProjectControls(project: ProjectIoHooks, host: HTMLElement)
         for (const w of warnings) console.warn(`[project-io] ${w}`);
         toast(
           warnings.length
-            ? `${file.name}: 読込（警告 ${warnings.length} 件・詳細はコンソール [project-io]）`
-            : `${file.name}: 読込完了`,
+            ? t("project.toast.loadedWarn", { source: file.name, n: warnings.length })
+            : t("graphIo.toast.loaded", { source: file.name }),
           warnings.length > 0,
         );
       } catch (e) {
         console.warn("[project-io] load failed:", e);
-        toast(`${file.name}: 読込失敗（${e instanceof Error ? e.message : "不明なエラー"}）`, true);
+        toast(t("graphIo.toast.loadFailed", {
+          source: file.name,
+          error: e instanceof Error ? e.message : t("error.unknown"),
+        }), true);
       }
     });
     projInput.value = "";

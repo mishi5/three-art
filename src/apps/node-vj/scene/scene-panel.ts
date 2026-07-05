@@ -4,6 +4,7 @@
 import type { Scene } from "./scene-store";
 import type { SidePanelDef } from "../editor/side-dock";
 import { effectiveOutputSceneId, isFollowingEdit } from "./output-scene";
+import { t } from "../i18n";
 
 export function panelDisplay(open: boolean): "flex" | "none" { return open ? "flex" : "none"; }
 
@@ -37,7 +38,7 @@ const MONITOR_ICON = ICON('<rect x="2" y="4" width="20" height="13" rx="2"/><pat
 export function scenePanelDef(actions: ScenePanelActions): SidePanelDef {
   return {
     id: "scene",
-    title: "シーン",
+    title: t("panel.scenes"),
     icon: SCENES_ICON,
     mount: (host) => mountScenePanel(host, actions),
   };
@@ -49,7 +50,7 @@ function mountScenePanel(host: HTMLElement, actions: ScenePanelActions): void {
   host.appendChild(listEl);
 
   const addBtn = document.createElement("button");
-  addBtn.textContent = "＋ シーン追加";
+  addBtn.textContent = t("scenes.add");
   addBtn.style.cssText = BTN_CSS + "text-align:center;flex:0 0 auto;";
   addBtn.addEventListener("click", () => actions.add());
   host.appendChild(addBtn);
@@ -82,8 +83,8 @@ function mountScenePanel(host: HTMLElement, actions: ScenePanelActions): void {
     // #174: 出力中のシーンにバッジを表示（追従中は「編集に追従」を明示）。
     if (isOutput) {
       const badge = document.createElement("span");
-      badge.textContent = following ? "● 出力(追従)" : "● 出力";
-      badge.title = following ? "出力は編集シーンに追従中" : "このシーンを出力中";
+      badge.textContent = following ? t("scenes.badge.outputFollow") : t("scenes.badge.output");
+      badge.title = following ? t("scenes.badge.followTitle") : t("scenes.badge.pinnedTitle");
       badge.style.cssText = "flex:0 0 auto;font:10px system-ui;color:#ff6b6b;white-space:nowrap;";
       row.appendChild(badge);
     }
@@ -110,7 +111,7 @@ function mountScenePanel(host: HTMLElement, actions: ScenePanelActions): void {
     const out = document.createElement("button");
     out.innerHTML = MONITOR_ICON;
     const pinnedHere = isOutput && !following;
-    out.title = pinnedHere ? "出力ピンを解除（編集に追従）" : "このシーンを出力する";
+    out.title = pinnedHere ? t("scenes.output.unpin") : t("scenes.output.pin");
     out.style.cssText = BTN_CSS + "flex:0 0 auto;display:flex;align-items:center;justify-content:center;padding:3px 5px;" +
       (pinnedHere ? "color:#ff6b6b;border-color:#ff6b6b;" : "");
     out.addEventListener("click", (e) => {
@@ -120,13 +121,13 @@ function mountScenePanel(host: HTMLElement, actions: ScenePanelActions): void {
     row.appendChild(out);
 
     const dup = document.createElement("button");
-    dup.innerHTML = DUP_ICON; dup.title = "複製";
+    dup.innerHTML = DUP_ICON; dup.title = t("scenes.duplicate");
     dup.style.cssText = BTN_CSS + "flex:0 0 auto;display:flex;align-items:center;justify-content:center;padding:3px 5px;";
     dup.addEventListener("click", (e) => { e.stopPropagation(); actions.duplicate(scene.id); });
     row.appendChild(dup);
 
     const del = document.createElement("button");
-    del.innerHTML = TRASH_ICON; del.title = count <= 1 ? "最後の 1 シーンは削除できません" : "削除";
+    del.innerHTML = TRASH_ICON; del.title = count <= 1 ? t("scenes.deleteLast") : t("scenes.delete");
     del.disabled = count <= 1;
     del.style.cssText = BTN_CSS + "flex:0 0 auto;display:flex;align-items:center;justify-content:center;padding:3px 5px;" +
       (count <= 1 ? "opacity:0.4;cursor:not-allowed;" : "");

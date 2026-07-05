@@ -90,6 +90,23 @@ describe("parsePrefs (#229)", () => {
     expect(parsePrefs('{"wsBridgeUrl":123}').wsBridgeUrl).toBe("ws://localhost:8787");
     expect(parsePrefs('{"wsBridgeUrl":null}').wsBridgeUrl).toBe("ws://localhost:8787");
   });
+
+  // #244: UI 言語
+  it("lang の既定値は ja（既存ユーザの見た目を変えない）", () => {
+    expect(parsePrefs(null).lang).toBe("ja");
+    expect(parsePrefs("{}").lang).toBe("ja");
+  });
+
+  it("lang: ja / en を読み取れる", () => {
+    expect(parsePrefs('{"lang":"ja"}').lang).toBe("ja");
+    expect(parsePrefs('{"lang":"en"}').lang).toBe("en");
+  });
+
+  it("lang が不正値なら既定（ja）へフォールバック", () => {
+    expect(parsePrefs('{"lang":"fr"}').lang).toBe("ja");
+    expect(parsePrefs('{"lang":123}').lang).toBe("ja");
+    expect(parsePrefs('{"lang":null}').lang).toBe("ja");
+  });
 });
 
 describe("PrefsStore (#229)", () => {
@@ -153,5 +170,21 @@ describe("PrefsStore (#229)", () => {
     expect(store.load()).toEqual({
       ...DEFAULT_PREFS, panMode: "legacy", wsBridgeEnabled: true,
     });
+  });
+
+  // #244: UI 言語の永続化と他フィールドとの独立性
+  it("lang を save → load で保持する", () => {
+    const store = new PrefsStore(memoryAdapter());
+    store.save({ lang: "en" });
+    expect(store.load().lang).toBe("en");
+    store.save({ lang: "ja" });
+    expect(store.load().lang).toBe("ja");
+  });
+
+  it("lang の保存は他フィールドを壊さない（部分更新）", () => {
+    const store = new PrefsStore(memoryAdapter());
+    store.save({ panMode: "legacy" });
+    store.save({ lang: "en" });
+    expect(store.load()).toEqual({ ...DEFAULT_PREFS, panMode: "legacy", lang: "en" });
   });
 });

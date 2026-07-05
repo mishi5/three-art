@@ -4,6 +4,7 @@
 // 右クリックメニューからの追加（NodeEditor.showAddMenu）はこのパネルと独立に残る。
 import { BAR_W, TOP, PANEL_W, type SidePanelDef } from "./side-dock";
 import { groupNodesByCategory } from "./node-menu";
+import { t } from "../i18n";
 
 const ICON = (body: string): string =>
   `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
@@ -93,7 +94,7 @@ export interface NodeAddPanelDeps {
 export function nodeAddPanelDef(deps: NodeAddPanelDeps): SidePanelDef {
   return {
     id: "node-add",
-    title: "ノード追加",
+    title: t("panel.nodeAdd"),
     icon: PLUS_ICON,
     mount: (host) => mountNodeAddPanel(host, deps),
   };

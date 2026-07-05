@@ -35,6 +35,7 @@ import { clipboardPanelDef } from "./editor/clipboard-panel";
 import { sharedCamera } from "./nodes/shared-camera";
 import { shouldAutoStopCamera } from "./nodes/camera-share-logic";
 import { PrefsStore } from "./prefs";
+import { setLang } from "./i18n";
 import { settingsPanelDef } from "./editor/settings-panel";
 import { controlsPanelDef } from "./editor/controls-panel";
 import { nodeAddPanelDef, nodeAddViewRect } from "./editor/node-add-panel";
@@ -191,6 +192,11 @@ type PadLoadable = {
   stopPad?: (index: number) => void;
   clearPad?: (index: number) => void;
 };
+// #229/#244: UI 設定（操作モード・言語等）。言語は UI 構築（t() を使う NodeEditor/パネル生成）
+// より前に確定させる必要があるため、ここで prefs を読み setLang する。
+const prefsStore = new PrefsStore(localStorageAdapter());
+setLang(prefsStore.load().lang);
+
 const editor = new NodeEditor(
   editorCanvas, graph, registry, history,
   (id) => runtime.getOutputs(id),
@@ -236,8 +242,7 @@ const editor = new NodeEditor(
   },
 );
 
-// #229: UI 設定（操作モード等）。起動時に読み込み、エディタへ即注入する。
-const prefsStore = new PrefsStore(localStorageAdapter());
+// #229: 操作モードを起動時に読み込み、エディタへ即注入する（prefsStore は上で生成済み）。
 editor.panSelectMode = prefsStore.load().panMode;
 
 // #154: canvas へドロップされたアセットを読み込む。
@@ -823,6 +828,12 @@ buildSideDock(
       setWsBridgeEnabled: (enabled) => {
         prefsStore.save({ wsBridgeEnabled: enabled });
         applyWsBridgePrefs();
+      },
+      // #244: 言語。UI 全体の再構築が必要なため、保存してリロードで反映する（ユーザ合意）。
+      getLang: () => prefsStore.load().lang,
+      setLang: (lang) => {
+        prefsStore.save({ lang });
+        location.reload();
       },
       getWsBridgeUrl: () => prefsStore.load().wsBridgeUrl,
       setWsBridgeUrl: (url) => {
