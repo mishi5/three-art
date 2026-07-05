@@ -3,6 +3,7 @@
 // 機能グループのセクションで縦に並べる。各セクションの中身（ボタン生成・配線）は
 // 呼び出し側が mount で構築する（settings-panel と同じ「ドックは枠だけ」パターン）。
 import type { SidePanelDef } from "./side-dock";
+import { t } from "../i18n";
 
 const ICON = (body: string): string =>
   `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
@@ -26,7 +27,7 @@ export interface ControlsSection {
 export function controlsPanelDef(sections: ControlsSection[]): SidePanelDef {
   return {
     id: "controls",
-    title: "コントロール",
+    title: t("panel.controls"),
     icon: SLIDERS_ICON,
     mount: (host) => mountControlsPanel(host, sections),
   };

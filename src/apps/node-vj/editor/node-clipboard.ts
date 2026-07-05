@@ -3,6 +3,7 @@
 // クリップ項目はシーン非依存の部分グラフ（元 id のまま保持し、貼付時に再 id する）。永続化はしない。
 import { addConnection, addNode, type Connection, type GraphDoc, type NodeInstance } from "../graph/graph-doc";
 import type { NodeRegistry } from "../graph/node-type";
+import { t } from "../i18n";
 
 /** クリップ項目のドラッグに使う dataTransfer 型（asset の application/x-node-vj-asset と別系統）。 */
 export const CLIP_MIME = "application/x-node-vj-clip";
@@ -99,10 +100,10 @@ export function pasteClip(
 
 /** 一覧表示用ラベル（ノード種別/件数）。例: "Number, Add" / "A, B 他 2 件"。 */
 export function clipLabel(nodes: readonly NodeInstance[]): string {
-  if (nodes.length === 0) return "(空)";
+  if (nodes.length === 0) return t("clipboard.label.empty");
   const types = nodes.map((n) => n.type);
   if (nodes.length <= 3) return types.join(", ");
-  return `${types.slice(0, 2).join(", ")} 他 ${nodes.length - 2} 件`;
+  return t("clipboard.label.more", { types: types.slice(0, 2).join(", "), n: nodes.length - 2 });
 }
 
 /** 選択からクリップ項目を生成する（空選択は null）。 */

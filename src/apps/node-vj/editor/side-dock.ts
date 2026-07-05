@@ -1,6 +1,7 @@
 // #151: VSCode 風サイドドック。最左のアクティビティバー（アイコン列）で
 // パネルを切り替え、その右に選択中パネルの内容を 1 枚だけ表示する。
 // 各パネルは内容を host へ mount するだけで、ドックがバー/ヘッダ/開閉を提供する。
+import { t } from "../i18n";
 
 export interface SidePanelDef {
   id: string;
@@ -96,12 +97,12 @@ export function buildSideDock(panels: SidePanelDef[], pin: DockPinActions): void
     pinBtn.style.background = pinned ? "#243042" : "#1c1c22";
     pinBtn.style.color = pinned ? "#cfe" : "#889";
     pinBtn.style.borderColor = pinned ? "#4a6a8a" : "#444";
-    pinBtn.title = pinned ? "ピン留め中（外側クリックで閉じない）" : "ピン留め（外側クリックで閉じなくする）";
+    pinBtn.title = pinned ? t("dock.pin.on") : t("dock.pin.off");
   }
   renderPin();
   const collapseBtn = document.createElement("button");
   collapseBtn.innerHTML = COLLAPSE_ICON;
-  collapseBtn.title = "パネルを閉じる";
+  collapseBtn.title = t("dock.collapse");
   collapseBtn.style.cssText = HEADER_BTN;
   const headerBtns = document.createElement("div");
   headerBtns.style.cssText = "display:flex;align-items:center;gap:4px;";

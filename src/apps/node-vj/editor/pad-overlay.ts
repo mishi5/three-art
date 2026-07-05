@@ -1,6 +1,7 @@
 // #205: MidiPad のパッドを画面全体に拡大表示する DOM オーバーレイ。
 // 大きな 4×4 パッドを並べ、click で発音（deps.play）・Shift+click で再割当（deps.assign）。
 // 上部に Stop（全停止）と ✕（閉じる）。Esc でも閉じる。複数 MidiPad があっても対象ノードのみ表示する。
+import { t } from "../i18n";
 
 /** オーバーレイが対象ノードのパッド状態・操作を引くための依存。 */
 export interface PadOverlayDeps {
@@ -52,12 +53,12 @@ export function openPadOverlay(nodeId: string, deps: PadOverlayDeps): void {
   stopBtn.addEventListener("click", () => deps.stop(nodeId));
   const closeBtn = document.createElement("button");
   closeBtn.type = "button";
-  closeBtn.textContent = "✕ 閉じる (Esc)";
+  closeBtn.textContent = t("pad.close");
   closeBtn.style.cssText =
     "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:6px;padding:8px 16px;cursor:pointer;font:14px system-ui;";
   closeBtn.addEventListener("click", () => closePadOverlay());
   const hint = document.createElement("span");
-  hint.textContent = "クリック=発音 / 右クリック=操作メニュー（割当・停止・再割当・解除）";
+  hint.textContent = t("pad.hint");
   hint.style.cssText = "color:#888;";
   bar.append(stopBtn, closeBtn, hint);
 
@@ -80,7 +81,7 @@ export function openPadOverlay(nodeId: string, deps: PadOverlayDeps): void {
       const filled = info?.filled ?? false;
       const label = filled ? (info?.label ?? null) : null;
       btn.textContent = label ?? String(i + 1);
-      btn.title = filled ? "クリックで発音 / 右クリックで操作（停止・再割当・解除）" : "右クリックで音声を割り当て";
+      btn.title = filled ? t("pad.cell.filledTitle") : t("pad.cell.emptyTitle");
       btn.style.cssText =
         "border-radius:10px;cursor:pointer;font:16px system-ui;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:6px;" +
         (filled
@@ -154,11 +155,11 @@ function showPadCtxMenu(
     menu.appendChild(el);
   };
   if (deps.info(nodeId, padIndex)?.filled ?? false) {
-    item("■ このパッドを停止", () => deps.stopVoice(nodeId, padIndex));
-    item("↻ 音声を再割り当て", () => deps.assign(nodeId, padIndex));
-    item("✕ 割り当てを解除", () => deps.unassign(nodeId, padIndex));
+    item(t("pad.menu.stopVoice"), () => deps.stopVoice(nodeId, padIndex));
+    item(t("pad.menu.reassign"), () => deps.assign(nodeId, padIndex));
+    item(t("pad.menu.unassign"), () => deps.unassign(nodeId, padIndex));
   } else {
-    item("＋ 音声を割り当て", () => deps.assign(nodeId, padIndex));
+    item(t("pad.menu.assign"), () => deps.assign(nodeId, padIndex));
   }
   document.body.appendChild(menu);
   const r = menu.getBoundingClientRect();
