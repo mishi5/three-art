@@ -33,10 +33,11 @@ export function shouldAutoClose(input: AutoCloseInput): boolean {
   return input.paneOpen && !input.pinned && !input.targetInBar && !input.targetInPane;
 }
 
-const BAR_W = 40;
-const TOP = 44;     // 上部ツールバーの下
-const BOTTOM = 0;   // #230: 下部バー撤去に伴い最下端まで使う
-const PANEL_W = 230;
+// #243: ノード追加パネルが「見えている範囲」（ドック右端〜画面端）を計算するため export する。
+export const BAR_W = 40;
+export const TOP = 44;     // 上部ツールバーの下
+const BOTTOM = 0;          // #230: 下部バー撤去に伴い最下端まで使う
+export const PANEL_W = 230;
 
 const COLLAPSE_ICON =
   `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +

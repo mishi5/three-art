@@ -24,6 +24,7 @@ import { hitTest } from "./hit-test";
 import { tooltipForHit, tooltipBox, wrapLines, nodeMenuTooltipContent, type TooltipContent } from "./tooltip";
 import { screenToWorld, worldToScreen, zoomAt } from "./viewport";
 import { groupNodesByCategory } from "./node-menu";
+import { findFreeSpot, viewCenter, type ViewRect } from "./node-add-panel";
 import { duplicateNodes } from "../graph/duplicate";
 import { CLIP_MIME, makeClipItem, pasteClip, type NodeClipboard } from "./node-clipboard";
 import { renderClipThumbnail } from "./clip-thumbnail";
@@ -117,8 +118,6 @@ export class NodeEditor {
   private contextMenu: HTMLDivElement | null = null;
   /** #103: 開いているフライアウトサブメニュー（カテゴリ → 型一覧）。 */
   private submenu: HTMLDivElement | null = null;
-  /** #166: 現在のメニューを開いたトグルボタン。再押下クローズの判定に使う（右クリックメニューは null）。 */
-  private menuAnchor: HTMLElement | null = null;
   // #203: ノード追加メニュー項目のホバー説明ツールチップ（DOM・遅延表示）。
   private menuTooltipEl: HTMLDivElement | null = null;
   private menuTooltipTimer: number | null = null;
@@ -228,15 +227,8 @@ export class NodeEditor {
     bar.style.cssText =
       "position:fixed;left:8px;right:8px;top:8px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;z-index:150;" +
       "font:12px system-ui;";
-    // #103: カテゴリボタン → クリックでそのカテゴリの型ドロップダウンを開く（階層化）。
-    for (const group of groupNodesByCategory(this.registry.list())) {
-      const btn = document.createElement("button");
-      btn.textContent = group.category + " ▾";
-      btn.style.cssText =
-        "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 10px;cursor:pointer;text-transform:capitalize;";
-      btn.addEventListener("click", () => this.showCategoryDropdown(btn, group));
-      bar.appendChild(btn);
-    }
+    // #243: ノード追加のカテゴリボタン群（#103）はサイドドック「ノード追加」パネルへ移設した
+    // （右クリックの追加メニューは showAddMenu のまま）。ツールバーはデバッグトグルと ? だけ残す。
     // デバッグ: 出力ポート横のライブ値表示トグル（既定 OFF）。
     const dbg = document.createElement("button");
     const syncDbg = (): void => {
@@ -289,6 +281,20 @@ export class NodeEditor {
     addNode(this.graph, node);
     this.selectedIds = new Set([node.id]);
     return node.id;
+  }
+
+  /**
+   * #243: サイドドック「ノード追加」パネルからの追加。view（スクリーン座標の可視矩形）の中央を
+   * 現在のパン/ズームで world へ変換し、既存ノードと重ならない空きへ配置する。
+   * 追加処理・履歴 record は addNodeOfType（右クリックメニューと同経路）を再利用する。
+   */
+  addNodeAtViewCenter(type: string, view: ViewRect): string {
+    const c = viewCenter(view);
+    const wc = screenToWorld(c.x, c.y, this.offset, this.scale);
+    // position はノードの左上。ノードが中央に見えるよう幅/タイトル分だけ引く。
+    const desired = { x: wc.x - NODE_WIDTH / 2, y: wc.y - TITLE_H };
+    const pos = findFreeSpot(desired, this.graph.nodes.map((n) => n.position ?? { x: 0, y: 0 }));
+    return this.addNodeOfType(type, pos);
   }
 
   // --- pointer 座標 → world 座標（#92: ズーム反映）---
@@ -1017,18 +1023,6 @@ export class NodeEditor {
     }
   }
 
-  /** ツールバーのカテゴリボタン押下: そのカテゴリの型ドロップダウンを下に開く。 */
-  private showCategoryDropdown(anchor: HTMLElement, group: { category: string; types: string[] }): void {
-    if (this.contextMenu) { this.closeContextMenu(); return; } // 同じボタン再押下で閉じる
-    const r = anchor.getBoundingClientRect();
-    const menu = this.buildMenu(r.left, r.bottom + 4);
-    // #166: このボタン上の pointerdown では closeOnOutside で閉じず、click のトグルに委ねる。
-    this.menuAnchor = anchor;
-    for (const type of group.types) {
-      this.addMenuItem(menu, "+ " + type, () => this.addNodeOfType(type), type);
-    }
-  }
-
   /** ノード上右クリック: 複製・削除。対象が未選択なら単独選択にしてから操作する。 */
   private showNodeMenu(screenX: number, screenY: number, node: NodeInstance): void {
     if (!this.selectedIds.has(node.id)) this.selectedIds = new Set([node.id]);
@@ -1069,9 +1063,7 @@ export class NodeEditor {
   private closeOnOutside = (e: PointerEvent): void => {
     const t = e.target as Node;
     const inMenu = this.contextMenu?.contains(t) || this.submenu?.contains(t);
-    // #166: トグルボタン自身の上では閉じない（click のトグルが閉じる役を担うため・二重発火で再オープンするのを防ぐ）。
-    const onAnchor = this.menuAnchor?.contains(t) ?? false;
-    if (!inMenu && !onAnchor) this.closeContextMenu();
+    if (!inMenu) this.closeContextMenu();
   };
 
   private closeSubmenu(): void {
@@ -1087,7 +1079,6 @@ export class NodeEditor {
     window.removeEventListener("pointerdown", this.closeOnOutside, true);
     this.contextMenu.remove();
     this.contextMenu = null;
-    this.menuAnchor = null;
   }
 
   /**
