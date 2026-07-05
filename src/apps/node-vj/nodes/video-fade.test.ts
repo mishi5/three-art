@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { expect, test, describe } from "bun:test";
-import { FADE_PARAM, FADE_SMOOTH_TIME, clampFade, readFade } from "./video-fade-logic";
+import { FADE_GAMMA, FADE_PARAM, FADE_SMOOTH_TIME, clampFade, perceptualFade, readFade } from "./video-fade-logic";
 import { VideoFileInputNode } from "./VideoFileInputNode";
 import { VideoTextureSurface } from "../graph/video-surface";
 import { paramInputs, isConnectableParam } from "../graph/node-ports";
@@ -18,6 +18,25 @@ describe("clampFade (#241)", () => {
     expect(clampFade(Number.NaN)).toBe(1);
     expect(clampFade(Infinity)).toBe(1);
     expect(clampFade(-Infinity)).toBe(1);
+  });
+});
+
+describe("perceptualFade (#241)", () => {
+  test("端点を保存する（0→0, 1→1）", () => {
+    expect(perceptualFade(0)).toBe(0);
+    expect(perceptualFade(1)).toBe(1);
+  });
+
+  test("つまみ値を ^2.2 でリニア光へ変換（知覚リニア化）", () => {
+    expect(perceptualFade(0.5)).toBeCloseTo(Math.pow(0.5, FADE_GAMMA));
+    expect(perceptualFade(0.2)).toBeCloseTo(Math.pow(0.2, FADE_GAMMA));
+  });
+
+  test("単調増加・範囲外/NaN はクランプ後に変換", () => {
+    expect(perceptualFade(0.3)).toBeGreaterThan(perceptualFade(0.2));
+    expect(perceptualFade(2)).toBe(1);
+    expect(perceptualFade(-1)).toBe(0);
+    expect(perceptualFade(Number.NaN)).toBe(1);
   });
 });
 
@@ -74,13 +93,14 @@ describe("VideoTextureSurface の fade 反映 (#241)", () => {
     s.dispose();
   });
 
-  test("setFade で material.color が (f,f,f) になる（map と乗算＝黒フェード）", () => {
+  test("setFade で material.color が (f^2.2,…) になる（リニア光乗算の知覚補正つき黒フェード）", () => {
     const s = new VideoTextureSurface();
     const mat = (s as unknown as SurfaceInternals).material;
     s.setFade(0.25);
-    expect(mat.color.r).toBeCloseTo(0.25);
-    expect(mat.color.g).toBeCloseTo(0.25);
-    expect(mat.color.b).toBeCloseTo(0.25);
+    const expected = Math.pow(0.25, FADE_GAMMA);
+    expect(mat.color.r).toBeCloseTo(expected);
+    expect(mat.color.g).toBeCloseTo(expected);
+    expect(mat.color.b).toBeCloseTo(expected);
     s.setFade(0); // 全黒
     expect(mat.color.r).toBe(0);
     s.setFade(1); // 原状

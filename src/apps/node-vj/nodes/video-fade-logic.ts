@@ -23,6 +23,22 @@ export function clampFade(v: number): number {
   return Math.min(1, Math.max(0, v));
 }
 
+/**
+ * 映像フェードの知覚補正ガンマ。Three.js の色管理では乗算がリニア光空間で行われるが、
+ * 人間の明るさ知覚はガンマ的（≈ linear^(1/2.2)）なため、つまみの値をそのまま掛けると
+ * 0.3 付近までほとんど暗くならず 0.2 以下で急落して見える（実機確認でのユーザ指摘）。
+ */
+export const FADE_GAMMA = 2.2;
+
+/**
+ * 映像用の知覚リニアな乗算係数。つまみ値 f（0..1）を f^2.2 に変換してから
+ * リニア空間で掛けることで、見た目の暗くなり方がつまみに比例する。
+ * 端点は保存される（0→0, 1→1）。音声は聴感上比例に感じられるため補正しない。
+ */
+export function perceptualFade(v: number): number {
+  return Math.pow(clampFade(v), FADE_GAMMA);
+}
+
 /** ctx.param から fade を読み出す（未設定・不正値は既定 1）。 */
 export function readFade(param: (id: string) => unknown): number {
   return clampFade(Number(param("fade") ?? DEFAULT_FADE));

@@ -3,6 +3,7 @@
 // 生の VideoTexture を直接流すと全面クアッドに引き伸ばされるため、入口で正規化する。
 import * as THREE from "three";
 import { containScale } from "../editor/fit";
+import { perceptualFade } from "../nodes/video-fade-logic";
 
 export class VideoTextureSurface {
   private scene = new THREE.Scene();
@@ -22,11 +23,12 @@ export class VideoTextureSurface {
   /**
    * #241: フェード量を設定する（0=黒、1=そのまま）。MeshBasicMaterial.color は map と
    * 乗算されるため、(f,f,f) を掛けると輝度乗算＝黒フェードになる。
+   * 乗算はリニア光空間で行われ知覚とズレる（0.2 以下で急落して見える）ため、
+   * perceptualFade（f^2.2）で知覚リニアに補正してから掛ける。
    * 範囲外は 0..1 にクランプ、NaN 等の不正値は 1（従来描画）に落とす。
    */
   setFade(fade: number): void {
-    const f = Number.isFinite(fade) ? Math.min(1, Math.max(0, fade)) : 1;
-    this.material.color.setScalar(f);
+    this.material.color.setScalar(perceptualFade(fade));
   }
 
   /**
