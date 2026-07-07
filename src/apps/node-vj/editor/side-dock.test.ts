@@ -1,5 +1,5 @@
 import { expect, test, describe } from "bun:test";
-import { nextActivePanel, shouldAutoClose } from "./side-dock";
+import { nextActivePanel, shouldAutoClose, activityButtonStyle, headerUnderline } from "./side-dock";
 
 describe("nextActivePanel", () => {
   test("別パネルをクリックしたらそれをアクティブに", () => {
@@ -29,5 +29,28 @@ describe("shouldAutoClose", () => {
   });
   test("パネル内の pointerdown では閉じない（パネル内操作で誤クローズしない）", () => {
     expect(shouldAutoClose({ ...base, targetInPane: true })).toBe(false);
+  });
+});
+
+// #259: パネルごとのアクセントカラー（アクティビティバー・ヘッダ下線）
+describe("activityButtonStyle", () => {
+  test("非アクティブは従来表示（accent の有無によらず）", () => {
+    expect(activityButtonStyle(false)).toEqual({ background: "transparent", color: "#9ab" });
+    expect(activityButtonStyle(false, "#5b87b8")).toEqual({ background: "transparent", color: "#9ab" });
+  });
+  test("アクティブ + accent はアイコン色を accent に", () => {
+    expect(activityButtonStyle(true, "#5b87b8")).toEqual({ background: "#243042", color: "#5b87b8" });
+  });
+  test("アクティブ + accent 未指定は従来のハイライト色", () => {
+    expect(activityButtonStyle(true)).toEqual({ background: "#243042", color: "#cfe" });
+  });
+});
+
+describe("headerUnderline", () => {
+  test("accent 指定時は 2px のアクセント下線", () => {
+    expect(headerUnderline("#c08a4a")).toBe("2px solid #c08a4a");
+  });
+  test("未指定は透明の下線（レイアウトを揺らさない・従来表示）", () => {
+    expect(headerUnderline()).toBe("2px solid transparent");
   });
 });

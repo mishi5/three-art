@@ -1,6 +1,6 @@
 import { expect, test, describe } from "bun:test";
 import { registerHappyDom } from "../../../test-setup/dom";
-import { panelDisplay, createRenderHold, scenePanelDef } from "./scene-panel";
+import { panelDisplay, createRenderHold, scenePanelDef, SCENE_ACCENT } from "./scene-panel";
 import type { ScenePanelActions } from "./scene-panel";
 import type { Scene } from "./scene-store";
 import type { GraphDoc } from "../graph/graph-doc";
@@ -111,7 +111,8 @@ describe("scenePanelDef (DOM)", () => {
   function startEdit(host: HTMLElement, index: number): HTMLInputElement {
     const listEl = host.children[0]!;
     const row = listEl.children[index]!;
-    const name = row.children[0]!;
+    // #259: 行の先頭は番号バッジになったため、名前は 2 番目の子要素。
+    const name = row.children[1]!;
     name.dispatchEvent(new Event("dblclick", { bubbles: true }));
     return host.querySelector("input") as HTMLInputElement;
   }
@@ -193,5 +194,41 @@ describe("scenePanelDef (DOM)", () => {
     expect(renamed).toEqual([]);
     expect(host.querySelector("input")).toBeNull();
     expect(host.textContent).toContain("Scene 1");
+  });
+
+  // #259: シーンパネルの視覚差別化（番号バッジ・左アクセントボーダー・accent 定義）
+  describe("視覚差別化 (#259)", () => {
+    test("scenePanelDef はシーン用アクセントカラーを持つ", () => {
+      const { actions } = makeActions(["Scene 1"]);
+      expect(scenePanelDef(actions).accent).toBe(SCENE_ACCENT);
+      expect(SCENE_ACCENT).toMatch(/^#[0-9a-f]{6}$/i);
+    });
+
+    test("各行の先頭に 1 始まりの番号バッジが付く", () => {
+      const { actions } = makeActions(["A", "B", "C"]);
+      const host = mountPanel(actions);
+      const listEl = host.children[0]!;
+      const badges = Array.from(listEl.children).map((row) => row.children[0]!.textContent);
+      expect(badges).toEqual(["1", "2", "3"]);
+    });
+
+    test("行に左アクセントボーダー（3px）が付く", () => {
+      const { actions } = makeActions(["A"]);
+      const host = mountPanel(actions);
+      const row = host.children[0]!.children[0] as HTMLElement;
+      // happy-dom はショートハンドを分解するため width で確認（色は accent 定義テストで担保）
+      expect(row.style.borderLeftWidth).toBe("3px");
+      expect(row.style.borderTopWidth).toBe("1px");
+    });
+
+    test("アクティブ行のバッジはアクセント背景で反転する", () => {
+      const { actions } = makeActions(["A", "B"]);
+      const host = mountPanel(actions); // activeId は先頭（s0）
+      const listEl = host.children[0]!;
+      const activeBadge = listEl.children[0]!.children[0] as HTMLElement;
+      const otherBadge = listEl.children[1]!.children[0] as HTMLElement;
+      expect(activeBadge.style.cssText).toContain(SCENE_ACCENT);
+      expect(otherBadge.style.cssText).not.toContain(`background: ${SCENE_ACCENT}`);
+    });
   });
 });

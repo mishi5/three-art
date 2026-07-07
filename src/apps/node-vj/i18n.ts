@@ -140,6 +140,10 @@ export const CATALOG = {
     en: "Storage quota exceeded. Delete unused assets.",
   },
   "assets.toast.addFailed": { ja: "追加に失敗: {name}", en: "Failed to add: {name}" },
+  // #259: 行左端の種別アイコンの tooltip
+  "assets.kind.image": { ja: "画像", en: "Image" },
+  "assets.kind.video": { ja: "動画", en: "Video" },
+  "assets.kind.audio": { ja: "音声", en: "Audio" },
 
   // --- クリップボードパネル（clipboard-panel / node-clipboard） ---
   "clipboard.hint": {

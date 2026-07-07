@@ -56,6 +56,10 @@ export interface ScenePanelActions {
 const BTN_CSS =
   "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;font:12px system-ui;";
 
+// #259: シーンパネルのアクセントカラー（青系）。アセットパネル（琥珀系）との視覚差別化に使う。
+// 既存の選択色系統（#243042 / #4a6a8a）に馴染む明るさへ調整した値。
+export const SCENE_ACCENT = "#5b87b8";
+
 const ICON = (body: string): string =>
   `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
   `stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
@@ -71,6 +75,7 @@ export function scenePanelDef(actions: ScenePanelActions): SidePanelDef {
     id: "scene",
     title: t("panel.scenes"),
     icon: SCENES_ICON,
+    accent: SCENE_ACCENT, // #259: アセットパネルと一目で見分けるための識別色
     mount: (host) => mountScenePanel(host, actions),
   };
 }
@@ -94,16 +99,26 @@ function mountScenePanel(host: HTMLElement, actions: ScenePanelActions): void {
     const outId = actions.outputId();
     const effectiveOut = effectiveOutputSceneId(outId, activeId, ids);
     const following = isFollowingEdit(outId, ids);
-    for (const scene of scenes) {
-      listEl.appendChild(renderRow(scene, scene.id === activeId, scene.id === effectiveOut, following, scenes.length));
-    }
+    scenes.forEach((scene, i) => {
+      listEl.appendChild(renderRow(scene, i, scene.id === activeId, scene.id === effectiveOut, following, scenes.length));
+    });
   }
 
-  function renderRow(scene: Scene, isActive: boolean, isOutput: boolean, following: boolean, count: number): HTMLElement {
+  function renderRow(scene: Scene, index: number, isActive: boolean, isOutput: boolean, following: boolean, count: number): HTMLElement {
     const row = document.createElement("div");
+    // #259: 左 3px のアクセントボーダー（シーン=青）でアセット行と見分ける。
     row.style.cssText =
       "display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid #333;border-radius:4px;cursor:pointer;" +
+      `border-left:3px solid ${SCENE_ACCENT};` +
       `background:${isActive ? "#243042" : "#16161c"};`;
+
+    // #259: 左端に番号バッジ（1,2,3…）。アクティブ行は accent 背景で反転して視認性を上げる。
+    const num = document.createElement("span");
+    num.textContent = String(index + 1);
+    num.style.cssText =
+      "flex:0 0 auto;min-width:14px;text-align:center;font:10px/1.5 system-ui;border-radius:3px;padding:0 3px;" +
+      (isActive ? `background:${SCENE_ACCENT};color:#0e1116;font-weight:700;` : "background:#1f2733;color:#8fb0cf;");
+    row.appendChild(num);
 
     const name = document.createElement("div");
     name.textContent = scene.name;
