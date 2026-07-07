@@ -14,7 +14,7 @@ export const FADE_SMOOTH_TIME = 0.03;
 /** fade param 定義。数値 param なので入力ポート化され、Envelope/Sine 等から駆動できる。 */
 export const FADE_PARAM: ParamDef = {
   id: "fade", label: "fade", kind: "number", default: DEFAULT_FADE, min: 0, max: 1, step: 0.01,
-  description: "映像と音の同時フェード（0=黒＋無音、1=そのまま）。他ノードの number 出力で駆動可能。",
+  description: "node.common.video.fade",
 };
 
 /** fade 値を 0..1 にクランプする。NaN・非有限は既定 1（従来挙動）に落とす。 */

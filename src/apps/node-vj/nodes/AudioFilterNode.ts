@@ -19,15 +19,15 @@ interface AudioFilterState {
 export const AudioFilterNode: NodeTypeDef = {
   type: "AudioFilter",
   category: "process",
-  description: "音声フィルタ。audio を lowpass/highpass/bandpass で加工する。frequency を Sine 等の number 出力で振ると音が動く。",
+  description: "node.AudioFilter.desc",
   isSink: false,
-  inputs: [{ id: "audio", label: "audio", type: "audio", description: "加工する実音声信号。" }],
+  inputs: [{ id: "audio", label: "audio", type: "audio", description: "node.AudioFilter.port.audio" }],
   outputs: [SIGNAL_OUTPUT],
   params: [
-    { id: "enabled", label: "enabled", kind: "enum", default: "on", options: ["on", "off"], description: "エフェクトの有効/無効。off で入力をそのまま出力（パススルー）。" },
-    { id: "type", label: "type", kind: "enum", default: "lowpass", options: [...FILTER_TYPES], description: "フィルタ種別（lowpass=低域通過, highpass=高域通過, bandpass=帯域通過）。" },
-    { id: "frequency", label: "frequency", kind: "number", default: 1000, min: 20, max: 20000, step: 1, description: "カットオフ/中心周波数（Hz）。聴感は対数的なので低域は細かく・高域は大きく動かすとよい。" },
-    { id: "Q", label: "Q", kind: "number", default: 1, min: 0.1, max: 20, step: 0.1, description: "レゾナンス（カットオフ付近の尖り）。大きいほどクセの強い音になる。" },
+    { id: "enabled", label: "enabled", kind: "enum", default: "on", options: ["on", "off"], description: "node.AudioFilter.param.enabled" },
+    { id: "type", label: "type", kind: "enum", default: "lowpass", options: [...FILTER_TYPES], description: "node.AudioFilter.param.type" },
+    { id: "frequency", label: "frequency", kind: "number", default: 1000, min: 20, max: 20000, step: 1, description: "node.AudioFilter.param.frequency" },
+    { id: "Q", label: "Q", kind: "number", default: 1, min: 0.1, max: 20, step: 0.1, description: "node.AudioFilter.param.Q" },
   ],
   createState(env: NodeEnv): AudioFilterState {
     const ctx = env.audioContext;

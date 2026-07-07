@@ -11,18 +11,18 @@ export const DEFAULT_ONSET_COOLDOWN = 0.12;
 
 /** audio 入力ノード共通の onset 調整 param（#109）。3 ノードで共有する。 */
 export const ONSET_PARAMS: ParamDef[] = [
-  { id: "onsetThreshold", label: "onsetThr", kind: "number", default: DEFAULT_ONSET_THRESHOLD, min: 0, max: 0.5, step: 0.005, description: "onset 発火しきい値。bass の前フレーム差がこの値を超えると発火（小さいほど敏感）。" },
-  { id: "onsetCooldown", label: "onsetCD", kind: "number", default: DEFAULT_ONSET_COOLDOWN, min: 0, max: 1, step: 0.01, description: "onset 発火後の再発火までの最小間隔（秒）。連発を防ぐ。" },
+  { id: "onsetThreshold", label: "onsetThr", kind: "number", default: DEFAULT_ONSET_THRESHOLD, min: 0, max: 0.5, step: 0.005, description: "node.common.audioFeature.onsetThreshold" },
+  { id: "onsetCooldown", label: "onsetCD", kind: "number", default: DEFAULT_ONSET_COOLDOWN, min: 0, max: 1, step: 0.01, description: "node.common.audioFeature.onsetCooldown" },
 ];
 
 /** 音声入力ノード共通の出力ポート（audio / 各バンド / onset）。section は含まない。 */
 export const AUDIO_FEATURE_OUTPUTS: PortDef[] = [
-  { id: "signal", label: "signal", type: "signal", description: "音響特徴量バンドル（解析結果）。visual ノードの signal 入力へ繋ぐ。" },
-  { id: "volume", label: "volume", type: "number", description: "全体音量（おおむね 0〜1）。" },
-  { id: "bass", label: "bass", type: "number", description: "低域成分の強さ（おおむね 0〜1）。" },
-  { id: "mid", label: "mid", type: "number", description: "中域成分の強さ（おおむね 0〜1）。" },
-  { id: "treble", label: "treble", type: "number", description: "高域成分の強さ（おおむね 0〜1）。" },
-  { id: "trigger", label: "trig", type: "trigger", description: "ビート（音の立ち上がり）検出時に発火する trigger。" },
+  { id: "signal", label: "signal", type: "signal", description: "node.common.audioFeature.signal" },
+  { id: "volume", label: "volume", type: "number", description: "node.common.audioFeature.volume" },
+  { id: "bass", label: "bass", type: "number", description: "node.common.audioFeature.bass" },
+  { id: "mid", label: "mid", type: "number", description: "node.common.audioFeature.mid" },
+  { id: "treble", label: "treble", type: "number", description: "node.common.audioFeature.treble" },
+  { id: "trigger", label: "trig", type: "trigger", description: "node.common.audioFeature.trigger" },
 ];
 
 /** ctx.param から onset しきい値/cooldown を読み出す（未設定は既定値）。 */

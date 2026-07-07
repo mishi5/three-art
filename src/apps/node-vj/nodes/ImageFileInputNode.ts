@@ -66,16 +66,16 @@ export class ImageFileInputRuntime {
 export const ImageFileInputNode: NodeTypeDef = {
   type: "ImageFileInput",
   category: "input",
-  description: "静止画ファイルを読み込んで texture を出力するノード。PointShape の image モードや任意の texture 入力に繋ぐ。",
+  description: "node.ImageFileInput.desc",
   isSink: false,
   fileInput: { accept: "image/*" },
   inputs: [],
   outputs: [
-    { id: "texture", label: "tex", type: "texture", description: "読み込んだ画像のテクスチャ（アスペクト比を入口で正規化済み）。" },
+    { id: "texture", label: "tex", type: "texture", description: "node.ImageFileInput.port.texture" },
   ],
   params: [
     { id: "assetId", label: "asset", kind: "string", default: "", noInput: true, hidden: true,
-      description: "割り当てられたアセットの id（アセットライブラリ管理・UI 非表示）。" },
+      description: "node.ImageFileInput.param.assetId" },
   ],
   createState: () => new ImageFileInputRuntime(),
   disposeState: (state: NodeState) => (state as ImageFileInputRuntime).dispose(),

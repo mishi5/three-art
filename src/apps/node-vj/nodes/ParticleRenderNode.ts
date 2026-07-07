@@ -112,20 +112,20 @@ function buildGeometry(base: THREE.PlaneGeometry, count: number): THREE.Instance
 export const ParticleRenderNode: NodeTypeDef = {
   type: "ParticleRender",
   category: "visual",
-  description: "points（位置テクスチャ）をカメラ向きのビルボード quad で描画する visual。結果を texture 出力する。",
+  description: "node.ParticleRender.desc",
   isSink: true,
   inputs: [
-    { id: "points", label: "points", type: "points", description: "描画する GPU 位置テクスチャ参照（未接続なら何も描かない）。" },
-    { id: "signal", label: "signal", type: "signal", description: "粒子サイズ・明るさを変調する音響特徴量入力（未接続なら環境の特徴量）。" },
+    { id: "points", label: "points", type: "points", description: "node.ParticleRender.port.points" },
+    { id: "signal", label: "signal", type: "signal", description: "node.ParticleRender.port.signal" },
   ],
-  outputs: [{ id: "texture", label: "tex", type: "texture", description: "描画結果のテクスチャ。" }],
+  outputs: [{ id: "texture", label: "tex", type: "texture", description: "node.ParticleRender.port.texture" }],
   params: [
-    { id: "baseSize", label: "baseSize", kind: "number", default: 4.0, min: 0.5, max: 40, step: 0.5, description: "粒子の基本サイズ。" },
-    { id: "volumeSize", label: "volumeSize", kind: "number", default: 8.0, min: 0, max: 60, step: 0.5, description: "音量に応じて粒子サイズを増す量。" },
-    { id: "bassExpansion", label: "bassExpansion", kind: "number", default: 18.0, min: 0, max: 60, step: 0.5, description: "bass に応じて粒子サイズを増す量。" },
-    { id: "hueBase", label: "hueBase", kind: "number", default: 0.6, min: 0, max: 1, step: 0.01, description: "基準色相（0〜1）。" },
-    { id: "hueSpread", label: "hueSpread", kind: "number", default: 0.4, min: 0, max: 1, step: 0.01, description: "色相の広がり幅（粒子間の色のばらつき）。" },
-    { id: "saturation", label: "saturation", kind: "number", default: 0.6, min: 0, max: 1, step: 0.01, description: "彩度（0〜1）。" },
+    { id: "baseSize", label: "baseSize", kind: "number", default: 4.0, min: 0.5, max: 40, step: 0.5, description: "node.ParticleRender.param.baseSize" },
+    { id: "volumeSize", label: "volumeSize", kind: "number", default: 8.0, min: 0, max: 60, step: 0.5, description: "node.ParticleRender.param.volumeSize" },
+    { id: "bassExpansion", label: "bassExpansion", kind: "number", default: 18.0, min: 0, max: 60, step: 0.5, description: "node.ParticleRender.param.bassExpansion" },
+    { id: "hueBase", label: "hueBase", kind: "number", default: 0.6, min: 0, max: 1, step: 0.01, description: "node.ParticleRender.param.hueBase" },
+    { id: "hueSpread", label: "hueSpread", kind: "number", default: 0.4, min: 0, max: 1, step: 0.01, description: "node.ParticleRender.param.hueSpread" },
+    { id: "saturation", label: "saturation", kind: "number", default: 0.6, min: 0, max: 1, step: 0.01, description: "node.ParticleRender.param.saturation" },
   ],
   createState(): ParticleRenderState {
     const fallbackTex = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1, THREE.RGBAFormat);

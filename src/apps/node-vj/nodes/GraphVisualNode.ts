@@ -28,21 +28,20 @@ interface GraphVisualState {
 export const GraphVisualNode: NodeTypeDef = {
   type: "GraphVisual",
   category: "visual",
-  description:
-    "number 入力の時系列を折れ線グラフ（波形）で描画して texture 出力する。右端が最新・左へ流れる。yMin/yMax で縦、windowSec で横スケール。",
+  description: "node.GraphVisual.desc",
   isSink: true,
-  inputs: [{ id: "value", label: "value", type: "number", description: "グラフに描く数値の時系列。未接続時は 0。" }],
-  outputs: [{ id: "texture", label: "tex", type: "texture", description: "波形を描いたテクスチャ。" }],
+  inputs: [{ id: "value", label: "value", type: "number", description: "node.GraphVisual.port.value" }],
+  outputs: [{ id: "texture", label: "tex", type: "texture", description: "node.GraphVisual.port.texture" }],
   params: [
-    { id: "windowSec", label: "windowSec", kind: "number", default: 4, min: 0.25, max: 30, step: 0.25, description: "横スケール（時間窓・秒）。この幅ぶんの履歴を画面幅に表示する。" },
-    { id: "yMin", label: "yMin", kind: "number", default: -1, min: -100, max: 100, step: 0.1, description: "縦スケール下端（画面下端に対応する値）。範囲外はクランプ。" },
-    { id: "yMax", label: "yMax", kind: "number", default: 1, min: -100, max: 100, step: 0.1, description: "縦スケール上端（画面上端に対応する値）。範囲外はクランプ。" },
-    { id: "lineWidth", label: "lineWidth", kind: "number", default: 2, min: 1, max: 8, step: 0.5, description: "折れ線の太さ（px）。" },
-    { id: "r", label: "line R", kind: "number", default: 0.2, min: 0, max: 1, step: 0.01, description: "線色の R（0..1）。" },
-    { id: "g", label: "line G", kind: "number", default: 1.0, min: 0, max: 1, step: 0.01, description: "線色の G（0..1）。" },
-    { id: "b", label: "line B", kind: "number", default: 0.6, min: 0, max: 1, step: 0.01, description: "線色の B（0..1）。" },
-    { id: "bgAlpha", label: "bgAlpha", kind: "number", default: 1, min: 0, max: 1, step: 0.01, description: "背景の不透明度（0=透明→下のレイヤが透ける / 1=不透明な黒）。" },
-    { id: "zeroLine", label: "zeroLine", kind: "enum", default: "on", options: ["off", "on"], description: "中央基準線（値 0 の水平線）。on で表示。" },
+    { id: "windowSec", label: "windowSec", kind: "number", default: 4, min: 0.25, max: 30, step: 0.25, description: "node.GraphVisual.param.windowSec" },
+    { id: "yMin", label: "yMin", kind: "number", default: -1, min: -100, max: 100, step: 0.1, description: "node.GraphVisual.param.yMin" },
+    { id: "yMax", label: "yMax", kind: "number", default: 1, min: -100, max: 100, step: 0.1, description: "node.GraphVisual.param.yMax" },
+    { id: "lineWidth", label: "lineWidth", kind: "number", default: 2, min: 1, max: 8, step: 0.5, description: "node.GraphVisual.param.lineWidth" },
+    { id: "r", label: "line R", kind: "number", default: 0.2, min: 0, max: 1, step: 0.01, description: "node.GraphVisual.param.r" },
+    { id: "g", label: "line G", kind: "number", default: 1.0, min: 0, max: 1, step: 0.01, description: "node.GraphVisual.param.g" },
+    { id: "b", label: "line B", kind: "number", default: 0.6, min: 0, max: 1, step: 0.01, description: "node.GraphVisual.param.b" },
+    { id: "bgAlpha", label: "bgAlpha", kind: "number", default: 1, min: 0, max: 1, step: 0.01, description: "node.GraphVisual.param.bgAlpha" },
+    { id: "zeroLine", label: "zeroLine", kind: "enum", default: "on", options: ["off", "on"], description: "node.GraphVisual.param.zeroLine" },
   ],
   createState(_env: NodeEnv): GraphVisualState {
     return {

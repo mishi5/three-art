@@ -18,13 +18,13 @@ interface AudioGainState {
 export const AudioGainNode: NodeTypeDef = {
   type: "AudioGain",
   category: "process",
-  description: "音声ゲイン。audio の音量を gain で調整する。Envelope 等の number 出力で駆動するとフェード/ダッキングになる。",
+  description: "node.AudioGain.desc",
   isSink: false,
-  inputs: [{ id: "audio", label: "audio", type: "audio", description: "音量調整する実音声信号。" }],
+  inputs: [{ id: "audio", label: "audio", type: "audio", description: "node.AudioGain.port.audio" }],
   outputs: [SIGNAL_OUTPUT],
   params: [
-    { id: "enabled", label: "enabled", kind: "enum", default: "on", options: ["on", "off"], description: "エフェクトの有効/無効。off で入力をそのまま出力（パススルー）。" },
-    { id: "gain", label: "gain", kind: "number", default: 1, min: 0, max: 2, step: 0.01, description: "音量（0=ミュート, 1=等倍, 2=増幅）。" },
+    { id: "enabled", label: "enabled", kind: "enum", default: "on", options: ["on", "off"], description: "node.AudioGain.param.enabled" },
+    { id: "gain", label: "gain", kind: "number", default: 1, min: 0, max: 2, step: 0.01, description: "node.AudioGain.param.gain" },
   ],
   createState(env: NodeEnv): AudioGainState {
     const ctx = env.audioContext;

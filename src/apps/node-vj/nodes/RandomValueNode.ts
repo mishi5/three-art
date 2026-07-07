@@ -16,13 +16,13 @@ export class RandomValueRuntime {
 export const RandomValueNode: NodeTypeDef = {
   type: "RandomValue",
   category: "generator",
-  description: "min〜max のランダム値を出力。trigger の立ち上がり、または interval 秒ごとに再ロールする。",
-  inputs: [{ id: "trigger", label: "trig", type: "trigger", description: "立ち上がりで値を再ロールする trigger（任意）。" }],
-  outputs: [{ id: "out", label: "n", type: "number", description: "現在のランダム値。" }],
+  description: "node.RandomValue.desc",
+  inputs: [{ id: "trigger", label: "trig", type: "trigger", description: "node.RandomValue.port.trigger" }],
+  outputs: [{ id: "out", label: "n", type: "number", description: "node.RandomValue.port.out" }],
   params: [
-    { id: "min", label: "min", kind: "number", default: 0, step: 0.1, description: "ランダム値の下限。" },
-    { id: "max", label: "max", kind: "number", default: 1, step: 0.1, description: "ランダム値の上限。" },
-    { id: "interval", label: "interval", kind: "number", default: 0, min: 0, max: 10, step: 0.01, description: "自動再ロール間隔（秒）。0 で自動なし（trigger のみ）。" },
+    { id: "min", label: "min", kind: "number", default: 0, step: 0.1, description: "node.RandomValue.param.min" },
+    { id: "max", label: "max", kind: "number", default: 1, step: 0.1, description: "node.RandomValue.param.max" },
+    { id: "interval", label: "interval", kind: "number", default: 0, min: 0, max: 10, step: 0.01, description: "node.RandomValue.param.interval" },
   ],
   createState: () => new RandomValueRuntime(),
   evaluate: (ctx) => {

@@ -63,18 +63,18 @@ export class SceneInputRuntime {
 export const SceneInputNode: NodeTypeDef = {
   type: "SceneInput",
   category: "input",
-  description: "別のシーンの最終映像 texture・音声 audio・音響特徴量(signal 等)を取り込むノード。シーン選択行で参照先を選ぶ（循環は禁止）。",
+  description: "node.SceneInput.desc",
   isSink: false,
   sceneInput: true,
   inputs: [],
   outputs: [
-    { id: "texture", label: "tex", type: "texture", description: "参照先シーンの最終映像テクスチャ。" },
+    { id: "texture", label: "tex", type: "texture", description: "node.SceneInput.port.texture" },
     ...AUDIO_FEATURE_OUTPUTS, // #240: 参照先シーンの集約音声から解析した特徴量。
     SIGNAL_OUTPUT, // #172: 参照先シーンの音声（AudioOutput の出力）。親の AudioMix/AudioOutput へ繋ぐ。
   ],
   params: [
     { id: "sceneId", label: "scene", kind: "string", default: "", hidden: true,
-      description: "参照先シーンの id（シーン選択行で設定・UI 非表示）。" },
+      description: "node.SceneInput.param.sceneId" },
     ...ONSET_PARAMS,
   ],
   createState: (env: NodeEnv) => new SceneInputRuntime(env.audioContext),

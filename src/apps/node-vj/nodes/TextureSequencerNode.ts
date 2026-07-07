@@ -48,19 +48,19 @@ export function selectSeqPort(step: number, connectedPorts: readonly number[]): 
 export const TextureSequencerNode: NodeTypeDef = {
   type: "TextureSequencer",
   category: "process",
-  description: "複数の texture 入力を trigger の発火ごとに 1 つずつ順送りで出力する（末尾でループ）。onset/拍に合わせて映像ネタを切り替える用途。接続したスロットだけを定義順に巡回する。",
+  description: "node.TextureSequencer.desc",
   inputs: [
     ...SEQ_INPUTS.map((id, i) => ({
       id, label: `t${i + 1}`, type: "texture" as const,
-      description: `シーケンス入力 ${i + 1}。接続したスロットだけを順番に巡回する。`,
+      description: `node.TextureSequencer.port.tex${i + 1}`,
     })),
-    { id: "trigger", label: "trig", type: "trigger", description: "立ち上がりエッジで次の texture へ進める。" },
-    { id: "reset", label: "reset", type: "trigger", description: "立ち上がりエッジで先頭（最初の接続スロット）へ戻す。" },
+    { id: "trigger", label: "trig", type: "trigger", description: "node.TextureSequencer.port.trigger" },
+    { id: "reset", label: "reset", type: "trigger", description: "node.TextureSequencer.port.reset" },
   ],
-  outputs: [{ id: "texture", label: "tex", type: "texture", description: "現在選択中の入力 texture（接続なしは無出力）。" }],
+  outputs: [{ id: "texture", label: "tex", type: "texture", description: "node.TextureSequencer.port.texture" }],
   params: [
     { id: "random", label: "random", kind: "enum", default: "off", options: ["off", "on"],
-      description: "ON で trigger ごとに接続中の texture からランダムに選ぶ（OFF は順送り）。" },
+      description: "node.TextureSequencer.param.random" },
   ],
   createState: () => new TextureSequencerRuntime(),
   evaluate: (ctx) => {

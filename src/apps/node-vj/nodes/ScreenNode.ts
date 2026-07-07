@@ -9,9 +9,9 @@ import { SCREEN_TEXTURE_KEY } from "../graph/texture-screen";
 export const ScreenNode: NodeTypeDef = {
   type: "Screen",
   category: "output",
-  description: "入力 texture を最終出力（画面）に表示する終端ノード。グラフの出口に置く。",
+  description: "node.Screen.desc",
   isSink: true,
-  inputs: [{ id: "texture", label: "tex", type: "texture", description: "画面に表示するテクスチャ。" }],
+  inputs: [{ id: "texture", label: "tex", type: "texture", description: "node.Screen.port.texture" }],
   outputs: [],
   params: [],
   evaluate(ctx) {

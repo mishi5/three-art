@@ -19,12 +19,12 @@ interface AudioDelayState {
 export const AudioDelayNode: NodeTypeDef = {
   type: "AudioDelay",
   category: "process",
-  description: "音声(audio)を delayMs だけ遅らせて出力する。映像の遅れに合わせて音を遅らせ、AudioOutput へ繋ぐと A/V が揃う。",
+  description: "node.AudioDelay.desc",
   isSink: false,
-  inputs: [{ id: "audio", label: "audio", type: "audio", description: "遅延させる実音声信号。" }],
+  inputs: [{ id: "audio", label: "audio", type: "audio", description: "node.AudioDelay.port.audio" }],
   outputs: [SIGNAL_OUTPUT],
   params: [
-    { id: "delayMs", label: "delayMs", kind: "number", default: 0, min: 0, max: 2000, step: 1, description: "遅延時間（ミリ秒）。映像の遅れに合わせて耳と目で調整する。" },
+    { id: "delayMs", label: "delayMs", kind: "number", default: 0, min: 0, max: 2000, step: 1, description: "node.AudioDelay.param.delayMs" },
   ],
   createState(env: NodeEnv): AudioDelayState {
     const ctx = env.audioContext;

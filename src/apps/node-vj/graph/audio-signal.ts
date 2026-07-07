@@ -13,7 +13,7 @@ export const SIGNAL_OUTPUT: PortDef = {
   id: "audio",
   label: "audio",
   type: "audio",
-  description: "ルーティング用の実音声信号。Audio Mix / Audio 出力ノードへ繋ぐと発音/合成できる。",
+  description: "node.common.audioSignal.audio",
 };
 
 /** AudioNode（or null）から実音声信号の出力オブジェクト（キー "audio"）を組み立てる。null は未接続。 */

@@ -3,9 +3,12 @@
 // - 既定言語は ja（既存ユーザの見た目を変えない）。en 未翻訳は ja へフォールバック。
 // - 未知キーはキー名をそのまま返す（表示が壊れない）。
 // - 現在言語はモジュール内状態。main.ts 起動時（UI 構築前）に prefs から setLang する。
-// - スコープ外: ノード定義の description / ポート説明 / param ラベル（別 Issue で段階対応）。
+// - #254: ノード定義文言（description 等）は i18n-nodes.ts の NODE_CATALOG に分離し、
+//   ここで merge して t() / resolveNodeText() から引く（i18n-nodes は型のみ逆参照＝循環なし）。
 // 注意: モジュールロード時に評価される定数へ t() の結果を焼き込まないこと
 // （setLang より先に評価され en にならない）。カタログキーを保持し、使用時に t() で解決する。
+
+import { NODE_CATALOG } from "./i18n-nodes";
 
 /** 対応言語。 */
 export type Lang = "ja" | "en";
@@ -261,8 +264,11 @@ export const CATALOG = {
   "audio.device.fallback": { ja: "音声出力 {n}", en: "Audio output {n}" },
 } as const satisfies Catalog;
 
-/** カタログのキー型（t のタイプミスをコンパイル時に検出する）。 */
-export type MsgKey = keyof typeof CATALOG;
+/** UI クローム＋ノード文言を合成した実効カタログ（#254）。 */
+const MERGED_CATALOG: Catalog = { ...CATALOG, ...NODE_CATALOG };
+
+/** カタログのキー型（t のタイプミスをコンパイル時に検出する）。ノード文言キーも含む（#254）。 */
+export type MsgKey = keyof typeof CATALOG | keyof typeof NODE_CATALOG;
 
 /** 現在の UI 言語（モジュール内状態）。既定 ja。 */
 let currentLang: Lang = "ja";
@@ -303,5 +309,14 @@ export function translate(
 
 /** 現在言語で UI 文言を引く。 */
 export function t(key: MsgKey, vars?: Record<string, string | number>): string {
-  return translate(CATALOG, currentLang, key, vars);
+  return translate(MERGED_CATALOG, currentLang, key, vars);
+}
+
+/**
+ * #254: ノード定義文言（description 等のカタログキー）を現在言語で解決する。
+ * カタログに無い文字列はそのまま返す（未キー化の残存文言や動的文字列でも表示が壊れない）。
+ * 表示点（tooltip / node-add-panel / getNodeCatalog）はすべてこれを通す。
+ */
+export function resolveNodeText(text: string): string {
+  return translate(MERGED_CATALOG, currentLang, text);
 }
