@@ -65,7 +65,7 @@ export class ImageFileInputRuntime {
 /** 静止画ファイル入力ノード（#121）。画像ファイルを読み込んで texture を出力する。 */
 export const ImageFileInputNode: NodeTypeDef = {
   type: "ImageFileInput",
-  category: "input",
+  category: "source",
   description: "node.ImageFileInput.desc",
   isSink: false,
   fileInput: { accept: "image/*" },

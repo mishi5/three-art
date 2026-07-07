@@ -10,27 +10,27 @@ import { BAR_W, TOP, PANEL_W } from "./side-dock";
 describe("buildNodeAddSections", () => {
   const defs = [
     { type: "Screen", category: "output", description: "最終出力。" },
-    { type: "Camera", category: "input", description: "カメラ映像入力。" },
-    { type: "Number", category: "generator" }, // description なし
-    { type: "Time", category: "generator", description: "経過秒。" },
+    { type: "Camera", category: "source", description: "カメラ映像入力。" },
+    { type: "Sine", category: "control" }, // description なし
+    { type: "Envelope", category: "control", description: "音量エンベロープ。" },
   ];
 
-  test("groupNodesByCategory と同じカテゴリ順（input→generator→…→output）に並ぶ", () => {
+  test("groupNodesByCategory と同じカテゴリ順（source→control→…→output）に並ぶ", () => {
     const sections = buildNodeAddSections(defs);
-    expect(sections.map((s) => s.category)).toEqual(["input", "generator", "output"]);
+    expect(sections.map((s) => s.category)).toEqual(["source", "control", "output"]);
   });
 
   test("各項目に type と description を引き回す（レジストリ順を維持）", () => {
     const sections = buildNodeAddSections(defs);
-    const gen = sections.find((s) => s.category === "generator")!;
-    expect(gen.items.map((i) => i.type)).toEqual(["Number", "Time"]);
-    expect(gen.items[1]!.description).toBe("経過秒。");
+    const ctl = sections.find((s) => s.category === "control")!;
+    expect(ctl.items.map((i) => i.type)).toEqual(["Sine", "Envelope"]);
+    expect(ctl.items[1]!.description).toBe("音量エンベロープ。");
   });
 
   test("description が無い型は空文字にする", () => {
     const sections = buildNodeAddSections(defs);
-    const gen = sections.find((s) => s.category === "generator")!;
-    expect(gen.items[0]!.description).toBe("");
+    const ctl = sections.find((s) => s.category === "control")!;
+    expect(ctl.items[0]!.description).toBe("");
   });
 
   test("空定義なら空配列", () => {
@@ -81,8 +81,8 @@ describe("nodeAddPanelDef (DOM)", () => {
   registerHappyDom();
 
   const defs = [
-    { type: "Camera", category: "input", description: "カメラ映像入力。" },
-    { type: "Number", category: "generator" },
+    { type: "Camera", category: "source", description: "カメラ映像入力。" },
+    { type: "Sine", category: "control" },
     { type: "Screen", category: "output", description: "最終出力。" },
   ];
 
@@ -103,9 +103,9 @@ describe("nodeAddPanelDef (DOM)", () => {
   test("カテゴリごとのセクション見出しと項目が registry から生成される", () => {
     const host = mountPanel(() => {});
     const headings = [...host.querySelectorAll("[data-role=section]")].map((el) => el.textContent);
-    expect(headings).toEqual(["input", "generator", "output"]);
+    expect(headings).toEqual(["source", "control", "output"]);
     const items = [...host.querySelectorAll("[data-node-type]")].map((el) => el.getAttribute("data-node-type"));
-    expect(items).toEqual(["Camera", "Number", "Screen"]);
+    expect(items).toEqual(["Camera", "Sine", "Screen"]);
   });
 
   test("項目に説明（小さな説明文 + title ツールチップ）が付く", () => {

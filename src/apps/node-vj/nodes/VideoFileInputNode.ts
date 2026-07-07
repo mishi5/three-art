@@ -196,7 +196,7 @@ export class VideoFileInputRuntime implements PlaybackControl {
 /** 動画ファイル入力ノード（#66/#116）。texture と（audio=on で）音響特徴量を出力する。 */
 export const VideoFileInputNode: NodeTypeDef = {
   type: "VideoFileInput",
-  category: "input",
+  category: "source",
   description: "node.VideoFileInput.desc",
   isSink: false,
   fileInput: { accept: "video/*" },

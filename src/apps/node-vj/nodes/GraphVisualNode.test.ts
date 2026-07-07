@@ -16,7 +16,7 @@ function ctxNoState(over: Partial<EvalContext> = {}): EvalContext {
 describe("GraphVisualNode (#217)", () => {
   test("visual カテゴリ・sink・value(number) 入力・texture 出力", () => {
     expect(GraphVisualNode.type).toBe("GraphVisual");
-    expect(GraphVisualNode.category).toBe("visual");
+    expect(GraphVisualNode.category).toBe("render");
     expect(GraphVisualNode.isSink).toBe(true);
     expect(GraphVisualNode.inputs.map((p) => p.id)).toEqual(["value"]);
     expect(GraphVisualNode.inputs[0]?.type).toBe("number");

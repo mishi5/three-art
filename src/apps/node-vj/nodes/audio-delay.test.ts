@@ -11,7 +11,7 @@ const noCtx = (): EvalContext => ({
 describe("AudioDelayNode (#135)", () => {
   test("process・audio in → audio out", () => {
     expect(AudioDelayNode.type).toBe("AudioDelay");
-    expect(AudioDelayNode.category).toBe("process");
+    expect(AudioDelayNode.category).toBe("audio");
     expect(AudioDelayNode.inputs.map((p) => `${p.id}:${p.type}`)).toEqual(["audio:audio"]);
     expect(AudioDelayNode.outputs.map((p) => `${p.id}:${p.type}`)).toEqual(["audio:audio"]);
   });

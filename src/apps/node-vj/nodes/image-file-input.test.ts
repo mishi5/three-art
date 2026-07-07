@@ -16,7 +16,7 @@ function ctxNoState(over: Partial<EvalContext> = {}): EvalContext {
 describe("ImageFileInputNode (#121)", () => {
   test("input カテゴリで texture を出力し、入力ポートは持たない", () => {
     expect(ImageFileInputNode.type).toBe("ImageFileInput");
-    expect(ImageFileInputNode.category).toBe("input");
+    expect(ImageFileInputNode.category).toBe("source");
     expect(ImageFileInputNode.inputs).toEqual([]);
     expect(ImageFileInputNode.outputs.map((p) => p.id)).toEqual(["texture"]);
     expect(ImageFileInputNode.outputs.find((p) => p.id === "texture")?.type).toBe("texture");

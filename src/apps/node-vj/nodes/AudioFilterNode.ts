@@ -18,7 +18,7 @@ interface AudioFilterState {
 /** 音声フィルタノード（#239）。audio を BiquadFilter で加工して出力する。 */
 export const AudioFilterNode: NodeTypeDef = {
   type: "AudioFilter",
-  category: "process",
+  category: "audio",
   description: "node.AudioFilter.desc",
   isSink: false,
   inputs: [{ id: "audio", label: "audio", type: "audio", description: "node.AudioFilter.port.audio" }],

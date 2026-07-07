@@ -15,7 +15,7 @@ export class RandomValueRuntime {
  */
 export const RandomValueNode: NodeTypeDef = {
   type: "RandomValue",
-  category: "generator",
+  category: "control",
   description: "node.RandomValue.desc",
   inputs: [{ id: "trigger", label: "trig", type: "trigger", description: "node.RandomValue.port.trigger" }],
   outputs: [{ id: "out", label: "n", type: "number", description: "node.RandomValue.port.out" }],

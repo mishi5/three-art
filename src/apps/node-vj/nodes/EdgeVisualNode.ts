@@ -38,7 +38,7 @@ const EMPTY_CENTER = new Float32Array(3);
 /** core EdgeOverlay（アンカー間エッジ描画）を texture 出力する visual ノード。 */
 export const EdgeVisualNode: NodeTypeDef = {
   type: "EdgeVisual",
-  category: "visual",
+  category: "render",
   description: "node.EdgeVisual.desc",
   isSink: true,
   inputs: [

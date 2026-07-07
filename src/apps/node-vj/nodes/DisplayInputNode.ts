@@ -135,7 +135,7 @@ export class DisplayInputRuntime {
  */
 export const DisplayInputNode: NodeTypeDef = {
   type: "DisplayInput",
-  category: "input",
+  category: "source",
   description: "node.DisplayInput.desc",
   isSink: false,
   inputs: [],

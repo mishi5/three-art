@@ -1,9 +1,10 @@
 // #103: ノード追加メニューのカテゴリ分け（純関数）。
 // ツールバー整理と右クリック追加メニューの両方で共有する。
+import { NODE_CATEGORIES } from "../graph/node-type";
 
 /** 表示順のカテゴリ。これ以外（未設定含む）は末尾の "other" にまとめる。
- *  generator = 値/時間/形状の生成元（Number/Time/PointShape）。input は外部入力（Camera/Mic 等）専用。 */
-export const CATEGORY_ORDER = ["input", "generator", "process", "visual", "effect", "output"] as const;
+ *  #227: 定義と並び順は graph/node-type.ts の NODE_CATEGORIES（単一情報源）。 */
+export const CATEGORY_ORDER = NODE_CATEGORIES;
 
 export interface NodeMenuGroup {
   category: string;

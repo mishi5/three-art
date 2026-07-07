@@ -20,7 +20,7 @@ describe("BlendNode", () => {
     const mode = BlendNode.params.find((p) => p.id === "mode");
     expect(mode?.options).toEqual([...BLEND_MODES]);
     expect(BlendNode.params.find((p) => p.id === "mix")?.kind).toBe("number");
-    expect(BlendNode.category).toBe("visual"); // 終端で自動表示・👁 対象
+    expect(BlendNode.category).toBe("composite"); // #227: 合成系。終端で自動表示・👁 対象
   });
 
   test("state/env 無しでは no-op", () => {

@@ -28,7 +28,7 @@ describe("envelopeValue (#110)", () => {
 describe("EnvelopeNode (#110)", () => {
   test("trigger 入力・number 出力の process ノード", () => {
     expect(EnvelopeNode.type).toBe("Envelope");
-    expect(EnvelopeNode.category).toBe("process");
+    expect(EnvelopeNode.category).toBe("control");
     expect(EnvelopeNode.inputs.map((p) => `${p.id}:${p.type}`)).toEqual(["trigger:trigger"]);
     expect(EnvelopeNode.outputs.map((p) => `${p.id}:${p.type}`)).toEqual(["out:number"]);
     const ids = EnvelopeNode.params.map((p) => p.id);

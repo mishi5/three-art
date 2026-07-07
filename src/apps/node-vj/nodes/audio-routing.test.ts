@@ -64,7 +64,7 @@ describe("AudioOutputNode (#128 sink)", () => {
 describe("AudioMixNode (#127)", () => {
   test("type/category", () => {
     expect(AudioMixNode.type).toBe("AudioMix");
-    expect(AudioMixNode.category).toBe("process");
+    expect(AudioMixNode.category).toBe("audio");
   });
 
   test("複数 audio 入力（in1..in4, 実音声信号）", () => {

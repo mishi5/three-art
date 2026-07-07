@@ -62,7 +62,7 @@ export class SceneInputRuntime {
  */
 export const SceneInputNode: NodeTypeDef = {
   type: "SceneInput",
-  category: "input",
+  category: "source",
   description: "node.SceneInput.desc",
   isSink: false,
   sceneInput: true,

@@ -52,65 +52,68 @@ import { AudioOutputNode } from "./AudioOutputNode";
 import { ScreenNode } from "./ScreenNode";
 import { SceneInputNode } from "./SceneInputNode";
 
-/** 既定ノードを登録したレジストリを返す。 */
+/** 既定ノードを登録したレジストリを返す。
+ *  #227: 登録順はメニュー内の表示順（カテゴリ内）になるため、NODE_CATEGORIES の並びで揃える。 */
 export function createDefaultRegistry(): NodeRegistry {
   const r = new NodeRegistry();
-  // input
-  r.register(NumberNode);
-  r.register(TimeNode);
-  r.register(PulseNode);
-  r.register(TapSequencerNode);
-  r.register(RandomValueNode);
+  // source（外部入力・値/映像の発生源）
   r.register(CameraInputNode);
-  r.register(PoseFeaturesNode);
-  r.register(VideoFileInputNode);
   r.register(MicInputNode);
   r.register(DisplayInputNode);
+  r.register(VideoFileInputNode);
   r.register(AudioFileInputNode);
-  r.register(MidiPadNode);
   r.register(ImageFileInputNode);
-  r.register(PointShapeNode);
   r.register(SceneInputNode);
-  // process
-  r.register(MultiplyNode);
-  r.register(AddNode);
+  r.register(MidiPadNode);
+  r.register(TextureGeneratorNode);
+  r.register(NumberNode);
+  r.register(TimeNode);
+  // control（数値の生成・変換・制御）
   r.register(SineNode);
   r.register(NoiseNode);
+  r.register(RandomValueNode);
+  r.register(PulseNode);
+  r.register(TapSequencerNode);
+  r.register(FlipFlopNode);
+  r.register(EnvelopeNode);
+  r.register(AddNode);
+  r.register(MultiplyNode);
   r.register(RemapNode);
   r.register(SmoothNode);
-  r.register(PointTransformNode);
-  r.register(EnvelopeNode);
-  r.register(FlipFlopNode);
-  r.register(TextureSequencerNode);
+  r.register(PoseFeaturesNode);
+  // audio（音声の加工・ルーティング）
   r.register(AudioMixNode);
   r.register(AudioDelayNode);
   r.register(AudioFilterNode);
   r.register(AudioGainNode);
   r.register(AudioReverbNode);
-  // visual
-  r.register(TextureGeneratorNode);
-  r.register(PointCloudVisualNode);
+  // render（点群・形状の生成と描画）
+  r.register(PointShapeNode);
+  r.register(PointTransformNode);
   r.register(ParticleRenderNode);
+  r.register(PointCloudVisualNode);
+  r.register(EdgeVisualNode);
   r.register(RainVisualNode);
+  r.register(GraphVisualNode);
+  // composite（テクスチャの合成・切替）
   r.register(BlendNode);
   r.register(KeyNode);
-  r.register(EdgeVisualNode);
-  r.register(GraphVisualNode);
+  r.register(TextureSequencerNode);
   // effect（texture→texture）
-  r.register(BlurNode);
   r.register(BloomNode);
-  r.register(RgbShiftNode);
-  r.register(PixelateNode);
+  r.register(BlurNode);
   r.register(ColorGradeNode);
   r.register(CrtNode);
-  r.register(KaleidoscopeNode);
-  r.register(FractalNode);
   r.register(DistortNode);
   r.register(FeedbackNode);
   r.register(FlashNode);
+  r.register(FractalNode);
+  r.register(KaleidoscopeNode);
+  r.register(PixelateNode);
+  r.register(RgbShiftNode);
   r.register(TextureTransformNode);
-  // output
-  r.register(AudioOutputNode);
+  // output（最終出力）
   r.register(ScreenNode);
+  r.register(AudioOutputNode);
   return r;
 }

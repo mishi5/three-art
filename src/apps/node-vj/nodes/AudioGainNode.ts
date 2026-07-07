@@ -17,7 +17,7 @@ interface AudioGainState {
 /** 音声ゲインノード（#239）。audio の音量を gain（0〜2）で調整して出力する。 */
 export const AudioGainNode: NodeTypeDef = {
   type: "AudioGain",
-  category: "process",
+  category: "audio",
   description: "node.AudioGain.desc",
   isSink: false,
   inputs: [{ id: "audio", label: "audio", type: "audio", description: "node.AudioGain.port.audio" }],

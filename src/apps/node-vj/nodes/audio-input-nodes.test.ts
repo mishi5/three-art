@@ -22,7 +22,7 @@ const FEATURE_IDS = ["signal", "volume", "bass", "mid", "treble", "trigger"];
 describe("MicInputNode (#100)", () => {
   test("ポート定義: 音響特徴量のみ（section 無し）・onset param（#109）", () => {
     expect(MicInputNode.type).toBe("MicInput");
-    expect(MicInputNode.category).toBe("input");
+    expect(MicInputNode.category).toBe("source");
     expect(MicInputNode.outputs.map((p) => p.id)).toEqual([...FEATURE_IDS, "audio"]);
     expect(MicInputNode.outputs.find((p) => p.id === "audio")?.type).toBe("audio");
     expect(MicInputNode.params.map((p) => p.id)).toEqual(["onsetThreshold", "onsetCooldown"]);

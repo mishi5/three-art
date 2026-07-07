@@ -39,7 +39,7 @@ describe("randomRange (#155)", () => {
 describe("PulseNode (#155)", () => {
   test("generator・入力なし・trigger 出力", () => {
     expect(PulseNode.type).toBe("Pulse");
-    expect(PulseNode.category).toBe("generator");
+    expect(PulseNode.category).toBe("control");
     expect(PulseNode.inputs).toEqual([]);
     expect(PulseNode.outputs.map((p) => p.id)).toEqual(["trigger"]);
     expect(PulseNode.outputs[0]?.type).toBe("trigger");
@@ -58,7 +58,7 @@ describe("PulseNode (#155)", () => {
 describe("RandomValueNode (#155)", () => {
   test("generator・trigger 入力・number 出力", () => {
     expect(RandomValueNode.type).toBe("RandomValue");
-    expect(RandomValueNode.category).toBe("generator");
+    expect(RandomValueNode.category).toBe("control");
     expect(RandomValueNode.inputs.find((p) => p.id === "trigger")?.type).toBe("trigger");
     expect(RandomValueNode.outputs.map((p) => p.id)).toEqual(["out"]);
     const ids = RandomValueNode.params.map((p) => p.id);

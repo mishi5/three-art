@@ -18,7 +18,7 @@ function ctxAt(timeSec: number, state: TapSequencerRuntime | undefined): EvalCon
 describe("#204 TapSequencerNode 定義", () => {
   test("generator カテゴリ・tapSequencer フラグ・trigger 出力のみ", () => {
     expect(TapSequencerNode.type).toBe("TapSequencer");
-    expect(TapSequencerNode.category).toBe("generator");
+    expect(TapSequencerNode.category).toBe("control");
     expect(TapSequencerNode.tapSequencer).toBe(true);
     expect(TapSequencerNode.inputs).toEqual([]);
     expect(TapSequencerNode.outputs.map((o) => o.id)).toEqual(["trigger"]);

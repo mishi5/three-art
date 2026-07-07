@@ -36,6 +36,22 @@ export interface NodeEnv {
 /** ノードのフレーム間永続状態（visual モジュールのインスタンス等）。 */
 export type NodeState = unknown;
 
+/** #227: 役割ベースのノードカテゴリ一覧（表示順もこの並び）。
+ *  category はシリアライズされないため、再編しても既存シーンのマイグレーションは不要。
+ *  - source: 外部入力・値/映像の発生源（Camera/Mic/Number/Time/TextureGenerator 等）
+ *  - control: 数値の生成・変換・制御（Sine/Envelope/Add/PoseFeatures 等）
+ *  - audio: 音声の加工・ルーティング（AudioMix/AudioFilter 等）
+ *  - render: 点群・形状の生成と描画（PointShape/ParticleRender/EdgeVisual 等）
+ *  - composite: テクスチャの合成・切替（Blend/Key/TextureSequencer）
+ *  - effect: texture→texture の映像エフェクト（Bloom/Blur 等）
+ *  - output: 最終出力（Screen/AudioOutput） */
+export const NODE_CATEGORIES = [
+  "source", "control", "audio", "render", "composite", "effect", "output",
+] as const;
+
+/** ノードカテゴリ（NODE_CATEGORIES のいずれか）。 */
+export type NodeCategory = (typeof NODE_CATEGORIES)[number];
+
 export interface PortDef {
   id: string;
   label: string;
@@ -81,7 +97,7 @@ export interface EvalContext {
 
 export interface NodeTypeDef {
   type: string;
-  category?: string;
+  category?: NodeCategory;
   /** #114: マウスオーバー時に出すノード説明（任意）。 */
   description?: string;
   inputs: PortDef[];

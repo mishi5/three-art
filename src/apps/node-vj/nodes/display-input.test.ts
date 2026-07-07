@@ -15,7 +15,7 @@ const FEATURE_IDS = ["signal", "volume", "bass", "mid", "treble", "trigger"];
 describe("DisplayInputNode (#140 AV 化)", () => {
   test("type/category", () => {
     expect(DisplayInputNode.type).toBe("DisplayInput");
-    expect(DisplayInputNode.category).toBe("input");
+    expect(DisplayInputNode.category).toBe("source");
   });
 
   test("出力: texture + 音響特徴量 + audio(実音声)", () => {

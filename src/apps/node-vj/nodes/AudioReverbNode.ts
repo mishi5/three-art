@@ -40,7 +40,7 @@ interface AudioReverbState {
 /** 音声リバーブノード（#239）。生成 IR の ConvolverNode で残響を付け、dry/wet 独立ゲインで調整する。 */
 export const AudioReverbNode: NodeTypeDef = {
   type: "AudioReverb",
-  category: "process",
+  category: "audio",
   description: "node.AudioReverb.desc",
   isSink: false,
   inputs: [{ id: "audio", label: "audio", type: "audio", description: "node.AudioReverb.port.audio" }],

@@ -39,7 +39,7 @@ describe("composeTransformElements (#102)", () => {
 describe("PointTransformNode (#102)", () => {
   test("points→points の変換ノード", () => {
     expect(PointTransformNode.type).toBe("PointTransform");
-    expect(PointTransformNode.category).toBe("process");
+    expect(PointTransformNode.category).toBe("render");
     expect(PointTransformNode.inputs.map((p) => `${p.id}:${p.type}`)).toEqual(["points:points"]);
     expect(PointTransformNode.outputs.map((p) => `${p.id}:${p.type}`)).toEqual(["points:points"]);
   });

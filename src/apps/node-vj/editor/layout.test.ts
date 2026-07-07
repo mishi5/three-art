@@ -7,8 +7,9 @@ import {
   padExpandButtonRect, padStopButtonRect,
   PAD_MARGIN_X, PAD_MARGIN_TOP,
   hasTapRows, tapControlRowRect, tapStatusRowRect, tapControlLayout, tapStatusLabel,
+  CATEGORY_COLORS,
 } from "./layout";
-import type { NodeTypeDef } from "../graph/node-type";
+import { NODE_CATEGORIES, type NodeTypeDef } from "../graph/node-type";
 import type { NodeInstance } from "../graph/graph-doc";
 
 const def: NodeTypeDef = {
@@ -86,7 +87,7 @@ describe("editor layout", () => {
 describe("#205 padGrid layout", () => {
   // 4×4 グリッド・出力 audio・volume param のみ可視（padAssets は hidden）。
   const padDef: NodeTypeDef = {
-    type: "MidiPad", category: "input",
+    type: "MidiPad", category: "source",
     inputs: [], outputs: [{ id: "audio", label: "audio", type: "audio" }],
     params: [
       { id: "volume", label: "volume", kind: "number", default: 1 },
@@ -166,7 +167,7 @@ describe("#205 padGrid layout", () => {
 describe("#204 TapSequencer layout", () => {
   // 入力なし・trigger 出力 1・params なし・tapSequencer フラグ。
   const tapDef: NodeTypeDef = {
-    type: "TapSequencer", category: "generator",
+    type: "TapSequencer", category: "control",
     inputs: [], outputs: [{ id: "trigger", label: "trig", type: "trigger" }],
     params: [], tapSequencer: true, evaluate: () => ({}),
   };
@@ -211,5 +212,13 @@ describe("#204 TapSequencer layout", () => {
       .toBe("録音中 3打 1.2s");
     expect(tapStatusLabel({ phase: "playing", tapCount: 4, loopLenSec: 2.5, playPosSec: 0.78, recordElapsedSec: 0 }))
       .toBe("4打 / 2.5s ループ ▶0.8s");
+  });
+});
+
+describe("#227 CATEGORY_COLORS", () => {
+  test("7 カテゴリ（NODE_CATEGORIES）すべてに色が定義されている", () => {
+    for (const cat of NODE_CATEGORIES) {
+      expect(CATEGORY_COLORS[cat]).toMatch(/^#[0-9a-f]{6}$/i);
+    }
   });
 });

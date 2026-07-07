@@ -57,7 +57,7 @@ describe("#202 selectSeqPort（純関数）", () => {
 describe("#202 TextureSequencerNode 定義", () => {
   test("texture 入力 N 本＋trigger/reset・texture 出力・process", () => {
     expect(TextureSequencerNode.type).toBe("TextureSequencer");
-    expect(TextureSequencerNode.category).toBe("process");
+    expect(TextureSequencerNode.category).toBe("composite");
     expect(SEQ_INPUTS.length).toBe(SEQ_TEX_COUNT);
     const inIds = TextureSequencerNode.inputs.map((p) => p.id);
     expect(inIds).toEqual([...SEQ_INPUTS, "trigger", "reset"]);

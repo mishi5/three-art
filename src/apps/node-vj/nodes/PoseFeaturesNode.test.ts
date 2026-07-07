@@ -49,7 +49,7 @@ const run = (ctx: EvalContext): Out => PoseFeaturesNode.evaluate(ctx) as Out;
 describe("PoseFeaturesNode (#185) メタ", () => {
   test("input=pose / 出力3本 / params", () => {
     expect(PoseFeaturesNode.type).toBe("PoseFeatures");
-    expect(PoseFeaturesNode.category).toBe("input");
+    expect(PoseFeaturesNode.category).toBe("control");
     expect(PoseFeaturesNode.inputs.map((p) => `${p.id}:${p.type}`)).toEqual(["pose:pose"]);
     expect(PoseFeaturesNode.outputs.map((p) => `${p.id}:${p.type}`)).toEqual([
       "handHeightL:number", "handHeightR:number", "motion:number",

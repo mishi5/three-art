@@ -22,7 +22,7 @@ export class PoseFeaturesRuntime {
  */
 export const PoseFeaturesNode: NodeTypeDef = {
   type: "PoseFeatures",
-  category: "input",
+  category: "control",
   description: "node.PoseFeatures.desc",
   inputs: [
     { id: "pose", label: "pose", type: "pose", description: "node.PoseFeatures.port.pose" },

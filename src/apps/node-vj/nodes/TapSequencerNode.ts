@@ -135,7 +135,7 @@ export class TapSequencerRuntime {
 /** #204: スペースキー手打ちのタイミング列を記録し、ループ再生で trigger を発火するノード。 */
 export const TapSequencerNode: NodeTypeDef = {
   type: "TapSequencer",
-  category: "generator",
+  category: "control",
   description: "node.TapSequencer.desc",
   tapSequencer: true,
   inputs: [],

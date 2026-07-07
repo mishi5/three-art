@@ -27,7 +27,7 @@ interface GraphVisualState {
  */
 export const GraphVisualNode: NodeTypeDef = {
   type: "GraphVisual",
-  category: "visual",
+  category: "render",
   description: "node.GraphVisual.desc",
   isSink: true,
   inputs: [{ id: "value", label: "value", type: "number", description: "node.GraphVisual.port.value" }],

@@ -10,7 +10,7 @@ export class FlipFlopRuntime {
 /** trigger の発火（立ち上がりエッジ）ごとに 0↔1 を反転する process ノード（#111）。 */
 export const FlipFlopNode: NodeTypeDef = {
   type: "FlipFlop",
-  category: "process",
+  category: "control",
   description: "node.FlipFlop.desc",
   inputs: [{ id: "trigger", label: "trig", type: "trigger", description: "node.FlipFlop.port.trigger" }],
   outputs: [{ id: "out", label: "out", type: "number", description: "node.FlipFlop.port.out" }],

@@ -32,7 +32,7 @@ interface AudioMixState {
 /** Audio Mix ノード（#127）。各入力レベルを調整して合成し、audio + 音響特徴量を出力。 */
 export const AudioMixNode: NodeTypeDef = {
   type: "AudioMix",
-  category: "process",
+  category: "audio",
   description: "node.AudioMix.desc",
   isSink: false,
   inputs: MIX_INPUTS.map((id, i) => ({

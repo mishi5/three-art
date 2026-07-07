@@ -16,7 +16,7 @@ function ctxNoState(over: Partial<EvalContext> = {}): EvalContext {
 describe("TextureGeneratorNode (#153)", () => {
   test("visual カテゴリ・入力なし・texture を出力", () => {
     expect(TextureGeneratorNode.type).toBe("TextureGenerator");
-    expect(TextureGeneratorNode.category).toBe("visual");
+    expect(TextureGeneratorNode.category).toBe("source");
     expect(TextureGeneratorNode.inputs).toEqual([]);
     expect(TextureGeneratorNode.outputs.map((p) => p.id)).toEqual(["texture"]);
     expect(TextureGeneratorNode.outputs[0]?.type).toBe("texture");
