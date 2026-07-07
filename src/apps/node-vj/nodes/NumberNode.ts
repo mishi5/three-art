@@ -3,7 +3,8 @@ import type { NodeTypeDef } from "../graph/node-type";
 /** 定数 number ソース。param `value` を出力する。🎲ボタンで min〜max のランダム値に再ロールできる（#150）。 */
 export const NumberNode: NodeTypeDef = {
   type: "Number",
-  category: "source",
+  // param を駆動する定数＝制御値なので、メディア入口の source ではなく control。
+  category: "control",
   description: "node.Number.desc",
   inputs: [],
   outputs: [{ id: "out", label: "n", type: "number" }],

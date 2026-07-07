@@ -15,8 +15,11 @@ Issue: https://github.com/mishi5/three-art/issues/227
 
 | カテゴリ | ノード数 | ノード type |
 | --- | --- | --- |
-| source | 11 | CameraInput, MicInput, DisplayInput, VideoFileInput, AudioFileInput, ImageFileInput, SceneInput, MidiPad, TextureGenerator, Number, Time |
-| control | 12 | Sine, Noise, RandomValue, Pulse, TapSequencer, FlipFlop, Envelope, Add, Multiply, Remap, Smooth, PoseFeatures |
+| source | 9 | CameraInput, MicInput, DisplayInput, VideoFileInput, AudioFileInput, ImageFileInput, SceneInput, MidiPad, TextureGenerator |
+| control | 14 | Number, Time, Sine, Noise, RandomValue, Pulse, TapSequencer, FlipFlop, Envelope, Add, Multiply, Remap, Smooth, PoseFeatures |
+
+※ Number / Time は当初 source 案だったが、実態は「param・LFO を駆動する制御値/時間軸」であり
+Camera/File 等の「メディア・外部入力の入口」とは性質が異なるため、ユーザ合意のうえ control へ変更（source はメディア入口に純化）。
 | audio | 5 | AudioMix, AudioDelay, AudioFilter, AudioGain, AudioReverb |
 | render | 7 | PointShape, PointTransform, ParticleRender, PointCloudVisual, EdgeVisual, RainVisual, GraphVisual |
 | composite | 3 | Blend, Key, TextureSequencer |
