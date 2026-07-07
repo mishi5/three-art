@@ -32,19 +32,13 @@ describe("shouldAutoClose", () => {
   });
 });
 
-// #259: パネルごとのアクセントカラー（アクティビティバー・ヘッダ下線）
+// #259: アイコンは全パネル共通のグレー系（識別色はヘッダ下線と行側で表現）
 describe("activityButtonStyle", () => {
-  test("非アクティブ + accent は減光したアクセント色（グレー一色で判別不能にしない）", () => {
-    expect(activityButtonStyle(false, "#5b87b8")).toEqual({ background: "transparent", color: "#5b87b8", opacity: "0.65" });
+  test("非アクティブは従来のグレー", () => {
+    expect(activityButtonStyle(false)).toEqual({ background: "transparent", color: "#9ab" });
   });
-  test("非アクティブ + accent 未指定は従来のグレー", () => {
-    expect(activityButtonStyle(false)).toEqual({ background: "transparent", color: "#9ab", opacity: "1" });
-  });
-  test("アクティブ + accent はアイコン色を accent に", () => {
-    expect(activityButtonStyle(true, "#5b87b8")).toEqual({ background: "#243042", color: "#5b87b8", opacity: "1" });
-  });
-  test("アクティブ + accent 未指定は従来のハイライト色", () => {
-    expect(activityButtonStyle(true)).toEqual({ background: "#243042", color: "#cfe", opacity: "1" });
+  test("アクティブは従来のハイライト（accent では着色しない）", () => {
+    expect(activityButtonStyle(true)).toEqual({ background: "#243042", color: "#cfe" });
   });
 });
 

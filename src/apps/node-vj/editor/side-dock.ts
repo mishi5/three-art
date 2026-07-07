@@ -19,13 +19,13 @@ export function nextActivePanel(current: string | null, clicked: string): string
 // #259: パネルごとのアクセントカラーをアクティビティバー / ヘッダへ反映する純関数。
 
 /**
- * アクティビティバーのアイコンボタンの配色。
- * accent 持ちのパネルは**非アクティブ時もアクセント色**（減光）で塗り、
- * 全アイコンが同じグレーで判別できない問題を避ける（実機確認のフィードバック反映）。
+ * アクティビティバーのアイコンボタンの配色（全パネル共通のグレー系）。
+ * #259 の実機確認で「一部アイコンだけ色付きは違和感・グリフで判別できるので色は不要」との
+ * フィードバックを受け、アイコン自体の着色はしない（パネルの識別色はヘッダ下線と行側で表現）。
  */
-export function activityButtonStyle(on: boolean, accent?: string): { background: string; color: string; opacity: string } {
-  if (!on) return { background: "transparent", color: accent ?? "#9ab", opacity: accent ? "0.65" : "1" };
-  return { background: "#243042", color: accent ?? "#cfe", opacity: "1" };
+export function activityButtonStyle(on: boolean): { background: string; color: string } {
+  if (!on) return { background: "transparent", color: "#9ab" };
+  return { background: "#243042", color: "#cfe" };
 }
 
 /** パネルヘッダの下線。accent 未指定は透明（高さを揺らさず従来表示のまま）。 */
@@ -181,16 +181,15 @@ export function buildSideDock(panels: SidePanelDef[], pin: DockPinActions): void
     for (const [pid, host] of hosts) host.style.display = pid === id ? "flex" : "none";
     const def = panels.find((p) => p.id === id);
     for (const [pid, btn] of iconButtons) {
-      // #259: accent 持ちのアイコンは常時アクセント色（非アクティブは減光・アクティブは背景付き）。
-      const s = activityButtonStyle(pid === id, panels.find((p) => p.id === pid)?.accent);
+      const s = activityButtonStyle(pid === id);
       btn.style.background = s.background;
       btn.style.color = s.color;
-      btn.style.opacity = s.opacity;
     }
-    // #259: ヘッダにアイコン（accent 色）＋アクセント下線。accent 未指定パネルは従来表示。
+    // #259: ヘッダはアイコン（グレー）＋アクセント下線。accent 未指定パネルは従来表示。
+    // アイコン自体は着色しない（識別色は下線と行側で表現・実機フィードバック反映）。
     titleEl.textContent = def ? def.title : "";
     headerIcon.innerHTML = def ? def.icon : "";
-    headerIcon.style.color = def?.accent ?? "#9ab";
+    headerIcon.style.color = "#9ab";
     header.style.borderBottom = headerUnderline(def?.accent);
   }
 
