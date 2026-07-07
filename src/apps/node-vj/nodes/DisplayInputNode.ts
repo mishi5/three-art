@@ -136,11 +136,11 @@ export class DisplayInputRuntime {
 export const DisplayInputNode: NodeTypeDef = {
   type: "DisplayInput",
   category: "input",
-  description: "画面共有（getDisplayMedia）の映像 texture と音声特徴量を入力する AV ノック。タブ音声 OFF でも映像は動く。",
+  description: "node.DisplayInput.desc",
   isSink: false,
   inputs: [],
   outputs: [
-    { id: "texture", label: "tex", type: "texture", description: "共有タブ映像のテクスチャ（アスペクト比を入口で正規化）。" },
+    { id: "texture", label: "tex", type: "texture", description: "node.DisplayInput.port.texture" },
     ...AUDIO_FEATURE_OUTPUTS,
     SIGNAL_OUTPUT,
   ],

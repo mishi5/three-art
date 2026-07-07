@@ -11,11 +11,11 @@ export class FlipFlopRuntime {
 export const FlipFlopNode: NodeTypeDef = {
   type: "FlipFlop",
   category: "process",
-  description: "trigger の発火（立ち上がりエッジ）ごとに出力を 0↔1 で反転するトグル。",
-  inputs: [{ id: "trigger", label: "trig", type: "trigger", description: "立ち上がりエッジで状態を反転させる trigger。" }],
-  outputs: [{ id: "out", label: "out", type: "number", description: "現在の状態（0 または 1）。" }],
+  description: "node.FlipFlop.desc",
+  inputs: [{ id: "trigger", label: "trig", type: "trigger", description: "node.FlipFlop.port.trigger" }],
+  outputs: [{ id: "out", label: "out", type: "number", description: "node.FlipFlop.port.out" }],
   params: [
-    { id: "initial", label: "initial", kind: "enum", default: "off", options: ["off", "on"], description: "初期状態（off=0 / on=1）。" },
+    { id: "initial", label: "initial", kind: "enum", default: "off", options: ["off", "on"], description: "node.FlipFlop.param.initial" },
   ],
   createState: () => new FlipFlopRuntime(),
   evaluate: (ctx) => {

@@ -33,20 +33,20 @@ interface AudioMixState {
 export const AudioMixNode: NodeTypeDef = {
   type: "AudioMix",
   category: "process",
-  description: "ミキサー。複数の実音声(audio)を入力ごとの level で音量調整しながら合成する。合成した audio を出力し、その音響特徴量(signal)も出力する。",
+  description: "node.AudioMix.desc",
   isSink: false,
   inputs: MIX_INPUTS.map((id, i) => ({
     id, label: id, type: "audio" as const,
-    description: `合成する音声 ${i + 1}。level${i + 1} で音量を調整。`,
+    description: `node.AudioMix.port.in${i + 1}`,
   })),
   outputs: [SIGNAL_OUTPUT, ...AUDIO_FEATURE_OUTPUTS],
   params: [
     ...MIX_INPUTS.map((_id, i) => ({
       id: levelParam(i), label: levelParam(i), kind: "number" as const,
       default: 1, min: 0, max: 2, step: 0.01,
-      description: `入力 ${i + 1}（in${i + 1}）の音量（0=ミュート, 1=等倍, 2=増幅）。`,
+      description: `node.AudioMix.param.level${i + 1}`,
     })),
-    { id: "gain", label: "gain", kind: "number", default: 1, min: 0, max: 2, step: 0.01, description: "合成後のマスタゲイン（0〜2）。" },
+    { id: "gain", label: "gain", kind: "number", default: 1, min: 0, max: 2, step: 0.01, description: "node.AudioMix.param.gain" },
     ...ONSET_PARAMS,
   ],
   createState(env: NodeEnv): AudioMixState {

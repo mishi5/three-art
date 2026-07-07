@@ -278,20 +278,20 @@ export function packPoseUniforms(
 export const PointShapeNode: NodeTypeDef = {
   type: "PointShape",
   category: "generator",
-  description: "cube/sphere/lattice の点群を GPU 生成するノード。位置テクスチャを points として出力する。",
+  description: "node.PointShape.desc",
   isSink: false,
   inputs: [
-    { id: "signal", label: "signal", type: "signal", description: "bass でノイズ歪み・bones クラスタ膨張・image の Z 押し出しを増幅するための音響特徴量入力。" },
-    { id: "pose", label: "pose", type: "pose", description: "bones モードで点群を骨格（13関節）に追従させる姿勢入力（任意）。" },
-    { id: "in", label: "in", type: "texture", description: "image モードでサンプルする画像ソース（ImageFileInput 等。未接続なら image は不可視）。" },
+    { id: "signal", label: "signal", type: "signal", description: "node.PointShape.port.signal" },
+    { id: "pose", label: "pose", type: "pose", description: "node.PointShape.port.pose" },
+    { id: "in", label: "in", type: "texture", description: "node.PointShape.port.in" },
   ],
-  outputs: [{ id: "points", label: "points", type: "points", description: "GPU 位置テクスチャ参照（ParticleRender 等の points 入力へ繋ぐ）。image では色も付与。" }],
+  outputs: [{ id: "points", label: "points", type: "points", description: "node.PointShape.port.points" }],
   params: [
-    { id: "mode", label: "mode", kind: "enum", default: "cube", options: ["cube", "sphere", "lattice", "bones", "image"], description: "形状。cube=立方体内に散布 / sphere=球面 / lattice=規則格子 / bones=pose の13関節に追従 / image=画像をグリッドサンプルした色付き点群。" },
-    { id: "count", label: "count", kind: "int", default: 4000, min: 1, max: MAX_COUNT, step: 1, noInput: true, description: "粒子数（lattice は近い N^3、image は近い res^2 に丸める）。" },
-    { id: "radius", label: "radius", kind: "number", default: 0.5, min: 0.05, max: 3, step: 0.01, description: "形状の半径（world m）。bones では関節クラスタの広がり、image では画像平面の高さの半分。" },
-    { id: "noiseAmount", label: "noiseAmount", kind: "number", default: 0, min: 0, max: 1, step: 0.01, description: "simplex noise による歪みの強さ（0=綺麗な形状。bass で増幅される）。" },
-    { id: "noiseScale", label: "noiseScale", kind: "number", default: 1.0, min: 0.1, max: 5, step: 0.1, description: "ノイズの空間周波数（大きいほど細かい歪み）。" },
+    { id: "mode", label: "mode", kind: "enum", default: "cube", options: ["cube", "sphere", "lattice", "bones", "image"], description: "node.PointShape.param.mode" },
+    { id: "count", label: "count", kind: "int", default: 4000, min: 1, max: MAX_COUNT, step: 1, noInput: true, description: "node.PointShape.param.count" },
+    { id: "radius", label: "radius", kind: "number", default: 0.5, min: 0.05, max: 3, step: 0.01, description: "node.PointShape.param.radius" },
+    { id: "noiseAmount", label: "noiseAmount", kind: "number", default: 0, min: 0, max: 1, step: 0.01, description: "node.PointShape.param.noiseAmount" },
+    { id: "noiseScale", label: "noiseScale", kind: "number", default: 1.0, min: 0.1, max: 5, step: 0.1, description: "node.PointShape.param.noiseScale" },
   ],
   createState(): PointShapeState {
     const joints = Array.from({ length: NUM_JOINTS }, () => new THREE.Vector3());

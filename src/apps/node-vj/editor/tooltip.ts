@@ -1,7 +1,9 @@
 // #114: ノード/param/ポートのマウスオーバー説明ツールチップ。
 // ヒット結果→表示テキストの解決と、画面端を避ける配置・テキスト折り返しを純関数で持つ。
 // 描画とホバー判定タイミングは NodeEditor 側（canvas 直描画・ズーム非依存のスクリーン座標）。
+// #254: description はカタログキー（node.<Type>.…）を保持するため resolveNodeText で現在言語に解決する。
 import type { NodeRegistry, NodeTypeDef } from "../graph/node-type";
+import { resolveNodeText } from "../i18n";
 import type { HitResult } from "./hit-test";
 
 export interface TooltipContent {
@@ -23,21 +25,21 @@ export function tooltipForHit(hit: HitResult, registry: NodeRegistry): TooltipCo
   if (!def) return null;
 
   if (hit.kind === "node") {
-    return def.description ? { title: def.type, body: def.description } : null;
+    return def.description ? { title: def.type, body: resolveNodeText(def.description) } : null;
   }
 
   if (hit.kind === "param") {
     const pd = def.params[hit.paramIndex];
-    return pd?.description ? { title: pd.label, body: pd.description } : null;
+    return pd?.description ? { title: pd.label, body: resolveNodeText(pd.description) } : null;
   }
 
   if (hit.kind === "port") {
     const list = hit.portKind === "output" ? def.outputs : def.inputs;
     const port = list.find((p) => p.id === hit.port);
-    if (port?.description) return { title: port.label, body: port.description };
+    if (port?.description) return { title: port.label, body: resolveNodeText(port.description) };
     // param 入力ポート（数値 param のドット）は inputs に無いので params から解決。
     const param = def.params.find((p) => p.id === hit.port);
-    if (param?.description) return { title: param.label, body: param.description };
+    if (param?.description) return { title: param.label, body: resolveNodeText(param.description) };
     return null;
   }
 
@@ -64,7 +66,7 @@ export function nodeMenuTooltipContent(def: NodeTypeDef | undefined): NodeMenuTo
   if (def.inputs.length) segs.push(`in ${fmt(def.inputs)}`);
   if (def.outputs.length) segs.push(`out ${fmt(def.outputs)}`);
   const ports = segs.join("   ");
-  const body = def.description ?? "";
+  const body = def.description ? resolveNodeText(def.description) : "";
   if (!body && !ports) return null;
   return { title: def.type, body, ports };
 }

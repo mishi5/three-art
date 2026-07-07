@@ -136,20 +136,20 @@ export class MidiPadRuntime {
 export const MidiPadNode: NodeTypeDef = {
   type: "MidiPad",
   category: "input",
-  description: "4×4 のパッドに音声ファイルを割り当て、クリックでワンショット発音する。連続クリックで重ねて鳴り、audio 出力を Audio Mix / Audio 出力へ繋げる。",
+  description: "node.MidiPad.desc",
   isSink: false,
   padGrid: { rows: PAD_ROWS, cols: PAD_COLS },
   inputs: [],
   outputs: [
     SIGNAL_OUTPUT,
     // #205: いずれかのパッド押下時に 1 フレームだけ発火する trigger（boolean）。Envelope/Flash 等へ繋げる。
-    { id: "trigger", label: "trig", type: "trigger", description: "いずれかのパッド押下時に1フレーム発火する trigger。" },
+    { id: "trigger", label: "trig", type: "trigger", description: "node.MidiPad.port.trigger" },
   ],
   params: [
-    { id: "volume", label: "volume", kind: "number", default: 1, min: 0, max: 1, step: 0.01, description: "出力全体の音量（master・0〜1）。" },
+    { id: "volume", label: "volume", kind: "number", default: 1, min: 0, max: 1, step: 0.01, description: "node.MidiPad.param.volume" },
     // 各パッドの割当アセット id（string[]・長さ可変・hidden）。アセットライブラリで永続化する。
     { id: "padAssets", label: "padAssets", kind: "string", default: [], noInput: true, hidden: true,
-      description: "各パッドに割り当てたアセットの id 配列（slot=パッド番号・UI 非表示）。" },
+      description: "node.MidiPad.param.padAssets" },
   ],
   createState: (env: NodeEnv) => new MidiPadRuntime(env.audioContext),
   disposeState: (state: NodeState) => (state as MidiPadRuntime).dispose(),

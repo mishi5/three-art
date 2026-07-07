@@ -8,6 +8,7 @@ import type { History } from "../graph/history";
 import type { NodeRegistry, ParamDef, PortDef } from "../graph/node-type";
 import { effectiveInputPorts } from "../graph/node-ports";
 import { serializeGraph } from "../graph/serialize";
+import { resolveNodeText } from "../i18n";
 
 /** 失敗結果（全コマンド共通）。 */
 export interface ApiError { ok: false; error: string }
@@ -167,13 +168,15 @@ export function validateParamValue(pd: ParamDef, value: unknown): ParamValidatio
 function toCatalogPort(p: PortDef, fallbackDescription?: string): CatalogPort {
   const out: CatalogPort = { id: p.id, type: p.type, label: p.label };
   const desc = p.description ?? fallbackDescription;
-  if (desc !== undefined) out.description = desc;
+  // #254: description はカタログキーを保持するため、現在言語の文言に解決して返す。
+  if (desc !== undefined) out.description = resolveNodeText(desc);
   return out;
 }
 
 /**
  * registry から AI 向けノードカタログ（JSON セーフ）を作る。
  * inputs は接続検証と同じ「実効入力ポート」（宣言入力 ∪ 数値 param 由来入力・#74）。
+ * #254: description は呼び出し時点の UI 言語で解決した文言を返す（キーのままにしない）。
  */
 export function buildNodeCatalog(registry: NodeRegistry): CatalogNode[] {
   return registry.list().map((def) => {
@@ -188,12 +191,12 @@ export function buildNodeCatalog(registry: NodeRegistry): CatalogNode[] {
         if (p.max !== undefined) cp.max = p.max;
         if (p.step !== undefined) cp.step = p.step;
         if (p.options !== undefined) cp.options = [...p.options];
-        if (p.description !== undefined) cp.description = p.description;
+        if (p.description !== undefined) cp.description = resolveNodeText(p.description);
         return cp;
       }),
     };
     if (def.category !== undefined) node.category = def.category;
-    if (def.description !== undefined) node.description = def.description;
+    if (def.description !== undefined) node.description = resolveNodeText(def.description);
     return node;
   });
 }

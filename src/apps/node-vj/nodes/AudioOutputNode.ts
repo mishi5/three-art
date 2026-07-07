@@ -19,13 +19,13 @@ interface AudioOutputState {
 export const AudioOutputNode: NodeTypeDef = {
   type: "AudioOutput",
   category: "output",
-  description: "音の出口（audio sink）。signal を繋ぐとスピーカーから鳴る。繋がれた音だけが発音される（visual の Screen と同じ思想）。",
+  description: "node.AudioOutput.desc",
   isSink: true,
-  inputs: [{ id: "audio", label: "audio", type: "audio", description: "発音する実音声信号。Mic/AudioFile/Video/Mix の audio を繋ぐ。" }],
+  inputs: [{ id: "audio", label: "audio", type: "audio", description: "node.AudioOutput.port.audio" }],
   outputs: [],
   params: [
-    { id: "volume", label: "volume", kind: "number", default: 1, min: 0, max: 1, step: 0.01, description: "出力音量（0〜1）。" },
-    { id: "mute", label: "mute", kind: "enum", default: "off", options: ["off", "on"], description: "ミュート。on で無音（volume を無視）。" },
+    { id: "volume", label: "volume", kind: "number", default: 1, min: 0, max: 1, step: 0.01, description: "node.AudioOutput.param.volume" },
+    { id: "mute", label: "mute", kind: "enum", default: "off", options: ["off", "on"], description: "node.AudioOutput.param.mute" },
   ],
   createState(env: NodeEnv): AudioOutputState {
     const ctx = env.audioContext;

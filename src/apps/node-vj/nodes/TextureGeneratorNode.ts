@@ -42,18 +42,18 @@ interface TextureGenState {
 export const TextureGeneratorNode: NodeTypeDef = {
   type: "TextureGenerator",
   category: "visual",
-  description: "入力なしで単色/グラデーション（線形・放射状）の texture を生成するソース。色(RGB)・角度は他ノードから駆動できる。",
+  description: "node.TextureGenerator.desc",
   inputs: [],
-  outputs: [{ id: "texture", label: "tex", type: "texture", description: "生成した単色/グラデーションのテクスチャ。" }],
+  outputs: [{ id: "texture", label: "tex", type: "texture", description: "node.TextureGenerator.port.texture" }],
   params: [
-    { id: "mode", label: "mode", kind: "enum", default: "linear", options: ["solid", "linear", "radial"], description: "solid=単色(color1) / linear=線形グラデ / radial=放射状グラデ。" },
-    { id: "r1", label: "color1 R", kind: "number", default: 0.05, min: 0, max: 1, step: 0.01, description: "色1（solid の色 / グラデ始点）の R。" },
-    { id: "g1", label: "color1 G", kind: "number", default: 0.10, min: 0, max: 1, step: 0.01, description: "色1の G。" },
-    { id: "b1", label: "color1 B", kind: "number", default: 0.30, min: 0, max: 1, step: 0.01, description: "色1の B。" },
-    { id: "r2", label: "color2 R", kind: "number", default: 0.90, min: 0, max: 1, step: 0.01, description: "色2（グラデ終点）の R。" },
-    { id: "g2", label: "color2 G", kind: "number", default: 0.30, min: 0, max: 1, step: 0.01, description: "色2の G。" },
-    { id: "b2", label: "color2 B", kind: "number", default: 0.50, min: 0, max: 1, step: 0.01, description: "色2の B。" },
-    { id: "angle", label: "angle", kind: "number", default: 0, min: 0, max: 360, step: 1, description: "線形グラデの角度（度）。" },
+    { id: "mode", label: "mode", kind: "enum", default: "linear", options: ["solid", "linear", "radial"], description: "node.TextureGenerator.param.mode" },
+    { id: "r1", label: "color1 R", kind: "number", default: 0.05, min: 0, max: 1, step: 0.01, description: "node.TextureGenerator.param.r1" },
+    { id: "g1", label: "color1 G", kind: "number", default: 0.10, min: 0, max: 1, step: 0.01, description: "node.TextureGenerator.param.g1" },
+    { id: "b1", label: "color1 B", kind: "number", default: 0.30, min: 0, max: 1, step: 0.01, description: "node.TextureGenerator.param.b1" },
+    { id: "r2", label: "color2 R", kind: "number", default: 0.90, min: 0, max: 1, step: 0.01, description: "node.TextureGenerator.param.r2" },
+    { id: "g2", label: "color2 G", kind: "number", default: 0.30, min: 0, max: 1, step: 0.01, description: "node.TextureGenerator.param.g2" },
+    { id: "b2", label: "color2 B", kind: "number", default: 0.50, min: 0, max: 1, step: 0.01, description: "node.TextureGenerator.param.b2" },
+    { id: "angle", label: "angle", kind: "number", default: 0, min: 0, max: 360, step: 1, description: "node.TextureGenerator.param.angle" },
   ],
   createState(): TextureGenState {
     const surface = new ShaderSurface(new THREE.ShaderMaterial({

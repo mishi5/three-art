@@ -10,7 +10,7 @@ export const EFFECT_ENABLED_PARAM: ParamDef = {
   kind: "enum",
   default: "on",
   options: ["on", "off"],
-  description: "エフェクトの有効/無効。off で入力をそのまま出力（パススルー）。",
+  description: "node.common.effect.enabled",
 };
 
 /** enabled param が off でないか（未設定は有効扱い）。 */

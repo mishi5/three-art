@@ -136,14 +136,12 @@ export class TapSequencerRuntime {
 export const TapSequencerNode: NodeTypeDef = {
   type: "TapSequencer",
   category: "generator",
-  description:
-    "録音ボタンを押しているあいだスペースキーの手打ちタイミングを記録し（ループ長＝押していた時間）、" +
-    "離すと記録どおりに trigger をループ発火する。録音中のタップも即時発火。Envelope/Flash 等へ。",
+  description: "node.TapSequencer.desc",
   tapSequencer: true,
   inputs: [],
   outputs: [
     { id: "trigger", label: "trig", type: "trigger",
-      description: "記録した手打ちタイミングで 1 フレーム発火する trigger（末尾でループ）。" },
+      description: "node.TapSequencer.port.trigger" },
   ],
   params: [],
   createState: () => new TapSequencerRuntime(),

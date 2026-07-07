@@ -11,11 +11,11 @@ export class PulseRuntime {
 export const PulseNode: NodeTypeDef = {
   type: "Pulse",
   category: "generator",
-  description: "一定間隔（interval 秒）で trigger を発火し続けるメトロノーム的ジェネレータ。",
+  description: "node.Pulse.desc",
   inputs: [],
-  outputs: [{ id: "trigger", label: "trig", type: "trigger", description: "interval ごとに 1 フレーム発火する trigger。" }],
+  outputs: [{ id: "trigger", label: "trig", type: "trigger", description: "node.Pulse.port.trigger" }],
   params: [
-    { id: "interval", label: "interval", kind: "number", default: 0.5, min: 0.02, max: 10, step: 0.01, description: "発火間隔（秒）。" },
+    { id: "interval", label: "interval", kind: "number", default: 0.5, min: 0.02, max: 10, step: 0.01, description: "node.Pulse.param.interval" },
   ],
   createState: () => new PulseRuntime(),
   evaluate: (ctx) => {

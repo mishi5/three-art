@@ -17,21 +17,21 @@ interface RainState {
 export const RainVisualNode: NodeTypeDef = {
   type: "RainVisual",
   category: "visual",
-  description: "音に反応する雨のような縦ストリームを描画する visual。結果を texture 出力する。",
+  description: "node.RainVisual.desc",
   isSink: true,
   inputs: [
-    { id: "signal", label: "signal", type: "signal", description: "雨の動きを駆動する音響特徴量入力（未接続なら環境の特徴量）。" },
-    { id: "baseSpeed", label: "baseSpeed", type: "number", description: "落下速度の入力（未接続なら param 値）。" },
-    { id: "count", label: "count", type: "number", description: "粒子数の入力（未接続なら param 値）。" },
+    { id: "signal", label: "signal", type: "signal", description: "node.RainVisual.port.signal" },
+    { id: "baseSpeed", label: "baseSpeed", type: "number", description: "node.RainVisual.port.baseSpeed" },
+    { id: "count", label: "count", type: "number", description: "node.RainVisual.port.count" },
   ],
-  outputs: [{ id: "texture", label: "tex", type: "texture", description: "描画結果のテクスチャ。" }],
+  outputs: [{ id: "texture", label: "tex", type: "texture", description: "node.RainVisual.port.texture" }],
   params: [
-    { id: "baseSpeed", label: "baseSpeed", kind: "number", default: 0.3, min: 0, max: 3, step: 0.01, description: "雨粒の基本落下速度。" },
-    { id: "count", label: "count", kind: "int", default: 2000, min: 16, max: 8000, step: 1, description: "雨粒の本数。" },
-    { id: "ampGain", label: "ampGain", kind: "number", default: 1.0, min: 0, max: 4, step: 0.1, description: "音量に対する反応の強さ。" },
-    { id: "length", label: "length", kind: "number", default: 0.06, min: 0.01, max: 0.5, step: 0.01, description: "雨粒（ストリーク）の長さ。" },
-    { id: "areaWidth", label: "areaWidth", kind: "number", default: 2.0, min: 0.5, max: 6, step: 0.1, description: "雨が降る領域の横幅（world m）。" },
-    { id: "areaHeight", label: "areaHeight", kind: "number", default: 2.4, min: 0.5, max: 6, step: 0.1, description: "雨が降る領域の高さ（world m）。" },
+    { id: "baseSpeed", label: "baseSpeed", kind: "number", default: 0.3, min: 0, max: 3, step: 0.01, description: "node.RainVisual.param.baseSpeed" },
+    { id: "count", label: "count", kind: "int", default: 2000, min: 16, max: 8000, step: 1, description: "node.RainVisual.param.count" },
+    { id: "ampGain", label: "ampGain", kind: "number", default: 1.0, min: 0, max: 4, step: 0.1, description: "node.RainVisual.param.ampGain" },
+    { id: "length", label: "length", kind: "number", default: 0.06, min: 0.01, max: 0.5, step: 0.01, description: "node.RainVisual.param.length" },
+    { id: "areaWidth", label: "areaWidth", kind: "number", default: 2.0, min: 0.5, max: 6, step: 0.1, description: "node.RainVisual.param.areaWidth" },
+    { id: "areaHeight", label: "areaHeight", kind: "number", default: 2.4, min: 0.5, max: 6, step: 0.1, description: "node.RainVisual.param.areaHeight" },
   ],
   createState(): RainState {
     const rain = new RainField();

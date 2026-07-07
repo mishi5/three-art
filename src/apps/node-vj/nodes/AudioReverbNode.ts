@@ -41,15 +41,15 @@ interface AudioReverbState {
 export const AudioReverbNode: NodeTypeDef = {
   type: "AudioReverb",
   category: "process",
-  description: "リバーブ。生成したインパルス応答で audio に残響を付ける。decay で残響の長さ、dry/wet は独立（dry=1 のまま wet を上げると原音の音量を変えずに残響が足せる）。",
+  description: "node.AudioReverb.desc",
   isSink: false,
-  inputs: [{ id: "audio", label: "audio", type: "audio", description: "残響を付ける実音声信号。" }],
+  inputs: [{ id: "audio", label: "audio", type: "audio", description: "node.AudioReverb.port.audio" }],
   outputs: [SIGNAL_OUTPUT],
   params: [
-    { id: "enabled", label: "enabled", kind: "enum", default: "on", options: ["on", "off"], description: "エフェクトの有効/無効。off で入力をそのまま出力（パススルー）。" },
-    { id: "decay", label: "decay", kind: "number", default: 2, min: REVERB_DECAY_MIN, max: REVERB_DECAY_MAX, step: 0.1, description: "残響の長さ（秒）。変更時にインパルス応答を再生成する。" },
-    { id: "dry", label: "dry", kind: "number", default: 1, min: 0, max: 1, step: 0.01, description: "原音の音量。1 のままなら原音は変わらない（0 で残響のみ）。" },
-    { id: "wet", label: "wet", kind: "number", default: 0.5, min: 0, max: 2, step: 0.01, description: "付加する残響の量（センド量）。原音とは独立に調整できる。" },
+    { id: "enabled", label: "enabled", kind: "enum", default: "on", options: ["on", "off"], description: "node.AudioReverb.param.enabled" },
+    { id: "decay", label: "decay", kind: "number", default: 2, min: REVERB_DECAY_MIN, max: REVERB_DECAY_MAX, step: 0.1, description: "node.AudioReverb.param.decay" },
+    { id: "dry", label: "dry", kind: "number", default: 1, min: 0, max: 1, step: 0.01, description: "node.AudioReverb.param.dry" },
+    { id: "wet", label: "wet", kind: "number", default: 0.5, min: 0, max: 2, step: 0.01, description: "node.AudioReverb.param.wet" },
   ],
   createState(env: NodeEnv): AudioReverbState {
     const ctx = env.audioContext;

@@ -26,12 +26,12 @@ export class EnvelopeRuntime {
 export const EnvelopeNode: NodeTypeDef = {
   type: "Envelope",
   category: "process",
-  description: "trigger 発火で立ち上がり（attack）、その後減衰（release）する AD エンベロープを number 出力する。",
-  inputs: [{ id: "trigger", label: "trig", type: "trigger", description: "立ち上がりエッジでエンベロープを再発火させる trigger。" }],
-  outputs: [{ id: "out", label: "out", type: "number", description: "0〜1 のエンベロープ値。" }],
+  description: "node.Envelope.desc",
+  inputs: [{ id: "trigger", label: "trig", type: "trigger", description: "node.Envelope.port.trigger" }],
+  outputs: [{ id: "out", label: "out", type: "number", description: "node.Envelope.port.out" }],
   params: [
-    { id: "attack", label: "attack", kind: "number", default: 0.01, min: 0, max: 2, step: 0.01, description: "0→1 まで立ち上がる時間（秒）。0 なら発火直後に 1。" },
-    { id: "release", label: "release", kind: "number", default: 0.3, min: 0, max: 5, step: 0.01, description: "1→0 まで減衰する時間（秒）。" },
+    { id: "attack", label: "attack", kind: "number", default: 0.01, min: 0, max: 2, step: 0.01, description: "node.Envelope.param.attack" },
+    { id: "release", label: "release", kind: "number", default: 0.3, min: 0, max: 5, step: 0.01, description: "node.Envelope.param.release" },
   ],
   createState: () => new EnvelopeRuntime(),
   evaluate: (ctx) => {

@@ -4,7 +4,7 @@
 // 右クリックメニューからの追加（NodeEditor.showAddMenu）はこのパネルと独立に残る。
 import { BAR_W, TOP, PANEL_W, type SidePanelDef } from "./side-dock";
 import { groupNodesByCategory } from "./node-menu";
-import { t } from "../i18n";
+import { resolveNodeText, t } from "../i18n";
 
 const ICON = (body: string): string =>
   `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
@@ -28,6 +28,8 @@ export interface NodeAddSection {
 /**
  * ノード定義からパネル表示用のセクション一覧を作る。カテゴリ分けと並び順は
  * 右クリックメニューと同じ groupNodesByCategory（#103）を共有する（#227 の再整理に自動追従）。
+ * #254: description はカタログキーを保持するため resolveNodeText で現在言語に解決する
+ * （カタログに無い文字列はそのまま通る）。
  */
 export function buildNodeAddSections(
   defs: ReadonlyArray<{ type: string; category?: string; description?: string }>,
@@ -35,7 +37,7 @@ export function buildNodeAddSections(
   const byType = new Map(defs.map((d) => [d.type, d]));
   return groupNodesByCategory(defs).map((g) => ({
     category: g.category,
-    items: g.types.map((t) => ({ type: t, description: byType.get(t)?.description ?? "" })),
+    items: g.types.map((t) => ({ type: t, description: resolveNodeText(byType.get(t)?.description ?? "") })),
   }));
 }
 
