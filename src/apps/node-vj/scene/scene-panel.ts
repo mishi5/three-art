@@ -8,6 +8,36 @@ import { t } from "../i18n";
 
 export function panelDisplay(open: boolean): "flex" | "none" { return open ? "flex" : "none"; }
 
+// #255: シーン名編集中に自動保存の onChange がリストを作り直して <input> を壊すため、
+// 編集中の再描画要求は dirty として保留し、編集終了時に flush する小さな状態機械。
+export interface RenderHold {
+  /** 編集開始。以後 request() は保留される。 */
+  beginEdit(): void;
+  /** 編集終了。保留があれば render を 1 回 flush する。 */
+  endEdit(): void;
+  /** 再描画要求。編集中なら dirty を立てるだけ、非編集中は即 render。 */
+  request(): void;
+  /** 編集中かどうか。 */
+  editing(): boolean;
+}
+
+export function createRenderHold(render: () => void): RenderHold {
+  let editing = false;
+  let dirty = false;
+  return {
+    beginEdit() { editing = true; },
+    endEdit() {
+      editing = false;
+      if (dirty) { dirty = false; render(); }
+    },
+    request() {
+      if (editing) { dirty = true; return; }
+      render();
+    },
+    editing() { return editing; },
+  };
+}
+
 export interface ScenePanelActions {
   list(): Scene[];
   activeId(): string;
@@ -97,12 +127,24 @@ function mountScenePanel(host: HTMLElement, actions: ScenePanelActions): void {
       const input = document.createElement("input");
       input.value = scene.name;
       input.style.cssText = "flex:1 1 auto;min-width:0;background:#111;color:#ddd;border:1px solid #4a5566;border-radius:3px;padding:2px 4px;";
-      const commit = (): void => { const v = input.value.trim(); if (v) actions.rename(scene.id, v); else render(); };
+      // #255: 編集開始。自動保存の onChange による再描画は endEdit まで保留される。
+      hold.beginEdit();
+      // #255: Enter 確定 / Escape キャンセル / blur 確定を一本化し、一度だけ実行する
+      // （render で input が外れた際の blur による二重 rename / 二重 render を防ぐ）。
+      let finished = false;
+      const finish = (apply: boolean): void => {
+        if (finished) return;
+        finished = true;
+        const v = input.value.trim();
+        hold.endEdit(); // 編集フラグ解除。保留があればここで flush
+        if (apply && v) actions.rename(scene.id, v); // rename の onChange で再描画される
+        else render(); // キャンセル・空文字は表示を復元
+      };
       input.addEventListener("keydown", (ev) => {
-        if (ev.key === "Enter") { ev.preventDefault(); commit(); }
-        else if (ev.key === "Escape") { ev.preventDefault(); render(); }
+        if (ev.key === "Enter") { ev.preventDefault(); finish(true); }
+        else if (ev.key === "Escape") { ev.preventDefault(); finish(false); }
       });
-      input.addEventListener("blur", commit);
+      input.addEventListener("blur", () => finish(true));
       input.addEventListener("click", (ev) => ev.stopPropagation());
       row.replaceChild(input, name);
       input.focus(); input.select();
@@ -138,6 +180,8 @@ function mountScenePanel(host: HTMLElement, actions: ScenePanelActions): void {
     return row;
   }
 
-  actions.onChange(() => render());
+  // #255: 名前編集中の再描画は保留し、編集終了時に flush する（自動保存で input を壊さない）。
+  const hold = createRenderHold(render);
+  actions.onChange(() => hold.request());
   render();
 }
