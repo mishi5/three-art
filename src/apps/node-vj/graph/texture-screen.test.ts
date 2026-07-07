@@ -7,7 +7,7 @@ import { NodeRegistry, type NodeTypeDef } from "./node-type";
 function makeRegistry(): NodeRegistry {
   const r = new NodeRegistry();
   const visual: NodeTypeDef = {
-    type: "Vis", category: "visual", isSink: true,
+    type: "Vis", category: "render", isSink: true,
     inputs: [], outputs: [{ id: "texture", label: "tex", type: "texture" }],
     params: [], evaluate: () => ({}),
   };

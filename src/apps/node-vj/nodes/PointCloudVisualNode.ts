@@ -37,7 +37,7 @@ function loadDefaultImage(pc: PointCloud): void {
 /** PointCloud + 各レンダリングモードを駆動する visual sink ノード。 */
 export const PointCloudVisualNode: NodeTypeDef = {
   type: "PointCloudVisual",
-  category: "visual",
+  category: "render",
   description: "node.PointCloudVisual.desc",
   isSink: true,
   inputs: [

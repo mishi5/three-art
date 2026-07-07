@@ -16,7 +16,7 @@ interface RainState {
  */
 export const RainVisualNode: NodeTypeDef = {
   type: "RainVisual",
-  category: "visual",
+  category: "render",
   description: "node.RainVisual.desc",
   isSink: true,
   inputs: [

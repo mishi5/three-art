@@ -4,7 +4,7 @@ import { remap } from "./process-logic";
 /** 範囲変換。in を [inMin,inMax] から [outMin,outMax] へ写す（clamp 可）。 */
 export const RemapNode: NodeTypeDef = {
   type: "Remap",
-  category: "process",
+  category: "control",
   description: "node.Remap.desc",
   inputs: [{ id: "in", label: "in", type: "number" }],
   outputs: [{ id: "out", label: "out", type: "number" }],

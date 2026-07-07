@@ -277,7 +277,7 @@ export function packPoseUniforms(
 /** 形状生成ノード（#104: cube/sphere/lattice）。位置テクスチャを points として出力する。 */
 export const PointShapeNode: NodeTypeDef = {
   type: "PointShape",
-  category: "generator",
+  category: "render",
   description: "node.PointShape.desc",
   isSink: false,
   inputs: [

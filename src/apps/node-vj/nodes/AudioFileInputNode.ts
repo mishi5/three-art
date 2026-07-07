@@ -109,7 +109,7 @@ export class AudioFileInputRuntime implements PlaybackControl {
 /** 音声ファイル入力ノード（#100）。audio / 各バンド / onset に加え section(number) を出力。 */
 export const AudioFileInputNode: NodeTypeDef = {
   type: "AudioFileInput",
-  category: "input",
+  category: "source",
   description: "node.AudioFileInput.desc",
   isSink: false,
   fileInput: { accept: "audio/*" },

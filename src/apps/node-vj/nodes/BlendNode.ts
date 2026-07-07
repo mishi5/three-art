@@ -92,7 +92,7 @@ class BlendSurface {
  */
 export const BlendNode: NodeTypeDef = {
   type: "Blend",
-  category: "visual",
+  category: "composite",
   description: "node.Blend.desc",
   isSink: true,
   inputs: [

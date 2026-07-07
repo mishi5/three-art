@@ -3,7 +3,7 @@ import type { NodeTypeDef } from "../graph/node-type";
 /** LFO/オシレータ。out = offset + amplitude·sin(2π·freq·t)。t 未接続なら timeSec。 */
 export const SineNode: NodeTypeDef = {
   type: "Sine",
-  category: "process",
+  category: "control",
   description: "node.Sine.desc",
   inputs: [{ id: "t", label: "t", type: "number", description: "node.Sine.port.t" }],
   outputs: [{ id: "out", label: "out", type: "number" }],

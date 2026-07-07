@@ -16,7 +16,7 @@ const out = (r: Record<string, unknown>) => (r as { out: number }).out;
 describe("FlipFlopNode (#111)", () => {
   test("trigger 入力・number 出力・initial param", () => {
     expect(FlipFlopNode.type).toBe("FlipFlop");
-    expect(FlipFlopNode.category).toBe("process");
+    expect(FlipFlopNode.category).toBe("control");
     expect(FlipFlopNode.inputs.map((p) => `${p.id}:${p.type}`)).toEqual(["trigger:trigger"]);
     expect(FlipFlopNode.outputs.map((p) => `${p.id}:${p.type}`)).toEqual(["out:number"]);
     const init = FlipFlopNode.params.find((p) => p.id === "initial");

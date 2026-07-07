@@ -3,7 +3,7 @@ import type { NodeTypeDef } from "../graph/node-type";
 /** 2 入力の加算。未接続入力は param 値（既定 0）にフォールバック。 */
 export const AddNode: NodeTypeDef = {
   type: "Add",
-  category: "process",
+  category: "control",
   description: "node.Add.desc",
   inputs: [
     { id: "a", label: "a", type: "number" },

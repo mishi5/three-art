@@ -41,7 +41,7 @@ interface TextureGenState {
 /** 単色/グラデーションの texture を生成するソースノード（#153）。入力を持たず texture のみ出力。 */
 export const TextureGeneratorNode: NodeTypeDef = {
   type: "TextureGenerator",
-  category: "visual",
+  category: "source",
   description: "node.TextureGenerator.desc",
   inputs: [],
   outputs: [{ id: "texture", label: "tex", type: "texture", description: "node.TextureGenerator.port.texture" }],

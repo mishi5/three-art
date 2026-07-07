@@ -18,7 +18,7 @@ interface AudioDelayState {
 /** 音声遅延ノード（#135）。audio を delayMs 遅らせて出力（A/V 同期の手動合わせ用）。 */
 export const AudioDelayNode: NodeTypeDef = {
   type: "AudioDelay",
-  category: "process",
+  category: "audio",
   description: "node.AudioDelay.desc",
   isSink: false,
   inputs: [{ id: "audio", label: "audio", type: "audio", description: "node.AudioDelay.port.audio" }],

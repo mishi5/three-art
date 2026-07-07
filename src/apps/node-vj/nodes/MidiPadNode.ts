@@ -135,7 +135,7 @@ export class MidiPadRuntime {
 /** #205: 簡易 MIDI パッドノード。4×4 のパッドに音声を割り当て、クリックでワンショット発音する。 */
 export const MidiPadNode: NodeTypeDef = {
   type: "MidiPad",
-  category: "input",
+  category: "source",
   description: "node.MidiPad.desc",
   isSink: false,
   padGrid: { rows: PAD_ROWS, cols: PAD_COLS },

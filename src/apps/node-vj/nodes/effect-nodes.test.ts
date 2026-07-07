@@ -36,7 +36,7 @@ describe("effect nodes (#64)", () => {
   test("EdgeVisual は pose/audio 入力 + texture 出力の visual", () => {
     expect(EdgeVisualNode.inputs.map((p) => p.type)).toEqual(["pose", "signal"]);
     expect(EdgeVisualNode.outputs.map((p) => p.type)).toEqual(["texture"]);
-    expect(EdgeVisualNode.category).toBe("visual"); // 終端で自動表示対象
+    expect(EdgeVisualNode.category).toBe("render"); // #227: 描画系。終端で自動表示対象
   });
 
   test("buildEdgeParams: curated 反映＋既定（wave/rewire は OFF）", () => {

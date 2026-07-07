@@ -12,7 +12,7 @@ function fakeAudioContext(): AudioContext {
 describe("#205 MidiPadNode 定義", () => {
   test("4×4 のパッドグリッド・input カテゴリ", () => {
     expect(MidiPadNode.type).toBe("MidiPad");
-    expect(MidiPadNode.category).toBe("input");
+    expect(MidiPadNode.category).toBe("source");
     expect(MidiPadNode.padGrid).toEqual({ rows: PAD_ROWS, cols: PAD_COLS });
     expect(PAD_COUNT).toBe(16);
   });

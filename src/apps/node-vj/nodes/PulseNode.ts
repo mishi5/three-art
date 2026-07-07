@@ -10,7 +10,7 @@ export class PulseRuntime {
 /** 一定間隔で trigger を定期発火するジェネレータ（#155）。Pulse→各種 trigger 入力へ。 */
 export const PulseNode: NodeTypeDef = {
   type: "Pulse",
-  category: "generator",
+  category: "control",
   description: "node.Pulse.desc",
   inputs: [],
   outputs: [{ id: "trigger", label: "trig", type: "trigger", description: "node.Pulse.port.trigger" }],

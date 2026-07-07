@@ -3,7 +3,7 @@ import type { NodeTypeDef } from "../graph/node-type";
 /** 2 入力の乗算。未接続入力は param 値（既定 1）にフォールバック。 */
 export const MultiplyNode: NodeTypeDef = {
   type: "Multiply",
-  category: "process",
+  category: "control",
   description: "node.Multiply.desc",
   inputs: [
     { id: "a", label: "a", type: "number" },

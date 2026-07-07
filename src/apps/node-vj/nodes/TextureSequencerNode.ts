@@ -47,7 +47,7 @@ export function selectSeqPort(step: number, connectedPorts: readonly number[]): 
 /** texture シーケンサノード（#202）。trigger 受信ごとに接続済み texture 入力を順送りで出力・ループ。 */
 export const TextureSequencerNode: NodeTypeDef = {
   type: "TextureSequencer",
-  category: "process",
+  category: "composite",
   description: "node.TextureSequencer.desc",
   inputs: [
     ...SEQ_INPUTS.map((id, i) => ({

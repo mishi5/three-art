@@ -14,9 +14,9 @@ function ctxNoState(over: Partial<EvalContext> = {}): EvalContext {
 }
 
 describe("PointShapeNode (#101)", () => {
-  test("points 出力を持つ generator ノード", () => {
+  test("points 出力を持つ render ノード", () => {
     expect(PointShapeNode.type).toBe("PointShape");
-    expect(PointShapeNode.category).toBe("generator");
+    expect(PointShapeNode.category).toBe("render");
     expect(PointShapeNode.outputs.map((p) => `${p.id}:${p.type}`)).toEqual(["points:points"]);
   });
   test("count / radius param を持つ", () => {
@@ -32,7 +32,7 @@ describe("PointShapeNode (#101)", () => {
 describe("ParticleRenderNode (#101)", () => {
   test("points/audio 入力・texture 出力の sink", () => {
     expect(ParticleRenderNode.type).toBe("ParticleRender");
-    expect(ParticleRenderNode.category).toBe("visual");
+    expect(ParticleRenderNode.category).toBe("render");
     expect(ParticleRenderNode.isSink).toBe(true);
     expect(ParticleRenderNode.inputs.find((p) => p.id === "points")?.type).toBe("points");
     expect(ParticleRenderNode.inputs.find((p) => p.id === "signal")?.type).toBe("signal");

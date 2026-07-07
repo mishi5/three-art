@@ -18,7 +18,7 @@ function miniRegistry(): NodeRegistry {
   const r = new NodeRegistry();
   r.register({
     type: "Num",
-    category: "value",
+    category: "source",
     description: "数値ソース",
     inputs: [],
     outputs: [{ id: "out", label: "out", type: "number", description: "値" }],
@@ -77,7 +77,7 @@ describe("buildNodeCatalog", () => {
     const catalog = buildNodeCatalog(miniRegistry());
     expect(catalog.map((n) => n.type)).toEqual(["Num", "Sig"]);
     const num = catalog[0]!;
-    expect(num.category).toBe("value");
+    expect(num.category).toBe("source");
     expect(num.description).toBe("数値ソース");
     expect(num.outputs).toEqual([{ id: "out", type: "number", label: "out", description: "値" }]);
     const value = num.params.find((p) => p.id === "value")!;

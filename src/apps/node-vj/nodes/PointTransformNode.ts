@@ -42,7 +42,7 @@ interface PointTransformState {
 /** 中心移動・方向調整（Transform）ノード（#102）。points を平行移動・回転して points を出力。 */
 export const PointTransformNode: NodeTypeDef = {
   type: "PointTransform",
-  category: "process",
+  category: "render",
   description: "node.PointTransform.desc",
   isSink: false,
   inputs: [{ id: "points", label: "points", type: "points", description: "node.PointTransform.port.points" }],

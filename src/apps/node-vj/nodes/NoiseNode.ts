@@ -4,7 +4,7 @@ import type { NodeTypeDef } from "../graph/node-type";
 /** 揺らぎ変調。out = offset + amplitude·noise3D(seed, t·speed, 0)（-1..1 ベース）。 */
 export const NoiseNode: NodeTypeDef = {
   type: "Noise",
-  category: "process",
+  category: "control",
   description: "node.Noise.desc",
   inputs: [{ id: "t", label: "t", type: "number", description: "node.Noise.port.t" }],
   outputs: [{ id: "out", label: "out", type: "number" }],

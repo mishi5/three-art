@@ -9,7 +9,7 @@ export class SmoothRuntime {
 /** EMA 平滑。out += (in - out)·factor。factor=1 で即追従、0 で固定。 */
 export const SmoothNode: NodeTypeDef = {
   type: "Smooth",
-  category: "process",
+  category: "control",
   description: "node.Smooth.desc",
   inputs: [{ id: "in", label: "in", type: "number" }],
   outputs: [{ id: "out", label: "out", type: "number" }],

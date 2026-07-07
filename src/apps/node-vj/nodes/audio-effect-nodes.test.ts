@@ -82,7 +82,7 @@ describe("音声エフェクトノード定義 (#239)", () => {
 
   for (const [def, ids] of cases) {
     test(`${def.type}: process・audio in → audio out`, () => {
-      expect(def.category).toBe("process");
+      expect(def.category).toBe("audio");
       expect(def.isSink).toBe(false);
       expect(def.inputs.map((p) => `${p.id}:${p.type}`)).toEqual(["audio:audio"]);
       expect(def.outputs.map((p) => `${p.id}:${p.type}`)).toEqual(["audio:audio"]);

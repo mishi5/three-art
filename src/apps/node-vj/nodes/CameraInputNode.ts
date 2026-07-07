@@ -134,7 +134,7 @@ export class CameraInputRuntime {
  */
 export const CameraInputNode: NodeTypeDef = {
   type: "CameraInput",
-  category: "input",
+  category: "source",
   description: "node.CameraInput.desc",
   isSink: false,
   inputs: [],

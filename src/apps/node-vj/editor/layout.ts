@@ -10,9 +10,13 @@ export const ROW_H = 22;
 export const PORT_R = 6;
 export const PADDING = 8;
 
-/** カテゴリ別のノード背景色（ノード描画・クリップサムネイルで共有）。 */
+/** カテゴリ別のノード背景色（ノード描画・クリップサムネイルで共有）。
+ *  #227: 7 カテゴリへ再編。source は旧 input の青・control は旧 generator/process の緑・
+ *  render は旧 visual の紫・effect/output は旧色を流用し、audio（琥珀）と composite（青緑）を追加。
+ *  未知カテゴリは参照側（NodeEditor/clip-thumbnail）で "#333" にフォールバックする。 */
 export const CATEGORY_COLORS: Record<string, string> = {
-  input: "#2a4a6a", process: "#3a5a3a", visual: "#5a3a5a", effect: "#3a4a5a", output: "#5a3a3a",
+  source: "#2a4a6a", control: "#3a5a3a", audio: "#5a4a2a", render: "#5a3a5a",
+  composite: "#2a5a5a", effect: "#3a4a5a", output: "#5a3a3a",
 };
 
 // 上部の行数 = signal 入力（左）と出力（右）の多い方。数値 param は param 行のドットで接続する。

@@ -111,7 +111,7 @@ function buildGeometry(base: THREE.PlaneGeometry, count: number): THREE.Instance
 /** パーティクル描画ノード（#101）。points（位置テクスチャ）をビルボード quad で描画して texture を出力する。 */
 export const ParticleRenderNode: NodeTypeDef = {
   type: "ParticleRender",
-  category: "visual",
+  category: "render",
   description: "node.ParticleRender.desc",
   isSink: true,
   inputs: [

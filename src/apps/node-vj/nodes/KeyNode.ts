@@ -71,7 +71,7 @@ class KeyState {
 /** マスク/キーイング（合成）ノード（#157）。fg をクロマ/ルマキーで抜き bg と合成して出力。 */
 export const KeyNode: NodeTypeDef = {
   type: "Key",
-  category: "visual",
+  category: "composite",
   description: "node.Key.desc",
   isSink: true,
   inputs: [

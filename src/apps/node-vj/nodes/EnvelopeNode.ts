@@ -25,7 +25,7 @@ export class EnvelopeRuntime {
 /** trigger を受け、発火で立ち上がり時間で減衰する number を出力する（#110）。 */
 export const EnvelopeNode: NodeTypeDef = {
   type: "Envelope",
-  category: "process",
+  category: "control",
   description: "node.Envelope.desc",
   inputs: [{ id: "trigger", label: "trig", type: "trigger", description: "node.Envelope.port.trigger" }],
   outputs: [{ id: "out", label: "out", type: "number", description: "node.Envelope.port.out" }],
