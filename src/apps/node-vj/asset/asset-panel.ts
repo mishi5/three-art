@@ -70,7 +70,8 @@ export function assetPanelDef(library: AssetLibrary): SidePanelDef {
   return {
     id: "asset",
     title: t("panel.assets"),
-    icon: ICON.sidebar,
+    // #259: メディア（写真）グリフ。何のパネルか一目で分かるように（旧: 無地のサイドバー枠）。
+    icon: ICON.image,
     accent: ASSET_ACCENT, // #259: シーンパネルと一目で見分けるための識別色
     mount: (host) => mountAssetPanel(host, library),
   };

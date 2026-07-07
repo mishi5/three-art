@@ -63,7 +63,12 @@ export const SCENE_ACCENT = "#5b87b8";
 const ICON = (body: string): string =>
   `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
   `stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
-const SCENES_ICON = ICON('<rect x="3" y="4" width="14" height="14" rx="2"/><path d="M21 7v13H8"/>');
+// #259: カチンコ（映画のシーン）。何のパネルか一目で分かるグリフに（旧: 重なった矩形）。
+const SCENES_ICON = ICON(
+  '<path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/>' +
+  '<path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/>' +
+  '<path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>',
+);
 const DUP_ICON = ICON('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>');
 const TRASH_ICON = ICON('<polyline points="4 7 20 7"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/>');
 // #174: 出力シーン切替用モニターアイコン。

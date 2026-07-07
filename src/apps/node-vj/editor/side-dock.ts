@@ -18,10 +18,14 @@ export function nextActivePanel(current: string | null, clicked: string): string
 
 // #259: パネルごとのアクセントカラーをアクティビティバー / ヘッダへ反映する純関数。
 
-/** アクティビティバーのアイコンボタンの配色。アクティブ時のみ accent（未指定は従来色）。 */
-export function activityButtonStyle(on: boolean, accent?: string): { background: string; color: string } {
-  if (!on) return { background: "transparent", color: "#9ab" };
-  return { background: "#243042", color: accent ?? "#cfe" };
+/**
+ * アクティビティバーのアイコンボタンの配色。
+ * accent 持ちのパネルは**非アクティブ時もアクセント色**（減光）で塗り、
+ * 全アイコンが同じグレーで判別できない問題を避ける（実機確認のフィードバック反映）。
+ */
+export function activityButtonStyle(on: boolean, accent?: string): { background: string; color: string; opacity: string } {
+  if (!on) return { background: "transparent", color: accent ?? "#9ab", opacity: accent ? "0.65" : "1" };
+  return { background: "#243042", color: accent ?? "#cfe", opacity: "1" };
 }
 
 /** パネルヘッダの下線。accent 未指定は透明（高さを揺らさず従来表示のまま）。 */
@@ -177,10 +181,11 @@ export function buildSideDock(panels: SidePanelDef[], pin: DockPinActions): void
     for (const [pid, host] of hosts) host.style.display = pid === id ? "flex" : "none";
     const def = panels.find((p) => p.id === id);
     for (const [pid, btn] of iconButtons) {
-      // #259: アクティブなアイコンはそのパネルの accent 色でハイライト（未指定は従来色）。
+      // #259: accent 持ちのアイコンは常時アクセント色（非アクティブは減光・アクティブは背景付き）。
       const s = activityButtonStyle(pid === id, panels.find((p) => p.id === pid)?.accent);
       btn.style.background = s.background;
       btn.style.color = s.color;
+      btn.style.opacity = s.opacity;
     }
     // #259: ヘッダにアイコン（accent 色）＋アクセント下線。accent 未指定パネルは従来表示。
     titleEl.textContent = def ? def.title : "";
