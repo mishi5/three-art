@@ -35,6 +35,22 @@ const ICON = {
 } as const;
 const KIND_ICON: Record<AssetKind, string> = { image: ICON.image, video: ICON.video, audio: ICON.audio };
 
+/** #259: アセット種別 → 行アイコンの対応（純関数・テスト対象）。 */
+export function kindIcon(kind: AssetKind): string {
+  return KIND_ICON[kind];
+}
+
+// #259: 種別アイコンの tooltip 文言キー（i18n カタログのキーを保持し使用時に t() で解決）。
+const KIND_TITLE_KEY = {
+  image: "assets.kind.image",
+  video: "assets.kind.video",
+  audio: "assets.kind.audio",
+} as const;
+
+// #259: アセットパネルのアクセントカラー（琥珀系）。シーンパネル（青系 SCENE_ACCENT）との視覚差別化に使う。
+// 既存のダークトーン（#16161c / #1c1c22）に馴染む彩度に抑えた値。
+export const ASSET_ACCENT = "#c08a4a";
+
 const BTN_CSS =
   "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;padding:4px 8px;cursor:pointer;font:12px system-ui;";
 
@@ -54,7 +70,9 @@ export function assetPanelDef(library: AssetLibrary): SidePanelDef {
   return {
     id: "asset",
     title: t("panel.assets"),
-    icon: ICON.sidebar,
+    // #259: メディア（写真）グリフ。何のパネルか一目で分かるように（旧: 無地のサイドバー枠）。
+    icon: ICON.image,
+    accent: ASSET_ACCENT, // #259: シーンパネルと一目で見分けるための識別色
     mount: (host) => mountAssetPanel(host, library),
   };
 }
@@ -114,9 +132,18 @@ function mountAssetPanel(host: HTMLElement, library: AssetLibrary): void {
     const row = document.createElement("div");
     row.draggable = true;
     row.title = meta.fileName;
+    // #259: 左 3px のアクセントボーダー（アセット=琥珀）でシーン行と見分ける。
     row.style.cssText =
       "display:flex;align-items:center;gap:6px;padding:4px;border:1px solid #333;" +
+      `border-left:3px solid ${ASSET_ACCENT};` +
       "border-radius:4px;background:#16161c;cursor:grab;";
+
+    // #259: 左端に種別アイコン（動画/画像/音声）。サムネイルの有無によらず種別が分かる。
+    const kind = document.createElement("span");
+    kind.innerHTML = kindIcon(meta.kind);
+    kind.title = t(KIND_TITLE_KEY[meta.kind]);
+    kind.style.cssText = `flex:0 0 auto;display:flex;align-items:center;color:${ASSET_ACCENT};`;
+    row.appendChild(kind);
 
     const thumb = document.createElement("div");
     thumb.style.cssText =

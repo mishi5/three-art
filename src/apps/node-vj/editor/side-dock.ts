@@ -7,12 +7,30 @@ export interface SidePanelDef {
   id: string;
   title: string;
   icon: string;                 // インライン SVG 文字列（currentColor）
+  accent?: string;              // #259: パネルの識別色（未指定は従来表示）
   mount(host: HTMLElement): void; // 内容を host に構築（1 度だけ呼ばれる）
 }
 
 /** クリックされたパネルに応じた次のアクティブ ID。アクティブを再クリックなら閉じる（null）。純関数。 */
 export function nextActivePanel(current: string | null, clicked: string): string | null {
   return current === clicked ? null : clicked;
+}
+
+// #259: パネルごとのアクセントカラーをアクティビティバー / ヘッダへ反映する純関数。
+
+/**
+ * アクティビティバーのアイコンボタンの配色（全パネル共通のグレー系）。
+ * #259 の実機確認で「一部アイコンだけ色付きは違和感・グリフで判別できるので色は不要」との
+ * フィードバックを受け、アイコン自体の着色はしない（パネルの識別色はヘッダ下線と行側で表現）。
+ */
+export function activityButtonStyle(on: boolean): { background: string; color: string } {
+  if (!on) return { background: "transparent", color: "#9ab" };
+  return { background: "#243042", color: "#cfe" };
+}
+
+/** パネルヘッダの下線。accent 未指定は透明（高さを揺らさず従来表示のまま）。 */
+export function headerUnderline(accent?: string): string {
+  return `2px solid ${accent ?? "transparent"}`;
 }
 
 /** #228: ピン状態の読み書き（prefs への永続化は呼び出し側・settings-panel の actions と同パターン）。 */
@@ -77,9 +95,16 @@ export function buildSideDock(panels: SidePanelDef[], pin: DockPinActions): void
     "border-radius:0 6px 6px 0;font:12px system-ui;color:#ddd;box-shadow:2px 0 16px rgba(0,0,0,0.4);";
 
   const header = document.createElement("div");
-  header.style.cssText = "display:flex;align-items:center;justify-content:space-between;flex:0 0 auto;";
+  header.style.cssText =
+    "display:flex;align-items:center;justify-content:space-between;flex:0 0 auto;padding-bottom:5px;";
+  // #259: タイトル左にパネルアイコン（accent 色）。どのパネルを開いているか一目で分かるようにする。
+  const headerIcon = document.createElement("span");
+  headerIcon.style.cssText = "display:flex;align-items:center;flex:0 0 auto;";
   const titleEl = document.createElement("span");
   titleEl.style.cssText = "font-weight:600;";
+  const headerLeft = document.createElement("div");
+  headerLeft.style.cssText = "display:flex;align-items:center;gap:6px;min-width:0;";
+  headerLeft.append(headerIcon, titleEl);
   const HEADER_BTN =
     "background:#1c1c22;color:#ddd;border:1px solid #444;border-radius:4px;cursor:pointer;" +
     "display:flex;align-items:center;justify-content:center;padding:3px 6px;";
@@ -107,7 +132,7 @@ export function buildSideDock(panels: SidePanelDef[], pin: DockPinActions): void
   const headerBtns = document.createElement("div");
   headerBtns.style.cssText = "display:flex;align-items:center;gap:4px;";
   headerBtns.append(pinBtn, collapseBtn);
-  header.append(titleEl, headerBtns);
+  header.append(headerLeft, headerBtns);
   pane.appendChild(header);
 
   const iconButtons = new Map<string, HTMLButtonElement>();
@@ -154,13 +179,18 @@ export function buildSideDock(panels: SidePanelDef[], pin: DockPinActions): void
     active = id;
     pane.style.display = id ? "flex" : "none";
     for (const [pid, host] of hosts) host.style.display = pid === id ? "flex" : "none";
-    for (const [pid, btn] of iconButtons) {
-      const on = pid === id;
-      btn.style.background = on ? "#243042" : "transparent";
-      btn.style.color = on ? "#cfe" : "#9ab";
-    }
     const def = panels.find((p) => p.id === id);
+    for (const [pid, btn] of iconButtons) {
+      const s = activityButtonStyle(pid === id);
+      btn.style.background = s.background;
+      btn.style.color = s.color;
+    }
+    // #259: ヘッダはアイコン（グレー）＋アクセント下線。accent 未指定パネルは従来表示。
+    // アイコン自体は着色しない（識別色は下線と行側で表現・実機フィードバック反映）。
     titleEl.textContent = def ? def.title : "";
+    headerIcon.innerHTML = def ? def.icon : "";
+    headerIcon.style.color = "#9ab";
+    header.style.borderBottom = headerUnderline(def?.accent);
   }
 
   setActive(null); // 初期は折りたたみ
