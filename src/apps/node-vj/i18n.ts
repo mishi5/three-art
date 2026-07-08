@@ -169,6 +169,9 @@ export const CATALOG = {
     en: "Clear the filter and show all nodes",
   },
   "nodeAdd.filter.empty": { ja: "(接続可能なノードなし)", en: "(no connectable nodes)" },
+  // #256: ノード検索。
+  "nodeAdd.search.placeholder": { ja: "ノードを検索…", en: "Search nodes…" },
+  "nodeAdd.search.empty": { ja: "(該当するノードなし)", en: "(no matching nodes)" },
 
   // --- コントロールパネル（main.ts の各セクション） ---
   "controls.section.input": { ja: "入力", en: "Input" },

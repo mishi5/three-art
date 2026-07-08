@@ -2,7 +2,7 @@ import { expect, test, describe } from "bun:test";
 import { registerHappyDom } from "../../../test-setup/dom";
 import {
   buildNodeAddSections, nodeAddViewRect, viewCenter, findFreeSpot, nodeAddPanelDef,
-  createNodeAddPanel, wireDropPosition, filterBadgeText,
+  createNodeAddPanel, wireDropPosition, filterBadgeText, matchesQuery,
 } from "./node-add-panel";
 import { BAR_W, TOP, PANEL_W } from "./side-dock";
 import { TITLE_H } from "./layout";
@@ -147,11 +147,23 @@ describe("nodeAddPanelDef (DOM)", () => {
     expect(items).toEqual(["Camera", "Sine", "Screen"]);
   });
 
-  test("項目に説明（小さな説明文 + title ツールチップ）が付く", () => {
+  test("#256: チップ本体はノード名のみ・説明は title ツールチップ（名前 — 説明）に寄せる", () => {
     const host = mountPanel(() => {});
     const camera = host.querySelector("[data-node-type=Camera]") as HTMLElement;
-    expect(camera.title).toBe("カメラ映像入力。");
-    expect(camera.textContent).toContain("カメラ映像入力。");
+    expect(camera.textContent).toBe("Camera"); // チップは名前のみ（スクロール圧縮）
+    expect(camera.title).toBe("Camera — カメラ映像入力。"); // 全文はツールチップ
+  });
+
+  test("#256: 説明なしノードの title はノード名のみ", () => {
+    const host = mountPanel(() => {});
+    const sine = host.querySelector("[data-node-type=Sine]") as HTMLElement;
+    expect(sine.title).toBe("Sine");
+  });
+
+  test("#256: カテゴリはグループボックス（カテゴリ色の左ボーダー）で囲まれる", () => {
+    const host = mountPanel(() => {});
+    const groups = [...host.querySelectorAll("[data-role=group]")].map((el) => (el as HTMLElement).dataset.category);
+    expect(groups).toEqual(["source", "control", "output"]);
   });
 
   test("項目クリックで onAdd(type) が呼ばれる", () => {
@@ -159,6 +171,54 @@ describe("nodeAddPanelDef (DOM)", () => {
     const host = mountPanel((t) => added.push(t));
     (host.querySelector("[data-node-type=Screen]") as HTMLElement).click();
     expect(added).toEqual(["Screen"]);
+  });
+
+  // #256: 検索ボックスによる絞り込み
+  test("#256: 検索でノード名の部分一致に絞る（空カテゴリは消える）", () => {
+    const host = mountPanel(() => {});
+    const search = host.querySelector("[data-role=search]") as HTMLInputElement;
+    search.value = "cam";
+    search.dispatchEvent(new Event("input"));
+    const items = [...host.querySelectorAll("[data-node-type]")].map((el) => el.getAttribute("data-node-type"));
+    expect(items).toEqual(["Camera"]);
+    const groups = [...host.querySelectorAll("[data-role=group]")].map((el) => (el as HTMLElement).dataset.category);
+    expect(groups).toEqual(["source"]); // control/output は該当なしで非表示
+  });
+
+  test("#256: 検索は説明にもマッチし大小を無視する", () => {
+    const host = mountPanel(() => {});
+    const search = host.querySelector("[data-role=search]") as HTMLInputElement;
+    search.value = "最終"; // Screen の説明「最終出力。」
+    search.dispatchEvent(new Event("input"));
+    const items = [...host.querySelectorAll("[data-node-type]")].map((el) => el.getAttribute("data-node-type"));
+    expect(items).toEqual(["Screen"]);
+  });
+
+  test("#256: 該当なしのときは search-empty を表示", () => {
+    const host = mountPanel(() => {});
+    const search = host.querySelector("[data-role=search]") as HTMLInputElement;
+    search.value = "zzzzz";
+    search.dispatchEvent(new Event("input"));
+    expect(host.querySelectorAll("[data-node-type]").length).toBe(0);
+    expect(host.querySelector("[data-role=search-empty]")).not.toBeNull();
+  });
+});
+
+describe("matchesQuery (#256)", () => {
+  const item = { type: "AudioFilter", description: "音声フィルタ。" };
+  test("空クエリは全件通す", () => {
+    expect(matchesQuery(item, "")).toBe(true);
+    expect(matchesQuery(item, "   ")).toBe(true);
+  });
+  test("ノード名の部分一致（大小無視）", () => {
+    expect(matchesQuery(item, "filter")).toBe(true);
+    expect(matchesQuery(item, "AUDIO")).toBe(true);
+  });
+  test("説明の部分一致", () => {
+    expect(matchesQuery(item, "フィルタ")).toBe(true);
+  });
+  test("非マッチは false", () => {
+    expect(matchesQuery(item, "video")).toBe(false);
   });
 });
 
