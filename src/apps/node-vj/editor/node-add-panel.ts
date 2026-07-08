@@ -7,7 +7,7 @@
 import { BAR_W, TOP, PANEL_W, type SidePanelDef } from "./side-dock";
 import { groupNodesByCategory } from "./node-menu";
 import { resolveNodeText, t } from "../i18n";
-import { TITLE_H } from "./layout";
+import { TITLE_H, CATEGORY_COLORS } from "./layout";
 import type { PortType } from "../graph/port-types";
 
 const ICON = (body: string): string =>
@@ -29,16 +29,26 @@ export interface NodeAddSection {
   items: NodeAddItem[];
 }
 
+/** #256: 検索クエリ（ノード名・説明の部分一致・大小無視）にマッチするか。空クエリは全件通す。 */
+export function matchesQuery(item: NodeAddItem, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (q === "") return true;
+  return item.type.toLowerCase().includes(q) || item.description.toLowerCase().includes(q);
+}
+
 /**
  * ノード定義からパネル表示用のセクション一覧を作る。カテゴリ分けと並び順は
  * 右クリックメニューと同じ groupNodesByCategory（#103）を共有する（#227 の再整理に自動追従）。
  * #254: description はカタログキーを保持するため resolveNodeText で現在言語に解決する
  * （カタログに無い文字列はそのまま通る）。
- * #258: allowedTypes（互換フィルタ）を指定すると該当型のみ残し、空になったセクションは落とす。
+ * #258: allowedTypes（互換フィルタ）を指定すると該当型のみ残す。
+ * #256: query（検索文字列）を指定するとノード名・説明の部分一致で絞る。互換フィルタと併用可。
+ * どちらのフィルタでも空になったセクションは落とす。
  */
 export function buildNodeAddSections(
   defs: ReadonlyArray<{ type: string; category?: string; description?: string }>,
   allowedTypes?: ReadonlySet<string> | null,
+  query = "",
 ): NodeAddSection[] {
   const byType = new Map(defs.map((d) => [d.type, d]));
   return groupNodesByCategory(defs)
@@ -46,7 +56,8 @@ export function buildNodeAddSections(
       category: g.category,
       items: g.types
         .filter((t) => !allowedTypes || allowedTypes.has(t))
-        .map((t) => ({ type: t, description: resolveNodeText(byType.get(t)?.description ?? "") })),
+        .map((t) => ({ type: t, description: resolveNodeText(byType.get(t)?.description ?? "") }))
+        .filter((item) => matchesQuery(item, query)),
     }))
     .filter((s) => s.items.length > 0);
 }
@@ -216,7 +227,13 @@ interface RenderCtx {
   clear(): void;
 }
 
-/** DOM を構築し、フィルタ状態に応じて一覧を再描画する render を返す。 */
+/** チップの共通スタイル（名前のみの小ボタン・#256）。説明は title ツールチップに寄せる。 */
+const CHIP_CSS =
+  "display:inline-block;padding:3px 8px;border:1px solid #333;border-radius:4px;cursor:pointer;" +
+  "background:#16161c;color:#ddd;font:12px system-ui;white-space:nowrap;" +
+  "overflow:hidden;text-overflow:ellipsis;max-width:100%;";
+
+/** DOM を構築し、フィルタ状態・検索クエリに応じて一覧を再描画する render を返す。 */
 function mountNodeAddPanel(host: HTMLElement, deps: NodeAddPanelDeps, ctx: RenderCtx): () => void {
   // #258: フィルタ中バッジ行（バッジ＋解除ボタン）。通常時は非表示で高さを取らない。
   const filterBar = document.createElement("div");
@@ -237,8 +254,19 @@ function mountNodeAddPanel(host: HTMLElement, deps: NodeAddPanelDeps, ctx: Rende
   filterBar.append(badge, clearBtn);
   host.appendChild(filterBar);
 
+  // #256: 検索ボックス。ノード名・説明の部分一致で絞る（互換フィルタと併用可）。
+  const search = document.createElement("input");
+  search.dataset.role = "search";
+  search.type = "search";
+  search.placeholder = t("nodeAdd.search.placeholder");
+  search.style.cssText =
+    "flex:0 0 auto;background:#111;color:#ddd;border:1px solid #444;border-radius:4px;" +
+    "padding:4px 8px;font:12px system-ui;box-sizing:border-box;width:100%;";
+  search.addEventListener("input", () => render());
+  host.appendChild(search);
+
   const body = document.createElement("div");
-  body.style.cssText = "display:flex;flex-direction:column;gap:4px;overflow-y:auto;flex:1 1 auto;";
+  body.style.cssText = "display:flex;flex-direction:column;gap:8px;overflow-y:auto;flex:1 1 auto;padding-top:2px;";
   host.appendChild(body);
 
   function render(): void {
@@ -247,51 +275,51 @@ function mountNodeAddPanel(host: HTMLElement, deps: NodeAddPanelDeps, ctx: Rende
     if (filter) badge.textContent = filterBadgeText(filter.portType);
 
     body.replaceChildren();
-    const sections = buildNodeAddSections(deps.defs(), filter ? filter.types : null);
-    if (filter && sections.length === 0) {
-      // 互換ノードが 1 つも無い（現状 texture→texture のみ等では起こりうる）。
+    const query = search.value;
+    const sections = buildNodeAddSections(deps.defs(), filter ? filter.types : null, query);
+    if (sections.length === 0) {
+      // 空表示の理由を分けて出す（互換フィルタで全滅 / 検索で該当なし）。
       const empty = document.createElement("div");
-      empty.dataset.role = "filter-empty";
-      empty.textContent = t("nodeAdd.filter.empty");
+      empty.dataset.role = query.trim() ? "search-empty" : "filter-empty";
+      empty.textContent = query.trim() ? t("nodeAdd.search.empty") : t("nodeAdd.filter.empty");
       empty.style.cssText = "color:#889;padding:8px 2px;";
-      body.appendChild(empty);
+      if (query.trim() || filter) body.appendChild(empty);
     }
     for (const section of sections) {
-      // セクション見出し（controls-panel / settings-panel と同スタイル）。
-      // カテゴリ名は registry の category id をそのまま表示（CSS capitalize・#244 の i18n 化に備え固定文言を増やさない）。
+      // #256: カテゴリごとのグループボックス（カテゴリ色の左ボーダーで境界を明確化）。
+      const color = CATEGORY_COLORS[section.category] ?? "#333";
+      const box = document.createElement("div");
+      box.dataset.role = "group";
+      box.dataset.category = section.category;
+      box.style.cssText =
+        `border-left:3px solid ${color};border-radius:4px;background:#141419;padding:5px 6px 7px;`;
+      body.appendChild(box);
+
       const heading = document.createElement("div");
       heading.dataset.role = "section";
       heading.textContent = section.category;
       heading.style.cssText =
-        "color:#9ab;font-size:11px;font-weight:600;padding:6px 2px 0;text-transform:capitalize;";
-      body.appendChild(heading);
+        "color:#9ab;font-size:11px;font-weight:600;padding:0 0 4px;text-transform:capitalize;";
+      box.appendChild(heading);
+
+      // #256: チップを複数列で敷き詰める（flex ラップ）。説明は title のみ＝スクロール量を圧縮。
+      const chips = document.createElement("div");
+      chips.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;";
+      box.appendChild(chips);
 
       for (const item of section.items) {
-        const row = document.createElement("button");
-        row.dataset.nodeType = item.type;
-        row.title = item.description; // ツールチップに全文
-        row.style.cssText =
-          "display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:4px 8px;" +
-          "border:1px solid #333;border-radius:4px;cursor:pointer;text-align:left;width:100%;box-sizing:border-box;" +
-          "background:#16161c;color:#ddd;font:12px system-ui;";
-        const name = document.createElement("div");
-        name.textContent = item.type;
-        name.style.cssText = "font-weight:600;";
-        row.appendChild(name);
-        if (item.description) {
-          const desc = document.createElement("div");
-          desc.textContent = item.description;
-          desc.style.cssText =
-            "color:#999;font-size:11px;line-height:1.4;max-width:100%;" +
-            "white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
-          row.appendChild(desc);
-        }
-        row.addEventListener("mouseenter", () => { row.style.background = "#243042"; });
-        row.addEventListener("mouseleave", () => { row.style.background = "#16161c"; });
-        // クリックで追加。パネル内クリックなので #228 の自動クローズは走らず、
-        // 非ピン時でも連続追加できる。フィルタ中は選択（追加＋自動接続）扱い。
-        row.addEventListener("click", () => ctx.pick(item.type));
-        body.appendChild(row);
+        const chip = document.createElement("button");
+        chip.dataset.nodeType = item.type;
+        chip.textContent = item.type;
+        // ツールチップに名前＋説明の全文（チップ本体は名前のみ）。
+        chip.title = item.description ? `${item.type} — ${item.description}` : item.type;
+        chip.style.cssText = CHIP_CSS;
+        chip.addEventListener("mouseenter", () => { chip.style.background = "#243042"; });
+        chip.addEventListener("mouseleave", () => { chip.style.background = "#16161c"; });
+        // クリックで追加。パネル内クリックなので #228 の自動クローズは走らず連続追加できる。
+        // フィルタ中は選択（追加＋自動接続）扱い。
+        chip.addEventListener("click", () => ctx.pick(item.type));
+        chips.appendChild(chip);
       }
     }
   }
