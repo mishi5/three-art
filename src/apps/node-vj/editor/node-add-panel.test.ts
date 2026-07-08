@@ -3,6 +3,7 @@ import { registerHappyDom } from "../../../test-setup/dom";
 import {
   buildNodeAddSections, nodeAddViewRect, viewCenter, findFreeSpot, nodeAddPanelDef,
   createNodeAddPanel, wireDropPosition, filterBadgeText, matchesQuery,
+  panelDropPosition, NODE_TYPE_MIME,
 } from "./node-add-panel";
 import { BAR_W, TOP, PANEL_W } from "./side-dock";
 import { TITLE_H } from "./layout";
@@ -108,6 +109,18 @@ describe("wireDropPosition", () => {
   });
 });
 
+// #257: パネルチップの D&D ドロップ位置 → ノード配置座標（findFreeSpot は使わない）。
+describe("panelDropPosition", () => {
+  test("入力ポート側（左上）が drop 付近に来るよう TITLE_H ぶん上げる", () => {
+    expect(panelDropPosition({ x: 300, y: 200 })).toEqual({ x: 300, y: 200 - TITLE_H });
+  });
+
+  test("既存ノードと重なっていても座標をずらさない（ユーザが狙って落とすため）", () => {
+    // wireDropPosition と異なり occupied を受け取らない＝常に同じ結果。
+    expect(panelDropPosition({ x: 0, y: 0 })).toEqual({ x: 0, y: -TITLE_H });
+  });
+});
+
 // #258: フィルタバッジの表示文言（ja 既定）。
 describe("filterBadgeText", () => {
   test("ポート型名を含む", () => {
@@ -171,6 +184,33 @@ describe("nodeAddPanelDef (DOM)", () => {
     const host = mountPanel((t) => added.push(t));
     (host.querySelector("[data-node-type=Screen]") as HTMLElement).click();
     expect(added).toEqual(["Screen"]);
+  });
+
+  // #257: チップからキャンバスへの D&D 追加。draggable + dragstart で dataTransfer にノード型を積む。
+  test("#257: チップは draggable=true", () => {
+    const host = mountPanel(() => {});
+    const camera = host.querySelector("[data-node-type=Camera]") as HTMLElement;
+    expect(camera.draggable).toBe(true);
+  });
+
+  test("#257: dragstart で dataTransfer に NODE_TYPE_MIME でノード型を積み、effectAllowed=copy にする", () => {
+    const host = mountPanel(() => {});
+    const camera = host.querySelector("[data-node-type=Camera]") as HTMLElement;
+    // happy-dom は DragEvent コンストラクタ経由では dataTransfer を渡せないため、
+    // 生成後に実 DataTransfer を代入して dispatch する（実ブラウザと同じ setData/getData 経路）。
+    const dt = new DataTransfer();
+    const ev = new DragEvent("dragstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, "dataTransfer", { value: dt, configurable: true });
+    camera.dispatchEvent(ev);
+    expect(dt.getData(NODE_TYPE_MIME)).toBe("Camera");
+    expect(dt.effectAllowed).toBe("copy");
+  });
+
+  test("#257: クリック追加はドラッグ配線を追加しても従来どおり動く（共存確認）", () => {
+    const added: string[] = [];
+    const host = mountPanel((t) => added.push(t));
+    (host.querySelector("[data-node-type=Camera]") as HTMLElement).click();
+    expect(added).toEqual(["Camera"]);
   });
 
   // #256: 検索ボックスによる絞り込み

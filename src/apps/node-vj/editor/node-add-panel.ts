@@ -122,6 +122,21 @@ export function filterBadgeText(portType: PortType): string {
   return t("nodeAdd.filter.badge", { type: portType });
 }
 
+/**
+ * #257: パネルチップからキャンバスへの D&D で運ぶ MIME。既存の
+ * "application/x-node-vj-asset"（アセットパネル）・CLIP_MIME（クリップボードパネル）と同じ命名規則。
+ */
+export const NODE_TYPE_MIME = "application/x-node-vj-node-type";
+
+/**
+ * #257: パネルチップの D&D ドロップ位置（world）→ ノード配置座標。position はノード左上なので、
+ * 入力ポート側（タイトル直下の行）が drop 付近に来るよう TITLE_H ぶん上げる。
+ * wireDropPosition と異なり findFreeSpot は使わない（ユーザが狙って落とした座標にそのまま置く）。
+ */
+export function panelDropPosition(drop: { x: number; y: number }): { x: number; y: number } {
+  return { x: drop.x, y: drop.y - TITLE_H };
+}
+
 /** #258: 互換フィルタ。エッジドロップ時に setFilter で適用する。 */
 export interface NodeAddFilter {
   /** ドラッグ元の出力ポート型（バッジ表示用）。 */
@@ -319,6 +334,14 @@ function mountNodeAddPanel(host: HTMLElement, deps: NodeAddPanelDeps, ctx: Rende
         // クリックで追加。パネル内クリックなので #228 の自動クローズは走らず連続追加できる。
         // フィルタ中は選択（追加＋自動接続）扱い。
         chip.addEventListener("click", () => ctx.pick(item.type));
+        // #257: ドラッグ開始点はチップ（パネル内）のため #228 の自動クローズ（pointerdown 起点）は
+        // 発火しない。移動を伴わないプレスは dragstart が発火せず通常の click になるため、
+        // クリック追加（上記）とドラッグ追加は共存する。
+        chip.draggable = true;
+        chip.addEventListener("dragstart", (e) => {
+          e.dataTransfer?.setData(NODE_TYPE_MIME, item.type);
+          if (e.dataTransfer) e.dataTransfer.effectAllowed = "copy";
+        });
         chips.appendChild(chip);
       }
     }
