@@ -276,17 +276,16 @@ export function tapStatusRowRect(
   return { x: cr.x, y: cr.y + ROW_H, w: cr.w, h: ROW_H };
 }
 
-/** #204: コントロール行を「● 録音（ホールド）」と「✕ クリア」の 2 ボタンに分割する。 */
+/**
+ * #275: コントロール行を「✕ クリア」ボタンのみのレイアウトにする（#186 automationControlLayout の
+ * clear と同型）。録音トリガはボタンホールドから 'r' キーホールドへ移行したため録音ボタンは撤去。
+ */
 export function tapControlLayout(rect: { x: number; y: number; w: number; h: number }): {
-  rec: { x: number; y: number; w: number; h: number };
   clear: { x: number; y: number; w: number; h: number };
 } {
-  const pad = 6, gap = 6;
-  const inner = rect.w - 2 * pad;
-  const recW = Math.round(inner * 0.56); // 録音を広め（主操作）
-  const rec = { x: rect.x + pad, y: rect.y + 2, w: recW, h: rect.h - 4 };
-  const clear = { x: rec.x + recW + gap, y: rect.y + 2, w: inner - recW - gap, h: rect.h - 4 };
-  return { rec, clear };
+  const pad = 6, clearW = 54;
+  const clear = { x: rect.x + pad, y: rect.y + 2, w: clearW, h: rect.h - 4 };
+  return { clear };
 }
 
 /**

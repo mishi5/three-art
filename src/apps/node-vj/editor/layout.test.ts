@@ -195,14 +195,12 @@ describe("#204 TapSequencer layout", () => {
     expect(tapStatusRowRect(node, def)).toBeNull();
   });
 
-  test("tapControlLayout: 録音/クリアの 2 ボタンが行内に収まり重ならない", () => {
+  test("tapControlLayout: #275 クリアボタンのみが行内に収まる（録音ボタンは撤去済み）", () => {
     const cr = tapControlRowRect(tapNode, tapDef)!;
-    const { rec, clear } = tapControlLayout(cr);
-    expect(rec.x).toBeGreaterThanOrEqual(cr.x);
-    expect(rec.x + rec.w).toBeLessThanOrEqual(clear.x);
+    const { clear } = tapControlLayout(cr);
+    expect(clear.x).toBeGreaterThanOrEqual(cr.x);
     expect(clear.x + clear.w).toBeLessThanOrEqual(cr.x + cr.w);
-    expect(rec.y).toBeGreaterThanOrEqual(cr.y);
-    expect(rec.y + rec.h).toBeLessThanOrEqual(cr.y + cr.h);
+    expect(clear.y).toBeGreaterThanOrEqual(cr.y);
     expect(clear.y + clear.h).toBeLessThanOrEqual(cr.y + cr.h);
   });
 

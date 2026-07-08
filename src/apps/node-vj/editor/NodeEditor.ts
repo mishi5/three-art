@@ -72,8 +72,6 @@ type Drag =
   | { kind: "seek"; nodeId: string; seek: { x: number; w: number }; duration: number }
   // #176: 自由ラベルのドラッグ移動。dx/dy はカーソル→ラベル原点のオフセット。
   | { kind: "label"; id: string; dx: number; dy: number; moved: boolean }
-  // #204: TapSequencer の録音ボタンをホールド中（pointerup / blur で録音停止）。
-  | { kind: "tapRecord"; nodeId: string }
   // #186: Automation のシークバードラッグ（ライブスクラブ・onMove のたび fraction を再計算）。
   | { kind: "automationSeek"; nodeId: string; seek: { x: number; w: number } }
   | null;
@@ -111,6 +109,12 @@ export class NodeEditor {
    * 一度記録が始まったら selectedIds が変化しても keyup まで継続する（ロック方式・TapSequencer 同様）。
    */
   private automationRecordingNodeId: string | null = null;
+  /**
+   * #275: TapSequencer の 'r' キー録音中のノード id（記録していなければ null）。
+   * Automation と同じロック方式（keyup まで継続）だが、ノード種別が異なるため独立したプロパティで持つ
+   * （selectedIds の単一選択判定上、同時に両方が非 null になることはない）。
+   */
+  private tapSeqRecordingNodeId: string | null = null;
   /** #176: 選択中の自由ラベル id（ノード選択 selectedIds とは別管理＝グループ化対象にしない）。 */
   private selectedLabelId: string | null = null;
   /** Space 押下中は常にパン（#207: 空白左ドラッグは既定でパン、Shift+左ドラッグで矩形選択）。 */
@@ -166,9 +170,9 @@ export class NodeEditor {
   onWireDropOnEmpty?: (info: {
     fromNode: string; fromPort: string; portType: PortType; worldX: number; worldY: number;
   }) => void;
-  /** #204: TapSequencer 録音開始（録音ボタン pointerdown）。任意。 */
+  /** #204/#275: TapSequencer 録音開始（選択中ノードで物理キー 'r' を押した）。任意。 */
   onTapRecordStart?: (nodeId: string) => void;
-  /** #204: TapSequencer 録音停止（録音ボタンのホールド解除）。任意。 */
+  /** #204/#275: TapSequencer 録音停止（'r' を離した）。任意。 */
   onTapRecordStop?: (nodeId: string) => void;
   /** #204: TapSequencer 録音中のスペースキータップ。任意。 */
   onTap?: (nodeId: string) => void;
@@ -231,6 +235,9 @@ export class NodeEditor {
     // #186: Automation の 'r' キー録音（選択中ノードが単一選択かつ automation フラグの時だけ捕捉）。
     window.addEventListener("keydown", this.onAutomationKeyDown, true);
     window.addEventListener("keyup", this.onAutomationKeyUp, true);
+    // #275: TapSequencer の 'r' キー録音（選択中ノードが単一選択かつ tapSequencer フラグの時だけ捕捉）。
+    window.addEventListener("keydown", this.onTapSeqKeyDown, true);
+    window.addEventListener("keyup", this.onTapSeqKeyUp, true);
     // #167: フォーカスが外れたら Space 押下状態をリセット（keyup 取りこぼしでパンが残る不具合の防止）。
     window.addEventListener("blur", this.onBlur);
     // 右ドラッグパンのためコンテキストメニューを抑止
@@ -540,17 +547,11 @@ export class NodeEditor {
           return;
         }
       }
-      // #204: TapSequencer の録音（押している間だけ記録）/クリアボタン。
+      // #275: TapSequencer のクリアボタン（録音トリガは 'r' キーホールドへ移行・onTapSeqKeyDown/Up 参照）。
       if (def?.tapSequencer) {
         const cr = tapControlRowRect(hit.node, def);
         if (cr) {
-          const { rec, clear } = tapControlLayout(cr);
-          if (w.x >= rec.x && w.x <= rec.x + rec.w && w.y >= rec.y && w.y <= rec.y + rec.h) {
-            // ホールド録音: pointerdown で開始し、onUp（離した時点）で停止する。
-            this.onTapRecordStart?.(hit.node.id);
-            this.drag = { kind: "tapRecord", nodeId: hit.node.id };
-            return;
-          }
+          const { clear } = tapControlLayout(cr);
           if (w.x >= clear.x && w.x <= clear.x + clear.w && w.y >= clear.y && w.y <= clear.y + clear.h) {
             this.onTapClear?.(hit.node.id);
             return;
@@ -757,13 +758,6 @@ export class NodeEditor {
   }
 
   private onUp = (e: PointerEvent): void => {
-    // #204: 録音ボタンのホールド解除 → 録音停止（ループ長＝押していた時間）。
-    // trackpad の pointerup 欠落は onMove の buttons===0 フォールバック（#167）がここへ来る。
-    if (this.drag?.kind === "tapRecord") {
-      this.onTapRecordStop?.(this.drag.nodeId);
-      this.drag = null;
-      return;
-    }
     // #186: シークバードラッグの終了（値は onMove で都度反映済み・ここでは drag を畳むだけ）。
     if (this.drag?.kind === "automationSeek") {
       this.drag = null;
@@ -843,17 +837,17 @@ export class NodeEditor {
   };
 
   /**
-   * #204: TapSequencer 録音中（録音ボタンをホールド中）だけ、Space を capture フェーズで消費して
+   * #275: TapSequencer 録音中（'r' キーをホールド中）だけ、Space を capture フェーズで消費して
    * タップとして記録する。preventDefault＋stopImmediatePropagation で #167 の Space パン
    * （onKey の spaceDown）やページスクロールへ流さない。録音していない時はグローバルキーを奪わない。
    * e.key は IME 有効時に変わり取りこぼすため、必ず物理キー e.code で判定する（#167 と同じ）。
    */
   private onKeyCapture = (e: KeyboardEvent): void => {
-    if (this.drag?.kind !== "tapRecord") return;
+    if (this.tapSeqRecordingNodeId === null) return;
     if (e.code !== "Space") return;
     e.preventDefault();
     e.stopImmediatePropagation();
-    if (!e.repeat) this.onTap?.(this.drag.nodeId); // キーリピートは打鍵として数えない
+    if (!e.repeat) this.onTap?.(this.tapSeqRecordingNodeId); // キーリピートは打鍵として数えない
   };
 
   /**
@@ -887,6 +881,39 @@ export class NodeEditor {
     const id = this.automationRecordingNodeId;
     this.automationRecordingNodeId = null;
     this.onAutomationRecordStop?.(id);
+  };
+
+  /**
+   * #275: TapSequencer の 'r' キー録音（押している間だけ記録）開始。選択中ノードが単一選択かつ
+   * def.tapSequencer の時だけ捕捉する（capture フェーズ・stopImmediatePropagation で他のキー処理と
+   * 衝突しない・#186 の Automation と同じ実装パターン）。e.key は IME 有効時に変わるため必ず物理キー
+   * e.code で判定する（#167 と同じ）。一度記録が始まったら keyup まで継続する（ロック方式）。
+   */
+  private onTapSeqKeyDown = (e: KeyboardEvent): void => {
+    if (e.code !== "KeyR") return;
+    const target = e.target as HTMLElement | null;
+    if (target && (target.tagName === "INPUT" || target.tagName === "SELECT" || target.tagName === "TEXTAREA")) return;
+    if (e.repeat || this.tapSeqRecordingNodeId !== null) return;
+    if (this.selectedIds.size !== 1) return;
+    const nodeId = [...this.selectedIds][0]!;
+    const node = findNode(this.graph, nodeId);
+    const def = node ? this.registry.get(node.type) : undefined;
+    if (!def?.tapSequencer) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    this.tapSeqRecordingNodeId = nodeId;
+    this.onTapRecordStart?.(nodeId);
+  };
+
+  /** #275: TapSequencer の 'r' キー録音停止（離した）。選択が途中で変わっていても継続していたノードを止める。 */
+  private onTapSeqKeyUp = (e: KeyboardEvent): void => {
+    if (e.code !== "KeyR") return;
+    if (this.tapSeqRecordingNodeId === null) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    const id = this.tapSeqRecordingNodeId;
+    this.tapSeqRecordingNodeId = null;
+    this.onTapRecordStop?.(id);
   };
 
   private onKey = (e: KeyboardEvent): void => {
@@ -980,10 +1007,11 @@ export class NodeEditor {
   /** #167: ウィンドウ blur で Space 押下状態を解除する（keyup を取りこぼしてもパンが残らないように）。 */
   private onBlur = (): void => {
     this.spaceDown = false;
-    // #204: 録音ボタンをホールドしたままフォーカスが外れたら録音を止める（pointerup を待たない）。
-    if (this.drag?.kind === "tapRecord") {
-      this.onTapRecordStop?.(this.drag.nodeId);
-      this.drag = null;
+    // #275: 'r' キーをホールドしたままフォーカスが外れたら TapSequencer の録音も止める（keyup を待たない）。
+    if (this.tapSeqRecordingNodeId !== null) {
+      const id = this.tapSeqRecordingNodeId;
+      this.tapSeqRecordingNodeId = null;
+      this.onTapRecordStop?.(id);
     }
     // #186: 'r' キーをホールドしたままフォーカスが外れたら Automation の録音も止める（keyup を待たない）。
     if (this.automationRecordingNodeId !== null) {
@@ -1769,26 +1797,19 @@ export class NodeEditor {
       }
       ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.font = "11px system-ui";
     }
-    // #204: TapSequencer の録音（ホールド）/クリアボタンとステータス行。
+    // #275: TapSequencer のクリアボタン（録音トリガは 'r' キーホールドへ移行済み）とステータス行。
     if (hasTapRows(def)) {
       const cr = tapControlRowRect(node, def)!;
-      const { rec, clear } = tapControlLayout(cr);
+      const { clear } = tapControlLayout(cr);
       const info = this.tapSeqInfo?.(node.id);
       const recording = info?.phase === "recording";
-      // 録音ボタン（録音中は赤く点灯）。
-      ctx.fillStyle = recording ? "#7a2430" : "#3a2a2a";
-      roundRect(ctx, rec.x, rec.y, rec.w, rec.h, 4);
-      ctx.fill();
-      ctx.strokeStyle = recording ? "#ff8f9f" : "#7a5a5a"; ctx.lineWidth = 1; ctx.stroke();
-      ctx.fillStyle = recording ? "#ffd7dd" : "#e9a0a0";
-      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "11px system-ui";
-      ctx.fillText(recording ? t("node.tap.recordingBtn") : t("node.tap.recordBtn"), rec.x + rec.w / 2, rec.y + rec.h / 2);
       // クリアボタン。
       ctx.fillStyle = "#262630";
       roundRect(ctx, clear.x, clear.y, clear.w, clear.h, 4);
       ctx.fill();
       ctx.strokeStyle = "#4a5566"; ctx.lineWidth = 1; ctx.stroke();
       ctx.fillStyle = "#9ab";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "11px system-ui";
       ctx.fillText(t("node.tap.clearBtn"), clear.x + clear.w / 2, clear.y + clear.h / 2);
       // ステータス行（記録数/ループ長/再生位置）。
       const st = tapStatusRowRect(node, def)!;
@@ -1865,6 +1886,8 @@ export class NodeEditor {
     window.removeEventListener("keyup", this.onKeyUp);
     window.removeEventListener("keydown", this.onAutomationKeyDown, true);
     window.removeEventListener("keyup", this.onAutomationKeyUp, true);
+    window.removeEventListener("keydown", this.onTapSeqKeyDown, true);
+    window.removeEventListener("keyup", this.onTapSeqKeyUp, true);
     window.removeEventListener("blur", this.onBlur);
     this.canvas.removeEventListener("contextmenu", this.onContextMenu);
     this.canvas.removeEventListener("wheel", this.onWheel);

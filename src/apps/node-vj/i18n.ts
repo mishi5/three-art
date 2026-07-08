@@ -265,8 +265,6 @@ export const CATALOG = {
   "node.tap.none": { ja: "記録なし", en: "No recording" },
   "node.tap.recording": { ja: "録音中 {n}打 {sec}s", en: "Recording {n} taps {sec}s" },
   "node.tap.playing": { ja: "{n}打 / {len}s ループ ▶{pos}s", en: "{n} taps / {len}s loop ▶{pos}s" },
-  "node.tap.recordBtn": { ja: "● 録音", en: "● Record" },
-  "node.tap.recordingBtn": { ja: "● 録音中…", en: "● Recording…" },
   "node.tap.clearBtn": { ja: "✕ クリア", en: "✕ Clear" },
   // #186: Automation（選択中に物理キー 'r' をホールドして記録）のステータス行/クリアボタン。
   "node.automation.none": { ja: "記録なし", en: "No recording" },
