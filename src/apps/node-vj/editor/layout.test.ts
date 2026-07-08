@@ -7,6 +7,8 @@ import {
   padExpandButtonRect, padStopButtonRect,
   PAD_MARGIN_X, PAD_MARGIN_TOP,
   hasTapRows, tapControlRowRect, tapStatusRowRect, tapControlLayout, tapStatusLabel,
+  hasAutomationRows, automationSeekRowRect, automationControlRowRect, automationControlLayout,
+  automationSeekFraction, automationStatusLabel,
   CATEGORY_COLORS,
 } from "./layout";
 import { NODE_CATEGORIES, type NodeTypeDef } from "../graph/node-type";
@@ -212,6 +214,77 @@ describe("#204 TapSequencer layout", () => {
       .toBe("録音中 3打 1.2s");
     expect(tapStatusLabel({ phase: "playing", tapCount: 4, loopLenSec: 2.5, playPosSec: 0.78, recordElapsedSec: 0 }))
       .toBe("4打 / 2.5s ループ ▶0.8s");
+  });
+});
+
+describe("#186 Automation layout", () => {
+  // reset (trigger) 入力・out (number) 出力・value/loopMode/speed の 3 可視 param・automation フラグ。
+  const autoDef: NodeTypeDef = {
+    type: "Automation", category: "control",
+    inputs: [{ id: "reset", label: "reset", type: "trigger" }],
+    outputs: [{ id: "out", label: "out", type: "number" }],
+    params: [
+      { id: "value", label: "value", kind: "number", default: 0 },
+      { id: "loopMode", label: "loopMode", kind: "enum", default: "loop", options: ["once", "loop", "pingpong"] },
+      { id: "speed", label: "speed", kind: "number", default: 1 },
+    ],
+    automation: true, evaluate: () => ({}),
+  };
+  const autoNode: NodeInstance = { id: "a", type: "Automation", params: {}, position: { x: 100, y: 50 } };
+
+  test("hasAutomationRows 判定", () => {
+    expect(hasAutomationRows(autoDef)).toBe(true);
+    expect(hasAutomationRows(def)).toBe(false);
+  });
+
+  test("nodeHeight はシークバー行＋クリア/ステータス行の 2 行ぶん増える", () => {
+    // portRows = max(1 signal入力, 1 出力) = 1・可視 param = 3 → base + 2 行
+    const base = TITLE_H + 1 * ROW_H + 3 * ROW_H + 8;
+    expect(nodeHeight(autoDef)).toBe(base + 2 * ROW_H);
+  });
+
+  test("シークバー行は params 直下・クリア/ステータス行はその下（automation 無しは null）", () => {
+    const sr = automationSeekRowRect(autoNode, autoDef)!;
+    expect(sr).toEqual({ x: 100, y: 50 + TITLE_H + 1 * ROW_H + 3 * ROW_H, w: NODE_WIDTH, h: ROW_H });
+    const cr = automationControlRowRect(autoNode, autoDef)!;
+    expect(cr).toEqual({ x: 100, y: sr.y + ROW_H, w: NODE_WIDTH, h: ROW_H });
+    expect(automationSeekRowRect(autoNode, def)).toBeNull();
+    expect(automationControlRowRect(autoNode, def)).toBeNull();
+  });
+
+  test("automationControlLayout: クリアボタンとステータス表示が行内に収まり重ならない", () => {
+    const cr = automationControlRowRect(autoNode, autoDef)!;
+    const { clear, status } = automationControlLayout(cr);
+    expect(clear.x).toBeGreaterThanOrEqual(cr.x);
+    expect(clear.x + clear.w).toBeLessThanOrEqual(status.x);
+    expect(status.x + status.w).toBeLessThanOrEqual(cr.x + cr.w);
+    expect(clear.y).toBeGreaterThanOrEqual(cr.y);
+    expect(clear.y + clear.h).toBeLessThanOrEqual(cr.y + cr.h);
+    expect(status.y + status.h).toBeLessThanOrEqual(cr.y + cr.h);
+  });
+
+  test("automationSeekFraction: rect 内の x 座標を 0..1 に変換しクランプする", () => {
+    const rect = { x: 100, w: 100 };
+    expect(automationSeekFraction(rect, 100)).toBeCloseTo(0);
+    expect(automationSeekFraction(rect, 150)).toBeCloseTo(0.5);
+    expect(automationSeekFraction(rect, 200)).toBeCloseTo(1);
+    expect(automationSeekFraction(rect, 50)).toBe(0);   // 範囲外下方はクランプ
+    expect(automationSeekFraction(rect, 250)).toBe(1);  // 範囲外上方はクランプ
+  });
+
+  test("automationSeekFraction: rect.w<=0 は 0", () => {
+    expect(automationSeekFraction({ x: 0, w: 0 }, 10)).toBe(0);
+    expect(automationSeekFraction({ x: 0, w: -5 }, 10)).toBe(0);
+  });
+
+  test("automationStatusLabel: フェーズごとの表示", () => {
+    expect(automationStatusLabel(undefined)).toBe("記録なし");
+    expect(automationStatusLabel({ phase: "idle", frameCount: 0, loopLenSec: 0, playPosSec: 0, recordElapsedSec: 0 }))
+      .toBe("記録なし");
+    expect(automationStatusLabel({ phase: "recording", frameCount: 12, loopLenSec: 0, playPosSec: 0, recordElapsedSec: 1.23 }))
+      .toBe("録音中 12点 1.2s");
+    expect(automationStatusLabel({ phase: "playing", frameCount: 20, loopLenSec: 2.5, playPosSec: 0.78, recordElapsedSec: 0 }))
+      .toBe("2.5s ループ ▶0.8s");
   });
 });
 

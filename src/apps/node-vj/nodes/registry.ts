@@ -26,6 +26,7 @@ import { ParticleRenderNode } from "./ParticleRenderNode";
 import { PointTransformNode } from "./PointTransformNode";
 import { EnvelopeNode } from "./EnvelopeNode";
 import { FlipFlopNode } from "./FlipFlopNode";
+import { AutomationNode } from "./AutomationNode";
 import { TextureSequencerNode } from "./TextureSequencerNode";
 import { BlendNode } from "./BlendNode";
 import { KeyNode } from "./KeyNode";
@@ -74,6 +75,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(RandomValueNode);
   r.register(PulseNode);
   r.register(TapSequencerNode);
+  r.register(AutomationNode);
   r.register(FlipFlopNode);
   r.register(EnvelopeNode);
   r.register(AddNode);

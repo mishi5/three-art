@@ -78,6 +78,14 @@ export function hasTapRows(def: NodeTypeDef): boolean {
 /** #204: TapSequencer が追加する行数（録音/クリアのコントロール行＋ステータス行）。 */
 const TAP_ROWS = 2;
 
+/** #186: Automation の記録/再生 UI（シークバー行＋クリア/ステータス行）を出すか。 */
+export function hasAutomationRows(def: NodeTypeDef): boolean {
+  return !!def.automation;
+}
+
+/** #186: Automation が追加する行数（シークバー行＋クリア/ステータス行）。 */
+const AUTOMATION_ROWS = 2;
+
 /** #154: ノード UI に行を描く param の数（hidden を除く）。末尾の hidden param 行は詰める。 */
 export function visibleParamCount(def: NodeTypeDef): number {
   return def.params.reduce((n, p) => (p.hidden ? n : n + 1), 0);
@@ -91,7 +99,10 @@ export function nodeHeight(def: NodeTypeDef): number {
   const padRows = hasPadGrid(def) ? PAD_MARGIN_TOP + padGridHeight(def) : 0;
   // #204: タップ録音 UI（コントロール行＋ステータス行）。
   const tapRows = hasTapRows(def) ? TAP_ROWS * ROW_H : 0;
-  return TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H + randomRow + fileRows + sceneRow + padRows + tapRows + PADDING;
+  // #186: Automation の記録/再生 UI（シークバー行＋クリア/ステータス行）。
+  const automationRows = hasAutomationRows(def) ? AUTOMATION_ROWS * ROW_H : 0;
+  return TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H + randomRow + fileRows + sceneRow
+    + padRows + tapRows + automationRows + PADDING;
 }
 
 export function nodePos(node: NodeInstance): { x: number; y: number } {
@@ -291,6 +302,64 @@ export function tapStatusLabel(
     return t("node.tap.playing", { n: s.tapCount, len: s.loopLenSec.toFixed(1), pos: s.playPosSec.toFixed(1) });
   }
   return t("node.tap.none");
+}
+
+/** #186: Automation のシークバー行の領域（params 直下・automation 無しは null）。 */
+export function automationSeekRowRect(
+  node: NodeInstance, def: NodeTypeDef,
+): { x: number; y: number; w: number; h: number } | null {
+  if (!hasAutomationRows(def)) return null;
+  const p = nodePos(node);
+  return { x: p.x, y: p.y + TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H, w: NODE_WIDTH, h: ROW_H };
+}
+
+/** #186: Automation のクリアボタン＋ステータス行の領域（シークバー行の直下）。 */
+export function automationControlRowRect(
+  node: NodeInstance, def: NodeTypeDef,
+): { x: number; y: number; w: number; h: number } | null {
+  const sr = automationSeekRowRect(node, def);
+  if (!sr) return null;
+  return { x: sr.x, y: sr.y + ROW_H, w: sr.w, h: ROW_H };
+}
+
+/** #186: コントロール行を「✕ クリア」ボタンとステータス表示に分割する（#204 tapControlLayout と同型）。 */
+export function automationControlLayout(rect: { x: number; y: number; w: number; h: number }): {
+  clear: { x: number; y: number; w: number; h: number };
+  status: { x: number; y: number; w: number; h: number };
+} {
+  const pad = 6, gap = 6, clearW = 54;
+  const clear = { x: rect.x + pad, y: rect.y + 2, w: clearW, h: rect.h - 4 };
+  const status = { x: clear.x + clearW + gap, y: rect.y + 2, w: rect.w - 2 * pad - clearW - gap, h: rect.h - 4 };
+  return { clear, status };
+}
+
+/**
+ * #186: シークバー領域内の world x 座標から再生位置の fraction（0..1・クランプ済み）を算出する
+ * 純関数。rect.w<=0（不正なレイアウト）は 0。
+ */
+export function automationSeekFraction(
+  rect: { x: number; w: number }, worldX: number,
+): number {
+  if (!(rect.w > 0)) return 0;
+  const ratio = (worldX - rect.x) / rect.w;
+  return Math.max(0, Math.min(1, ratio));
+}
+
+/**
+ * #186: ステータス行のラベル。recording は記録点数＋経過秒、playing はループ長＋再生位置、
+ * それ以外（idle・state 未生成）は「記録なし」。
+ */
+export function automationStatusLabel(
+  s: { phase: string; frameCount: number; loopLenSec: number; playPosSec: number; recordElapsedSec: number } | null | undefined,
+): string {
+  if (!s) return t("node.automation.none");
+  if (s.phase === "recording") {
+    return t("node.automation.recording", { n: s.frameCount, sec: s.recordElapsedSec.toFixed(1) });
+  }
+  if (s.phase === "playing") {
+    return t("node.automation.playing", { len: s.loopLenSec.toFixed(1), pos: s.playPosSec.toFixed(1) });
+  }
+  return t("node.automation.none");
 }
 
 /** #152: シーン選択行の領域（params 直下・sceneInput 無しは null）。 */

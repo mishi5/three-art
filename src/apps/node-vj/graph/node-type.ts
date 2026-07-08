@@ -128,6 +128,13 @@ export interface NodeTypeDef {
    * ランタイム state に startRecording/stopRecording/tap/clear/status を持つ前提。
    */
   tapSequencer?: boolean;
+  /**
+   * #186: ノード上に param 軌跡の記録/再生 UI（シークバー＋クリアボタン＋ステータス行）を
+   * 描く目印（Automation）。記録トリガはノード直付けボタンではなく、選択中に物理キー 'r' を
+   * ホールドする NodeEditor 側の仕組み（tapSequencer とは録音トリガの起点が異なる）。
+   * ランタイム state に startRecording/stopRecording/clear/seekToFraction/status を持つ前提。
+   */
+  automation?: boolean;
   /** visual/sink ノードの初期化（THREE オブジェクト生成・scene 追加等）。1 度だけ呼ばれる。 */
   createState?(env: NodeEnv): NodeState;
   /**
