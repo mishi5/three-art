@@ -26,7 +26,7 @@ import { hitTest } from "./hit-test";
 import { tooltipForHit, tooltipBox, wrapLines, nodeMenuTooltipContent, type TooltipContent } from "./tooltip";
 import { screenToWorld, worldToScreen, zoomAt } from "./viewport";
 import { groupNodesByCategory } from "./node-menu";
-import { findFreeSpot, viewCenter, wireDropPosition, type ViewRect } from "./node-add-panel";
+import { findFreeSpot, viewCenter, wireDropPosition, panelDropPosition, NODE_TYPE_MIME, type ViewRect } from "./node-add-panel";
 import { duplicateNodes } from "../graph/duplicate";
 import { CLIP_MIME, makeClipItem, pasteClip, type NodeClipboard } from "./node-clipboard";
 import { renderClipThumbnail } from "./clip-thumbnail";
@@ -359,6 +359,17 @@ export class NodeEditor {
     return id;
   }
 
+  /**
+   * #257: ノード追加パネルのチップからの D&D 追加。screen（クライアント座標）を world 変換し、
+   * panelDropPosition で入力ポート側を drop 位置に寄せた座標へ addNodeOfType（接続なし・
+   * 履歴 record 込みの単純追加）でそのまま置く。findFreeSpot による重なり回避はしない
+   * （ユーザが狙って落とした位置にそのまま置くため）。
+   */
+  addNodeAtDropPoint(type: string, screen: { x: number; y: number }): string {
+    const w = screenToWorld(screen.x, screen.y, this.offset, this.scale);
+    return this.addNodeOfType(type, panelDropPosition(w));
+  }
+
   // --- pointer 座標 → world 座標（#92: ズーム反映）---
   private toWorld(e: PointerEvent): { x: number; y: number } {
     return screenToWorld(e.clientX, e.clientY, this.offset, this.scale);
@@ -379,13 +390,18 @@ export class NodeEditor {
     this.hover = null; // ズーム中はツールチップを消す
   };
 
-  /** #154/#206: asset id / クリップ項目を運ぶ D&D を受け入れる（ドロップ可否を示すため preventDefault）。 */
+  /**
+   * #154/#206/#257: asset id / クリップ項目 / ノード追加パネルのノード型を運ぶ D&D を
+   * 受け入れる（ドロップ可否を示すため preventDefault）。
+   */
   private onDragOver = (e: DragEvent): void => {
     const t = e.dataTransfer?.types;
-    if (t && (t.includes("application/x-node-vj-asset") || t.includes(CLIP_MIME))) e.preventDefault();
+    if (t && (t.includes("application/x-node-vj-asset") || t.includes(CLIP_MIME) || t.includes(NODE_TYPE_MIME))) {
+      e.preventDefault();
+    }
   };
 
-  /** #154: asset / #206: クリップ項目をドロップ位置（world 座標）へ貼り付ける。 */
+  /** #154: asset / #206: クリップ項目 / #257: パネルのノード型をドロップ位置（world 座標）へ配置する。 */
   private onDrop = (e: DragEvent): void => {
     // #206: クリップ履歴項目のドロップ＝その位置に貼り付け、貼付ノードを選択・current に。
     const clipId = e.dataTransfer?.getData(CLIP_MIME);
@@ -398,6 +414,13 @@ export class NodeEditor {
         this.selectedIds = new Set(pasteClip(this.graph, this.registry, item, genId, { at: w }));
         this.clipboard.setCurrent(clipId);
       }
+      return;
+    }
+    // #257: ノード追加パネルのチップドロップ＝ドロップ位置へ addNodeOfType（接続なし）で追加する。
+    const nodeType = e.dataTransfer?.getData(NODE_TYPE_MIME);
+    if (nodeType) {
+      e.preventDefault();
+      this.addNodeAtDropPoint(nodeType, { x: e.clientX, y: e.clientY });
       return;
     }
     const id = e.dataTransfer?.getData("application/x-node-vj-asset");
