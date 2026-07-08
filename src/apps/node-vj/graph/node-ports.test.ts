@@ -1,5 +1,8 @@
 import { expect, test, describe } from "bun:test";
-import { paramInputs, signalInputs, effectiveInputPorts, isParamInput, isNumericParam } from "./node-ports";
+import {
+  paramInputs, signalInputs, effectiveInputPorts, isParamInput, isNumericParam,
+  firstCompatibleInput, compatibleNodeTypes,
+} from "./node-ports";
 import type { NodeTypeDef } from "./node-type";
 
 // Multiply 風: 宣言入力 a/b（数値 param a/b と同 id）
@@ -70,5 +73,60 @@ describe("node-ports 分類", () => {
     expect(paramInputs(fixed)).toEqual([]);
     expect(effectiveInputPorts(fixed)).toEqual([]);
     expect(isParamInput(fixed, "value")).toBe(false);
+  });
+});
+
+// #258: エッジドロップ（出力ポート起点）の互換ノード判定と自動接続先の決定。
+describe("firstCompatibleInput (#258)", () => {
+  test("宣言入力（signal）から最初の互換ポートを返す", () => {
+    expect(firstCompatibleInput(visual, "pose")?.id).toBe("pose");
+    expect(firstCompatibleInput(visual, "audio")?.id).toBe("audio");
+  });
+
+  test("数値 param の自動入力ポート化（paramInputs）も接続先とみなす", () => {
+    // visual の number 互換は param 由来の radius（宣言入力 pose/audio は不一致）。
+    expect(firstCompatibleInput(visual, "number")?.id).toBe("radius");
+    // Multiply は a/b が param 由来 → 最初の a。
+    expect(firstCompatibleInput(multiply, "number")?.id).toBe("a");
+  });
+
+  test("互換入力が無ければ undefined", () => {
+    expect(firstCompatibleInput(visual, "texture")).toBeUndefined();
+    expect(firstCompatibleInput(multiply, "pose")).toBeUndefined();
+  });
+
+  test("noInput な数値 param は接続先にならない", () => {
+    const fixed: NodeTypeDef = {
+      type: "Fixed",
+      inputs: [],
+      outputs: [{ id: "out", label: "n", type: "number" }],
+      params: [{ id: "value", label: "Value", kind: "number", default: 1, noInput: true }],
+      evaluate: () => ({}),
+    };
+    expect(firstCompatibleInput(fixed, "number")).toBeUndefined();
+  });
+});
+
+describe("compatibleNodeTypes (#258)", () => {
+  const fixed: NodeTypeDef = {
+    type: "Fixed",
+    inputs: [],
+    outputs: [{ id: "out", label: "n", type: "number" }],
+    params: [{ id: "value", label: "Value", kind: "number", default: 1, noInput: true }],
+    evaluate: () => ({}),
+  };
+  const defs = [multiply, visual, fixed];
+
+  test("互換な入力ポート（param 入力含む）を持つ型のみ返す（定義順を維持）", () => {
+    expect(compatibleNodeTypes(defs, "number")).toEqual(["Multiply", "V"]);
+    expect(compatibleNodeTypes(defs, "pose")).toEqual(["V"]);
+  });
+
+  test("互換ノードが無ければ空配列", () => {
+    expect(compatibleNodeTypes(defs, "texture")).toEqual([]);
+  });
+
+  test("空定義なら空配列", () => {
+    expect(compatibleNodeTypes([], "number")).toEqual([]);
   });
 });

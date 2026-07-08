@@ -2,10 +2,13 @@ import { expect, test, describe } from "bun:test";
 import { registerHappyDom } from "../../../test-setup/dom";
 import {
   buildNodeAddSections, nodeAddViewRect, viewCenter, findFreeSpot, nodeAddPanelDef,
+  createNodeAddPanel, wireDropPosition, filterBadgeText, matchesQuery,
 } from "./node-add-panel";
 import { BAR_W, TOP, PANEL_W } from "./side-dock";
+import { TITLE_H } from "./layout";
 
 // #243: サイドドック「ノード追加」パネルの一覧データ生成・配置座標の純関数と DOM mount。
+// #258: 互換フィルタ（エッジドロップ → 接続可能ノードのみ表示）と右ドック化に伴う可視領域。
 
 describe("buildNodeAddSections", () => {
   const defs = [
@@ -36,12 +39,28 @@ describe("buildNodeAddSections", () => {
   test("空定義なら空配列", () => {
     expect(buildNodeAddSections([])).toEqual([]);
   });
+
+  // #258: 互換フィルタ。allowedTypes 指定時は該当型のみ・空になったセクションは落とす。
+  test("allowedTypes で項目を絞り、空セクションは含めない", () => {
+    const sections = buildNodeAddSections(defs, new Set(["Sine", "Screen"]));
+    expect(sections.map((s) => s.category)).toEqual(["control", "output"]);
+    expect(sections.flatMap((s) => s.items.map((i) => i.type))).toEqual(["Sine", "Screen"]);
+  });
+
+  test("allowedTypes が空集合なら空配列", () => {
+    expect(buildNodeAddSections(defs, new Set())).toEqual([]);
+  });
+
+  test("allowedTypes 未指定（undefined/null）は従来どおり全件", () => {
+    expect(buildNodeAddSections(defs, null).flatMap((s) => s.items).length).toBe(4);
+  });
 });
 
 describe("nodeAddViewRect / viewCenter", () => {
-  test("ドック（バー+パネル）の右端〜画面右端・ツールバー下〜画面下端", () => {
+  // #258: パネルは右ドックへ移動。可視領域は「左バー右端〜右ドック（バー+パネル）左端」。
+  test("左バー右端〜右ドック左端・ツールバー下〜画面下端", () => {
     const view = nodeAddViewRect(1200, 800);
-    expect(view).toEqual({ left: BAR_W + PANEL_W, top: TOP, right: 1200, bottom: 800 });
+    expect(view).toEqual({ left: BAR_W, top: TOP, right: 1200 - BAR_W - PANEL_W, bottom: 800 });
   });
 
   test("viewCenter は矩形の中心", () => {
@@ -77,6 +96,26 @@ describe("findFreeSpot", () => {
   });
 });
 
+// #258: エッジドロップ位置 → ノード配置座標。
+describe("wireDropPosition", () => {
+  test("入力ポート側（左上）が drop 付近に来るよう TITLE_H ぶん上げる", () => {
+    expect(wireDropPosition({ x: 300, y: 200 }, [])).toEqual({ x: 300, y: 200 - TITLE_H });
+  });
+
+  test("既存ノードと重なる場合は findFreeSpot で回避する", () => {
+    const p = wireDropPosition({ x: 300, y: 200 }, [{ x: 300, y: 200 - TITLE_H }]);
+    expect(Math.hypot(p.x - 300, p.y - (200 - TITLE_H))).toBeGreaterThan(0);
+  });
+});
+
+// #258: フィルタバッジの表示文言（ja 既定）。
+describe("filterBadgeText", () => {
+  test("ポート型名を含む", () => {
+    expect(filterBadgeText("texture")).toContain("texture");
+    expect(filterBadgeText("number")).toContain("number");
+  });
+});
+
 describe("nodeAddPanelDef (DOM)", () => {
   registerHappyDom();
 
@@ -108,11 +147,23 @@ describe("nodeAddPanelDef (DOM)", () => {
     expect(items).toEqual(["Camera", "Sine", "Screen"]);
   });
 
-  test("項目に説明（小さな説明文 + title ツールチップ）が付く", () => {
+  test("#256: チップ本体はノード名のみ・説明は title ツールチップ（名前 — 説明）に寄せる", () => {
     const host = mountPanel(() => {});
     const camera = host.querySelector("[data-node-type=Camera]") as HTMLElement;
-    expect(camera.title).toBe("カメラ映像入力。");
-    expect(camera.textContent).toContain("カメラ映像入力。");
+    expect(camera.textContent).toBe("Camera"); // チップは名前のみ（スクロール圧縮）
+    expect(camera.title).toBe("Camera — カメラ映像入力。"); // 全文はツールチップ
+  });
+
+  test("#256: 説明なしノードの title はノード名のみ", () => {
+    const host = mountPanel(() => {});
+    const sine = host.querySelector("[data-node-type=Sine]") as HTMLElement;
+    expect(sine.title).toBe("Sine");
+  });
+
+  test("#256: カテゴリはグループボックス（カテゴリ色の左ボーダー）で囲まれる", () => {
+    const host = mountPanel(() => {});
+    const groups = [...host.querySelectorAll("[data-role=group]")].map((el) => (el as HTMLElement).dataset.category);
+    expect(groups).toEqual(["source", "control", "output"]);
   });
 
   test("項目クリックで onAdd(type) が呼ばれる", () => {
@@ -120,5 +171,165 @@ describe("nodeAddPanelDef (DOM)", () => {
     const host = mountPanel((t) => added.push(t));
     (host.querySelector("[data-node-type=Screen]") as HTMLElement).click();
     expect(added).toEqual(["Screen"]);
+  });
+
+  // #256: 検索ボックスによる絞り込み
+  test("#256: 検索でノード名の部分一致に絞る（空カテゴリは消える）", () => {
+    const host = mountPanel(() => {});
+    const search = host.querySelector("[data-role=search]") as HTMLInputElement;
+    search.value = "cam";
+    search.dispatchEvent(new Event("input"));
+    const items = [...host.querySelectorAll("[data-node-type]")].map((el) => el.getAttribute("data-node-type"));
+    expect(items).toEqual(["Camera"]);
+    const groups = [...host.querySelectorAll("[data-role=group]")].map((el) => (el as HTMLElement).dataset.category);
+    expect(groups).toEqual(["source"]); // control/output は該当なしで非表示
+  });
+
+  test("#256: 検索は説明にもマッチし大小を無視する", () => {
+    const host = mountPanel(() => {});
+    const search = host.querySelector("[data-role=search]") as HTMLInputElement;
+    search.value = "最終"; // Screen の説明「最終出力。」
+    search.dispatchEvent(new Event("input"));
+    const items = [...host.querySelectorAll("[data-node-type]")].map((el) => el.getAttribute("data-node-type"));
+    expect(items).toEqual(["Screen"]);
+  });
+
+  test("#256: 該当なしのときは search-empty を表示", () => {
+    const host = mountPanel(() => {});
+    const search = host.querySelector("[data-role=search]") as HTMLInputElement;
+    search.value = "zzzzz";
+    search.dispatchEvent(new Event("input"));
+    expect(host.querySelectorAll("[data-node-type]").length).toBe(0);
+    expect(host.querySelector("[data-role=search-empty]")).not.toBeNull();
+  });
+});
+
+describe("matchesQuery (#256)", () => {
+  const item = { type: "AudioFilter", description: "音声フィルタ。" };
+  test("空クエリは全件通す", () => {
+    expect(matchesQuery(item, "")).toBe(true);
+    expect(matchesQuery(item, "   ")).toBe(true);
+  });
+  test("ノード名の部分一致（大小無視）", () => {
+    expect(matchesQuery(item, "filter")).toBe(true);
+    expect(matchesQuery(item, "AUDIO")).toBe(true);
+  });
+  test("説明の部分一致", () => {
+    expect(matchesQuery(item, "フィルタ")).toBe(true);
+  });
+  test("非マッチは false", () => {
+    expect(matchesQuery(item, "video")).toBe(false);
+  });
+});
+
+// #258: 互換フィルタ付きパネル（エッジドロップからの自動オープン）。
+describe("createNodeAddPanel filter (DOM)", () => {
+  registerHappyDom();
+
+  const defs = [
+    { type: "Camera", category: "source", description: "カメラ映像入力。" },
+    { type: "Sine", category: "control" },
+    { type: "Screen", category: "output", description: "最終出力。" },
+  ];
+
+  interface Ctx {
+    host: HTMLElement;
+    pane: HTMLElement;
+    panel: ReturnType<typeof createNodeAddPanel>;
+    added: string[];
+    picked: string[];
+  }
+
+  /** dock-pane 相当のラッパごと body に mount する（外側クリック判定のため）。 */
+  function mount(): Ctx {
+    const added: string[] = [];
+    const picked: string[] = [];
+    const panel = createNodeAddPanel({ defs: () => defs, onAdd: (t) => added.push(t) });
+    const pane = document.createElement("div");
+    pane.dataset.role = "dock-pane";
+    const host = document.createElement("div");
+    pane.appendChild(host);
+    document.body.appendChild(pane);
+    panel.def.mount(host);
+    return { host, pane, panel, added, picked };
+  }
+
+  function cleanup(ctx: Ctx): void {
+    ctx.panel.clearFilter();
+    ctx.pane.remove();
+  }
+
+  function types(host: HTMLElement): (string | null)[] {
+    return [...host.querySelectorAll("[data-node-type]")].map((el) => el.getAttribute("data-node-type"));
+  }
+
+  test("setFilter で互換型のみ表示・バッジと解除ボタンが出る", () => {
+    const ctx = mount();
+    ctx.panel.setFilter({ portType: "texture", types: new Set(["Screen"]), onPick: (t) => ctx.picked.push(t) });
+    expect(types(ctx.host)).toEqual(["Screen"]);
+    const badge = ctx.host.querySelector("[data-role=filter-badge]") as HTMLElement;
+    expect(badge.textContent).toContain("texture");
+    expect(ctx.host.querySelector("[data-role=filter-clear]")).not.toBeNull();
+    cleanup(ctx);
+  });
+
+  test("フィルタ中の項目クリックは onPick（onAdd ではない）・フィルタは解除される", () => {
+    const ctx = mount();
+    ctx.panel.setFilter({ portType: "texture", types: new Set(["Screen"]), onPick: (t) => ctx.picked.push(t) });
+    (ctx.host.querySelector("[data-node-type=Screen]") as HTMLElement).click();
+    expect(ctx.picked).toEqual(["Screen"]);
+    expect(ctx.added).toEqual([]);
+    expect(ctx.panel.getFilter()).toBeNull();
+    expect(types(ctx.host)).toEqual(["Camera", "Sine", "Screen"]); // 全件表示に戻る
+    cleanup(ctx);
+  });
+
+  test("解除ボタンで何も追加せず全件表示に戻る", () => {
+    const ctx = mount();
+    ctx.panel.setFilter({ portType: "number", types: new Set(["Sine"]), onPick: (t) => ctx.picked.push(t) });
+    (ctx.host.querySelector("[data-role=filter-clear]") as HTMLElement).click();
+    expect(ctx.picked).toEqual([]);
+    expect(ctx.panel.getFilter()).toBeNull();
+    expect(types(ctx.host)).toEqual(["Camera", "Sine", "Screen"]);
+    cleanup(ctx);
+  });
+
+  test("Esc でフィルタ解除（何も追加しない）", () => {
+    const ctx = mount();
+    ctx.panel.setFilter({ portType: "number", types: new Set(["Sine"]), onPick: (t) => ctx.picked.push(t) });
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(ctx.panel.getFilter()).toBeNull();
+    expect(ctx.picked).toEqual([]);
+    cleanup(ctx);
+  });
+
+  test("ペイン外 pointerdown でフィルタ解除・ペイン内では解除しない", () => {
+    const ctx = mount();
+    ctx.panel.setFilter({ portType: "number", types: new Set(["Sine"]), onPick: () => {} });
+    // ペイン内（項目の上）では解除されない。
+    ctx.host.querySelector("[data-node-type=Sine]")!
+      .dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    expect(ctx.panel.getFilter()).not.toBeNull();
+    // ペイン外（body 直下）で解除。
+    document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    expect(ctx.panel.getFilter()).toBeNull();
+    cleanup(ctx);
+  });
+
+  test("パネル非表示（onHide）でフィルタ解除", () => {
+    const ctx = mount();
+    ctx.panel.setFilter({ portType: "number", types: new Set(["Sine"]), onPick: () => {} });
+    ctx.panel.def.onHide?.();
+    expect(ctx.panel.getFilter()).toBeNull();
+    expect(types(ctx.host)).toEqual(["Camera", "Sine", "Screen"]);
+    cleanup(ctx);
+  });
+
+  test("互換ノードが無い場合は空表示メッセージを出す", () => {
+    const ctx = mount();
+    ctx.panel.setFilter({ portType: "trigger", types: new Set(), onPick: () => {} });
+    expect(types(ctx.host)).toEqual([]);
+    expect(ctx.host.querySelector("[data-role=filter-empty]")).not.toBeNull();
+    cleanup(ctx);
   });
 });

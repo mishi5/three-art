@@ -9,8 +9,10 @@ import type { Lang } from "./i18n";
 export interface Prefs {
   /** #229: 空白左ドラッグの操作モード（modern=#207 現行 / legacy=#207 以前）。 */
   panMode: PanSelectMode;
-  /** #228: サイドドックのピン留め（true なら外側クリックで自動クローズしない）。 */
+  /** #228: サイドドック（左）のピン留め（true なら外側クリックで自動クローズしない）。 */
   dockPinned: boolean;
+  /** #258: 右ドック（ノード追加パネル）のピン留め。左と独立に保持する。 */
+  dockPinnedRight: boolean;
   /** #237: AI ブリッジ（WS）を有効にするか。外部プロセスへ口を開くため既定 false（opt-in）。 */
   wsBridgeEnabled: boolean;
   /** #237: AI ブリッジの中継サーバ URL。 */
@@ -22,6 +24,7 @@ export interface Prefs {
 export const DEFAULT_PREFS: Prefs = {
   panMode: "modern",
   dockPinned: false,
+  dockPinnedRight: false,
   wsBridgeEnabled: false,
   wsBridgeUrl: "ws://localhost:8787",
   lang: "ja",
@@ -47,6 +50,7 @@ export function parsePrefs(raw: string | null): Prefs {
   const prefs: Prefs = { ...DEFAULT_PREFS };
   if (src.panMode === "modern" || src.panMode === "legacy") prefs.panMode = src.panMode;
   if (typeof src.dockPinned === "boolean") prefs.dockPinned = src.dockPinned;
+  if (typeof src.dockPinnedRight === "boolean") prefs.dockPinnedRight = src.dockPinnedRight;
   if (typeof src.wsBridgeEnabled === "boolean") prefs.wsBridgeEnabled = src.wsBridgeEnabled;
   if (typeof src.wsBridgeUrl === "string" && src.wsBridgeUrl !== "") prefs.wsBridgeUrl = src.wsBridgeUrl;
   if (src.lang === "ja" || src.lang === "en") prefs.lang = src.lang;

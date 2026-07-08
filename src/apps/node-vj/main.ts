@@ -29,7 +29,7 @@ import { sanitizeSceneSet } from "./scene/scene-sanitize";
 import { serializeProject, deserializeProject, projectFileName } from "./scene/project-file";
 import { wouldCreateSceneCycle } from "./scene/scene-refs";
 import { scenePanelDef, type ScenePanelActions } from "./scene/scene-panel";
-import { buildSideDock } from "./editor/side-dock";
+import { buildSideDock, BAR_W, PANEL_W } from "./editor/side-dock";
 import { NodeClipboard } from "./editor/node-clipboard";
 import { clipboardPanelDef } from "./editor/clipboard-panel";
 import { sharedCamera } from "./nodes/shared-camera";
@@ -38,7 +38,8 @@ import { PrefsStore } from "./prefs";
 import { setLang, t } from "./i18n";
 import { settingsPanelDef } from "./editor/settings-panel";
 import { controlsPanelDef } from "./editor/controls-panel";
-import { nodeAddPanelDef, nodeAddViewRect } from "./editor/node-add-panel";
+import { createNodeAddPanel, nodeAddViewRect } from "./editor/node-add-panel";
+import { compatibleNodeTypes } from "./graph/node-ports";
 import { deserializeGraph } from "./graph/serialize";
 import { createAiApi } from "./api/ai-api";
 import { installPostMessageBridge } from "./api/post-message-bridge";
@@ -84,6 +85,12 @@ const RECORD_VIDEO_BITRATE = 16_000_000;
 // クリック（移動量小）で切替、ドラッグは OrbitControls の回転に使う。Esc で全画面解除。
 const preview = previewCanvas;
 let previewLarge = false;
+// #258: 右ドック（ノード追加パネル）と PiP の重なり回避。バー（常時）ぶんは固定で、
+// パネル展開中はさらに PANEL_W 退避する（開閉は下の rightDock.onActiveChange で追随）。
+let rightDockOpen = false;
+function pipRightPx(): number {
+  return 12 + BAR_W + (rightDockOpen ? PANEL_W : 0);
+}
 function applyPreviewSize(): void {
   const { w, h } = previewSize(previewLarge, window.innerWidth, window.innerHeight);
   preview.style.width = w + "px";
@@ -92,9 +99,9 @@ function applyPreviewSize(): void {
     // 全画面: 画面全体を占有して最前面に。
     Object.assign(preview.style, { left: "0", top: "0", right: "auto", bottom: "auto", border: "none", zIndex: "200" });
   } else {
-    // 小窓: 右下 PiP に戻す（node-vj.html の既定と同じ）。
-    // #230: 下部バー撤去に伴い bottom を right と対称の 12px に（node-vj.html の既定と同じ）。
-    Object.assign(preview.style, { left: "auto", top: "auto", right: "12px", bottom: "12px", border: "1px solid rgba(255,255,255,0.25)", zIndex: "120" });
+    // 小窓: 右下 PiP に戻す。
+    // #230: 下部バー撤去に伴い bottom を 12px に。#258: 右ドックと重ならないよう right を退避。
+    Object.assign(preview.style, { left: "auto", top: "auto", right: `${pipRightPx()}px`, bottom: "12px", border: "1px solid rgba(255,255,255,0.25)", zIndex: "120" });
   }
   // #148/#179: 出力ウィンドウ表示中・録画中は PiP の見た目サイズに依らず高解像度で描き、
   // 出力/録画を鮮明にする（PiP は CSS で縮小表示＝同じ映像の縮小ビュー）。通常は表示サイズ×dpr。
@@ -802,20 +809,16 @@ const applyWsBridgePrefs = (): void => {
 };
 applyWsBridgePrefs();
 
-// #151: VSCode 風サイドドック（最左アイコン列で アセット/シーン/クリップボード/ノード追加/コントロール/設定 を切替）。
+// #151: VSCode 風サイドドック（最左アイコン列で アセット/シーン/クリップボード/コントロール/設定 を切替）。
 // #229: 設定パネル。操作モードの切替は prefs へ保存しつつエディタへ即反映する。
 // #228: ピン状態も prefs へ永続化（非ピン時はパネル外クリックで自動クローズ）。
 // #230: 下部バーの全コントロールを「コントロール」パネルへ移設（下部バーは撤去）。
+// #258: 「ノード追加」パネルは右ドックへ移設（下で構築）。
 buildSideDock(
   [
     assetPanelDef(library),
     scenePanelDef(sceneActions),
     clipboardPanelDef(clipboard),
-    // #243: ノード追加（旧ツールバーのカテゴリボタン群）。クリックでビューポート中央の空きへ追加。
-    nodeAddPanelDef({
-      defs: () => registry.list(),
-      onAdd: (type) => editor.addNodeAtViewCenter(type, nodeAddViewRect(window.innerWidth, window.innerHeight)),
-    }),
     controlsPanelDef([
       { title: t("controls.section.input"), mount: mountInputControls },
       { title: t("controls.section.output"), mount: mountOutputControls },
@@ -856,6 +859,49 @@ buildSideDock(
     setPinned: (pinned) => prefsStore.save({ dockPinned: pinned }),
   },
 );
+
+// #258: 右ドック（ノード追加パネルのみ）。手動で開けば従来どおり全ノード＋クリック追加
+// （ビューポート中央の空きへ配置）。ピン状態は左と独立（dockPinnedRight）。
+const nodeAddPanel = createNodeAddPanel({
+  defs: () => registry.list(),
+  onAdd: (type) => editor.addNodeAtViewCenter(type, nodeAddViewRect(window.innerWidth, window.innerHeight)),
+});
+const rightDock = buildSideDock(
+  [nodeAddPanel.def],
+  {
+    getPinned: () => prefsStore.load().dockPinnedRight,
+    setPinned: (pinned) => prefsStore.save({ dockPinnedRight: pinned }),
+  },
+  {
+    side: "right",
+    // パネル開閉で右下 PiP を左へ退避/復帰させる（重なり防止）。
+    onActiveChange: (id) => {
+      rightDockOpen = id !== null;
+      applyPreviewSize();
+    },
+  },
+);
+
+// #258: 出力ポートからの接続ドラッグを空白で離したら、互換ノードのみに絞った
+// ノード追加パネルを自動オープンする（n8n 風）。選択でドロップ位置に追加＋自動接続
+// （追加＋接続で 1 undo・NodeEditor.addNodeAtWireDrop）。Esc/外側クリック/閉じるでキャンセル。
+// 自動クローズ（#228）は pointerdown 起点なので、ドロップの pointerup で即閉じることはない。
+editor.onWireDropOnEmpty = (info) => {
+  nodeAddPanel.setFilter({
+    portType: info.portType,
+    types: new Set(compatibleNodeTypes(registry.list(), info.portType)),
+    onPick: (type) => {
+      editor.addNodeAtWireDrop(
+        type,
+        { x: info.worldX, y: info.worldY },
+        { node: info.fromNode, port: info.fromPort },
+      );
+      // 選択で目的は完了。非ピン時はパネルを閉じる（ピン中は開いたまま＝#228 と同じ扱い）。
+      if (!prefsStore.load().dockPinnedRight) rightDock.close();
+    },
+  });
+  rightDock.open("node-add");
+};
 
 (window as unknown as { nodeVj: unknown }).nodeVj = { graph, registry, runtime, editor, sceneManager, recorder, api: aiApi };
 console.log("[node-vj] editor + preview started");
