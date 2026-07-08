@@ -2,6 +2,12 @@
 // 記録バッファの扱いは #217 GraphVisual の pushSample を、状態遷移は #204 TapSequencer の
 // idle→recording→playing 状態機械を参考にする。DOM/時計に依存しない純関数のみを置く
 // （状態機械そのものは AutomationNode.ts の AutomationRuntime が持つ）。
+//
+// #186 再設計: 記録トリガはグラフの trigger 入力（arm）ではなく、NodeEditor が捕捉する
+// 物理キー 'r' のホールド（押している間だけ記録）に変更した。ランタイム側からは
+// 「armed（記録キーを押しているか）という boolean の立ち上がり/立ち下がり」として見えるため、
+// 純関数は edge 検出のみを担う（旧 armToggle の trigger 版と異なりフェーズ遷移は
+// AutomationRuntime.step が行う。edge 検出とフェーズ遷移を分離した方が責務が明確なため）。
 
 /** 状態機械のフェーズ。idle（未記録）→ recording（記録中）→ playing（ループ再生中）。 */
 export type AutomationPhase = "idle" | "recording" | "playing";
@@ -15,20 +21,20 @@ export interface AutomationFrame {
   v: number;
 }
 
+/** armed（記録キーのホールド状態）フラグのエッジ判定結果。 */
+export type ArmEdge = "start" | "stop" | "none";
+
 /**
- * arm トリガの立ち上がりエッジ判定と、それに応じた暫定フェーズ遷移。
- * - idle/playing で立ち上がり → recording へ（playing からの場合は前の記録を破棄して新規記録＝
- *   #204 TapSequencer と同じ「再 arm で上書き」挙動。実際の破棄は呼び出し側 Runtime が行う）。
- * - recording で立ち上がり → 録音終了。ここでは暫定的に "playing" を返すのみで、
- *   frames が空（0 フレーム）だった場合に "idle" へ戻すかは呼び出し側 Runtime が
- *   記録データを見て決める（#204 finalizeRecording のタップ 0 回ガードと同じ位置づけ）。
- * - 立ち上がりが無ければ phase をそのまま返す。
+ * armed（記録キー 'r' を押しているか）の立ち上がり/立ち下がりエッジ判定。
+ * - false→true（立ち上がり）: "start"（記録開始のトリガ）。
+ * - true→false（立ち下がり）: "stop"（記録終了のトリガ）。
+ * - 変化なし: "none"。
+ * フェーズ遷移そのもの（recording への突入・確定判断等）は呼び出し側 Runtime の責務。
  */
-export function armToggle(
-  prevArm: boolean, curArm: boolean, phase: AutomationPhase,
-): AutomationPhase {
-  if (!(curArm && !prevArm)) return phase;
-  return phase === "recording" ? "playing" : "recording";
+export function armEdge(prevArmed: boolean, curArmed: boolean): ArmEdge {
+  if (curArmed && !prevArmed) return "start";
+  if (!curArmed && prevArmed) return "stop";
+  return "none";
 }
 
 /**

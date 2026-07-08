@@ -52,24 +52,20 @@ export const NODE_CATALOG = {
     en: "Trigger that fires for one frame at the recorded tap timings (loops at the end).",
   },
   "node.Automation.desc": {
-    ja: "arm で in の時間軌跡を記録し（もう一度 arm で確定・可変長）、ループ再生できる loop station 的なノード。再生中は記録値を線形補間して出力、記録中は in をパススルーする。再 arm すると前の記録を破棄して新規記録。",
-    en: "Records the in signal's trajectory over time while armed (arm again to finalize; variable length), a loop-station-style recorder. Outputs the interpolated recorded value while playing, and passes in through while recording. Re-arming discards the previous recording and starts a new one.",
-  },
-  "node.Automation.port.in": {
-    ja: "記録するソース値。記録中/未記録時はそのままパススルーされる。",
-    en: "Source value to record. Passed straight through while recording or before any recording exists.",
-  },
-  "node.Automation.port.arm": {
-    ja: "立ち上がりで記録の開始/確定をトグルするトリガ。",
-    en: "Trigger that toggles recording start/finalize on its rising edge.",
+    ja: "ノードを選択して物理キー 'r' をホールドしているあいだ value の時間軌跡を記録し（離すと確定・可変長）、ループ再生できる loop station 的なノード。再生中は記録値を線形補間して出力、記録中は value をパススルーする。再度 'r' で記録すると前の記録を破棄して新規記録。",
+    en: "While the node is selected and physical key 'r' is held, records the value param's trajectory over time (release to finalize; variable length), a loop-station-style recorder. Outputs the interpolated recorded value while playing, and passes value through while recording. Recording again with 'r' discards the previous recording and starts a new one.",
   },
   "node.Automation.port.reset": {
     ja: "立ち上がりで再生位置を先頭へ戻すトリガ。",
     en: "Trigger that returns the playback position to the start on its rising edge.",
   },
   "node.Automation.port.out": {
-    ja: "再生中は記録値を補間した値、記録中/未記録時は in をそのまま出力。",
-    en: "Interpolated recorded value while playing; outputs in as-is while recording or before any recording exists.",
+    ja: "再生中は記録値を補間した値、記録中/未記録時は value をそのまま出力。",
+    en: "Interpolated recorded value while playing; outputs value as-is while recording or before any recording exists.",
+  },
+  "node.Automation.param.value": {
+    ja: "記録するソース値。他ノードから接続する、またはドラッグ/クリックで手動操作する（記録中/未記録時はそのままパススルーされる）。",
+    en: "Source value to record. Connect from another node, or drag/click to set it manually (passed straight through while recording or before any recording exists).",
   },
   "node.Automation.param.loopMode": {
     ja: "ループ再生モード（once=末尾で停止 / loop=先頭へラップ / pingpong=往復）。",

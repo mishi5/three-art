@@ -1,26 +1,21 @@
 import { expect, test, describe } from "bun:test";
 import {
-  advancePlayhead, armToggle, loopPosition, pushFrame, sampleAt, sanitizeFrames,
+  advancePlayhead, armEdge, loopPosition, pushFrame, sampleAt, sanitizeFrames,
   type AutomationFrame,
 } from "./automation-logic";
 
-describe("#186 armToggle", () => {
-  test("idle で立ち上がり → recording", () => {
-    expect(armToggle(false, true, "idle")).toBe("recording");
+describe("#186 armEdge", () => {
+  test("false→true（立ち上がり）は start", () => {
+    expect(armEdge(false, true)).toBe("start");
   });
 
-  test("recording で立ち上がり → playing（暫定。空記録の idle 戻しは呼び出し側の責務）", () => {
-    expect(armToggle(false, true, "recording")).toBe("playing");
+  test("true→false（立ち下がり）は stop", () => {
+    expect(armEdge(true, false)).toBe("stop");
   });
 
-  test("playing で立ち上がり → recording（再 arm で新規記録）", () => {
-    expect(armToggle(false, true, "playing")).toBe("recording");
-  });
-
-  test("立ち上がりが無ければ phase をそのまま返す", () => {
-    expect(armToggle(true, true, "recording")).toBe("recording"); // 継続 true
-    expect(armToggle(false, false, "playing")).toBe("playing");   // 継続 false
-    expect(armToggle(true, false, "idle")).toBe("idle");           // 立ち下がり
+  test("変化なし（true→true / false→false）は none", () => {
+    expect(armEdge(true, true)).toBe("none");
+    expect(armEdge(false, false)).toBe("none");
   });
 });
 
