@@ -34,7 +34,7 @@ export class TapSequencerRuntime {
   /** 確定済みタップ列（相対秒・昇順）。 */
   private taps: number[] = [];
   private loopLenSec = 0;
-  /** 録音中タップの即時 trigger ラッチ（MidiPad の pressed と同じ・evaluate で消費）。 */
+  /** 録音中タップの即時 trigger ラッチ（SamplePad の pressed と同じ・evaluate で消費）。 */
   private pressed = false;
   /** 再生の基準時刻（ctx.timeSec 系・playing 遷移後の最初の playStep で張る）。 */
   private playAnchorSec: number | null = null;
@@ -92,7 +92,7 @@ export class TapSequencerRuntime {
     this.pressed = false;
   }
 
-  /** 録音中タップのラッチを消費して返す（1 フレームだけ true・MidiPad と同じ表現）。 */
+  /** 録音中タップのラッチを消費して返す（1 フレームだけ true・SamplePad と同じ表現）。 */
   consumeTapTrigger(): boolean {
     const p = this.pressed;
     this.pressed = false;

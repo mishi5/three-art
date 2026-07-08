@@ -1,4 +1,5 @@
-// #205: 簡易 MIDI パッドノード（4×4）。各パッドに音声ファイルを割り当て、クリックでワンショット発音する。
+// #205: クリック式の仮想サンプルパッドノード（4×4）。Web MIDI には非対応で、画面上のパッドをクリックすることで
+// 各パッドに割り当てた音声ファイルをワンショット発音する。
 // 全パッドを 1 つの mix gain に合流し、audio 出力として AudioMix/AudioOutput へ流せる。
 // 連続クリックのたびに新規 AudioBufferSourceNode を生成するため、前の音を切らずに重ねて鳴る。
 import type { NodeEnv, NodeState, NodeTypeDef } from "../graph/node-type";
@@ -17,10 +18,10 @@ export function shortPadLabel(name: string | null | undefined): string | null {
 }
 
 /**
- * #205: MidiPad の永続状態。各パッドの AudioBuffer を保持し、playPad でワンショット発音する。
+ * #205: SamplePad の永続状態。各パッドの AudioBuffer を保持し、playPad でワンショット発音する。
  * 発音は createBufferSource→mixGain へ接続→start(0)。ended で active から除去。
  */
-export class MidiPadRuntime {
+export class SamplePadRuntime {
   private ctx: AudioContext;
   /** 全パッドの合流先（master volume 兼用）。これを audio 出力として配線する。 */
   readonly mixGain: GainNode;
@@ -132,29 +133,29 @@ export class MidiPadRuntime {
   }
 }
 
-/** #205: 簡易 MIDI パッドノード。4×4 のパッドに音声を割り当て、クリックでワンショット発音する。 */
-export const MidiPadNode: NodeTypeDef = {
-  type: "MidiPad",
+/** #205: クリック式の仮想サンプルパッドノード。4×4 のパッドに音声を割り当て、クリックでワンショット発音する。 */
+export const SamplePadNode: NodeTypeDef = {
+  type: "SamplePad",
   category: "source",
-  description: "node.MidiPad.desc",
+  description: "node.SamplePad.desc",
   isSink: false,
   padGrid: { rows: PAD_ROWS, cols: PAD_COLS },
   inputs: [],
   outputs: [
     SIGNAL_OUTPUT,
     // #205: いずれかのパッド押下時に 1 フレームだけ発火する trigger（boolean）。Envelope/Flash 等へ繋げる。
-    { id: "trigger", label: "trig", type: "trigger", description: "node.MidiPad.port.trigger" },
+    { id: "trigger", label: "trig", type: "trigger", description: "node.SamplePad.port.trigger" },
   ],
   params: [
-    { id: "volume", label: "volume", kind: "number", default: 1, min: 0, max: 1, step: 0.01, description: "node.MidiPad.param.volume" },
+    { id: "volume", label: "volume", kind: "number", default: 1, min: 0, max: 1, step: 0.01, description: "node.SamplePad.param.volume" },
     // 各パッドの割当アセット id（string[]・長さ可変・hidden）。アセットライブラリで永続化する。
     { id: "padAssets", label: "padAssets", kind: "string", default: [], noInput: true, hidden: true,
-      description: "node.MidiPad.param.padAssets" },
+      description: "node.SamplePad.param.padAssets" },
   ],
-  createState: (env: NodeEnv) => new MidiPadRuntime(env.audioContext),
-  disposeState: (state: NodeState) => (state as MidiPadRuntime).dispose(),
+  createState: (env: NodeEnv) => new SamplePadRuntime(env.audioContext),
+  disposeState: (state: NodeState) => (state as SamplePadRuntime).dispose(),
   evaluate: (ctx) => {
-    const s = ctx.state as MidiPadRuntime | undefined;
+    const s = ctx.state as SamplePadRuntime | undefined;
     if (!s) return { ...signalOutput(null), trigger: false };
     s.setVolume(Number(ctx.param("volume") ?? 1));
     // #205: 押下ラッチを消費して trigger（boolean）として出力する（PulseNode と同じ表現）。

@@ -21,7 +21,7 @@ describe("collectAssetRefs", () => {
     const g: GraphDoc = {
       version: 1,
       nodes: [
-        { id: "pad", type: "MidiPad", params: { padAssets: ["a", "", "c", ""] }, position: { x: 0, y: 0 } },
+        { id: "pad", type: "SamplePad", params: { padAssets: ["a", "", "c", ""] }, position: { x: 0, y: 0 } },
       ],
       connections: [],
     };
@@ -35,8 +35,8 @@ describe("collectAssetRefs", () => {
     const g: GraphDoc = {
       version: 1,
       nodes: [
-        { id: "p1", type: "MidiPad", params: { padAssets: [] }, position: { x: 0, y: 0 } },
-        { id: "p2", type: "MidiPad", params: {}, position: { x: 0, y: 0 } },
+        { id: "p1", type: "SamplePad", params: { padAssets: [] }, position: { x: 0, y: 0 } },
+        { id: "p2", type: "SamplePad", params: {}, position: { x: 0, y: 0 } },
       ],
       connections: [],
     };
@@ -48,7 +48,7 @@ describe("collectAssetRefs", () => {
       version: 1,
       nodes: [
         { id: "img", type: "ImageFileInput", params: { assetId: "h1" }, position: { x: 0, y: 0 } },
-        { id: "pad", type: "MidiPad", params: { padAssets: ["", "x"] }, position: { x: 0, y: 0 } },
+        { id: "pad", type: "SamplePad", params: { padAssets: ["", "x"] }, position: { x: 0, y: 0 } },
       ],
       connections: [],
     };
