@@ -7,7 +7,7 @@ import {
 } from "../graph/graph-doc";
 import type { NodeRegistry } from "../graph/node-type";
 import { isCompatible, type PortType } from "../graph/port-types";
-import { signalInputs, isParamInput } from "../graph/node-ports";
+import { signalInputs, isParamInput, firstCompatibleInput } from "../graph/node-ports";
 import {
   NODE_WIDTH, TITLE_H, ROW_H, PORT_R, nodeRect,
   inputPortPos, outputPortPos, paramRowY, paramPortPos, resolveInputPortPos,
@@ -24,7 +24,7 @@ import { hitTest } from "./hit-test";
 import { tooltipForHit, tooltipBox, wrapLines, nodeMenuTooltipContent, type TooltipContent } from "./tooltip";
 import { screenToWorld, worldToScreen, zoomAt } from "./viewport";
 import { groupNodesByCategory } from "./node-menu";
-import { findFreeSpot, viewCenter, type ViewRect } from "./node-add-panel";
+import { findFreeSpot, viewCenter, wireDropPosition, type ViewRect } from "./node-add-panel";
 import { duplicateNodes } from "../graph/duplicate";
 import { CLIP_MIME, makeClipItem, pasteClip, type NodeClipboard } from "./node-clipboard";
 import { renderClipThumbnail } from "./clip-thumbnail";
@@ -149,6 +149,14 @@ export class NodeEditor {
    * 最後の CameraInput 削除で共有カメラを自動停止する等の判定トリガに使う。
    */
   onGraphMutated?: () => void;
+  /**
+   * #258: 出力ポートからの接続ドラッグを空白で離したとき（n8n 風のエッジドロップ）。任意。
+   * 呼び出し側（main.ts）が右ドックのノード追加パネルを互換フィルタ付きで開く。
+   * 入力ポート起点の付け替え（#178 regrab）とノード上で離した場合は発火しない（従来どおり）。
+   */
+  onWireDropOnEmpty?: (info: {
+    fromNode: string; fromPort: string; portType: PortType; worldX: number; worldY: number;
+  }) => void;
   /** #204: TapSequencer 録音開始（録音ボタン pointerdown）。任意。 */
   onTapRecordStart?: (nodeId: string) => void;
   /** #204: TapSequencer 録音停止（録音ボタンのホールド解除）。任意。 */
@@ -296,6 +304,36 @@ export class NodeEditor {
     const desired = { x: wc.x - NODE_WIDTH / 2, y: wc.y - TITLE_H };
     const pos = findFreeSpot(desired, this.graph.nodes.map((n) => n.position ?? { x: 0, y: 0 }));
     return this.addNodeOfType(type, pos);
+  }
+
+  /**
+   * #258: エッジドロップからの追加。ドロップ位置（world）へ type を追加し、
+   * from（ドラッグ元の出力ポート）から最初の互換入力ポート（paramInputs 含む・#74）へ自動接続する。
+   * 履歴は addNodeOfType が record 済みのため接続では積まず、「追加＋接続」で 1 undo になる。
+   * 接続に失敗しても（互換入力なし等・フィルタ済みなので通常起きない）追加は残す。
+   */
+  addNodeAtWireDrop(
+    type: string,
+    drop: { x: number; y: number },
+    from: { node: string; port: string },
+  ): string | null {
+    const def = this.registry.get(type);
+    if (!def) return null;
+    const fromNode = findNode(this.graph, from.node);
+    const fromDef = fromNode ? this.registry.get(fromNode.type) : undefined;
+    const outType = fromDef?.outputs.find((p) => p.id === from.port)?.type;
+    const pos = wireDropPosition(drop, this.graph.nodes.map((n) => n.position ?? { x: 0, y: 0 }));
+    const id = this.addNodeOfType(type, pos); // history.record + 追加ノードを選択
+    const inPort = outType ? firstCompatibleInput(def, outType) : undefined;
+    if (inPort) {
+      const res = addConnection(this.graph, this.registry, {
+        id: genId("c"),
+        from: { node: from.node, port: from.port },
+        to: { node: id, port: inPort.id },
+      });
+      if (!res.ok) console.warn(`[node-vj] エッジドロップの自動接続に失敗: ${res.reason}`);
+    }
+    return id;
   }
 
   // --- pointer 座標 → world 座標（#92: ズーム反映）---
@@ -719,6 +757,14 @@ export class NodeEditor {
         if (!drag.recorded) this.history.record(this.graph);
         const res = addConnection(this.graph, this.registry, conn);
         if (!res.ok && !drag.recorded) this.history.discardLast(); // 無効な接続は操作として積まない（regrab は切断記録を残す）
+      } else if (!drag.regrab && moved && !target) {
+        // #258: 出力ポート起点のドラッグを空白（ノード外）で離した → 接続破棄の代わりに
+        // 互換ノード選択（右ドックのノード追加パネル）へ委ねる。ノード上で離した場合
+        // （target あり・drop 不成立＝破棄）と入力起点の付け替え（regrab）は従来どおり。
+        this.onWireDropOnEmpty?.({
+          fromNode: drag.fromNode, fromPort: drag.fromPort, portType: drag.type,
+          worldX: w.x, worldY: w.y,
+        });
       }
     }
     this.drag = null;

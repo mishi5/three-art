@@ -1,6 +1,7 @@
 // #151: VSCode 風サイドドック。最左のアクティビティバー（アイコン列）で
 // パネルを切り替え、その右に選択中パネルの内容を 1 枚だけ表示する。
 // 各パネルは内容を host へ mount するだけで、ドックがバー/ヘッダ/開閉を提供する。
+// #258: 左右対応（side: "left" | "right"）。右ドックはバーが画面右端・パネルがその左（鏡像）。
 import { t } from "../i18n";
 
 export interface SidePanelDef {
@@ -9,6 +10,8 @@ export interface SidePanelDef {
   icon: string;                 // インライン SVG 文字列（currentColor）
   accent?: string;              // #259: パネルの識別色（未指定は従来表示）
   mount(host: HTMLElement): void; // 内容を host に構築（1 度だけ呼ばれる）
+  /** #258: パネルが非表示になったとき（別パネル切替・collapse・自動クローズ）。任意。 */
+  onHide?(): void;
 }
 
 /** クリックされたパネルに応じた次のアクティブ ID。アクティブを再クリックなら閉じる（null）。純関数。 */
@@ -58,6 +61,48 @@ export const TOP = 44;     // 上部ツールバーの下
 const BOTTOM = 0;          // #230: 下部バー撤去に伴い最下端まで使う
 export const PANEL_W = 230;
 
+/** #258: ドックの取り付け側。 */
+export type DockSide = "left" | "right";
+
+/**
+ * #258: side に応じたバー/パネルの配置 CSS 断片（純関数）。
+ * left は従来配置（バー左端・パネルはバーの右）、right はその鏡像。
+ */
+export function dockPlacement(side: DockSide): { bar: string; pane: string } {
+  if (side === "right") {
+    return {
+      bar: "right:0;border-left:1px solid #333;",
+      pane:
+        `right:${BAR_W}px;border-left:1px solid #444;border-radius:6px 0 0 6px;` +
+        "box-shadow:-2px 0 16px rgba(0,0,0,0.4);",
+    };
+  }
+  return {
+    bar: "left:0;border-right:1px solid #333;",
+    pane:
+      `left:${BAR_W}px;border-right:1px solid #444;border-radius:0 6px 6px 0;` +
+      "box-shadow:2px 0 16px rgba(0,0,0,0.4);",
+  };
+}
+
+/** #258: ドックの外部操作ハンドル（エッジドロップからのプログラム的オープン等）。 */
+export interface SideDockHandle {
+  /** 指定パネルを開く（既に開いていれば何もしない）。 */
+  open(id: string): void;
+  /** パネルを閉じる（バーは残る）。 */
+  close(): void;
+  /** 現在開いているパネル id（閉じていれば null）。 */
+  activeId(): string | null;
+}
+
+/** #258: buildSideDock のオプション。 */
+export interface SideDockOptions {
+  /** 取り付け側。既定 "left"（従来）。 */
+  side?: DockSide;
+  /** 開閉・パネル切替のたびに呼ぶ（PiP 等のレイアウト追随用）。 */
+  onActiveChange?(id: string | null): void;
+}
+
 const COLLAPSE_ICON =
   `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
   `stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">` +
@@ -76,23 +121,33 @@ const ACTIVITY_BTN =
   "width:32px;height:32px;display:flex;align-items:center;justify-content:center;" +
   "background:transparent;color:#9ab;border:none;border-radius:6px;cursor:pointer;padding:0;";
 
-/** アクティビティバー + パネル表示領域を body へ追加する。初期は折りたたみ（非表示）。 */
-export function buildSideDock(panels: SidePanelDef[], pin: DockPinActions): void {
+/**
+ * アクティビティバー + パネル表示領域を body へ追加する。初期は折りたたみ（非表示）。
+ * #258: options.side で左右を選べる（既定 left・従来配置）。戻り値のハンドルで外部から開閉できる。
+ */
+export function buildSideDock(
+  panels: SidePanelDef[],
+  pin: DockPinActions,
+  options?: SideDockOptions,
+): SideDockHandle {
   let active: string | null = null;
   let pinned = pin.getPinned(); // #228: 前回のピン状態を復元
+  const placement = dockPlacement(options?.side ?? "left");
 
   const bar = document.createElement("div");
   bar.style.cssText =
-    `position:fixed;left:0;top:${TOP}px;bottom:${BOTTOM}px;width:${BAR_W}px;z-index:158;` +
+    `position:fixed;${placement.bar}top:${TOP}px;bottom:${BOTTOM}px;width:${BAR_W}px;z-index:158;` +
     "display:flex;flex-direction:column;align-items:center;gap:4px;padding-top:6px;box-sizing:border-box;" +
-    "background:rgba(16,16,20,0.96);border-right:1px solid #333;";
+    "background:rgba(16,16,20,0.96);";
 
   const pane = document.createElement("div");
+  // #258: パネル側から「ペイン外クリック」を判定できるよう目印を付ける（node-add-panel のフィルタ解除）。
+  pane.dataset.role = "dock-pane";
   pane.style.cssText =
-    `position:fixed;left:${BAR_W}px;top:${TOP}px;bottom:${BOTTOM}px;width:${PANEL_W}px;z-index:157;` +
+    `position:fixed;${placement.pane}top:${TOP}px;bottom:${BOTTOM}px;width:${PANEL_W}px;z-index:157;` +
     "display:none;flex-direction:column;gap:6px;padding:8px;box-sizing:border-box;" +
-    "background:rgba(20,20,26,0.96);border-right:1px solid #444;border-top:1px solid #444;" +
-    "border-radius:0 6px 6px 0;font:12px system-ui;color:#ddd;box-shadow:2px 0 16px rgba(0,0,0,0.4);";
+    "background:rgba(20,20,26,0.96);border-top:1px solid #444;" +
+    "font:12px system-ui;color:#ddd;";
 
   const header = document.createElement("div");
   header.style.cssText =
@@ -176,6 +231,7 @@ export function buildSideDock(panels: SidePanelDef[], pin: DockPinActions): void
   );
 
   function setActive(id: string | null): void {
+    const prev = active;
     active = id;
     pane.style.display = id ? "flex" : "none";
     for (const [pid, host] of hosts) host.style.display = pid === id ? "flex" : "none";
@@ -191,7 +247,18 @@ export function buildSideDock(panels: SidePanelDef[], pin: DockPinActions): void
     headerIcon.innerHTML = def ? def.icon : "";
     headerIcon.style.color = "#9ab";
     header.style.borderBottom = headerUnderline(def?.accent);
+    // #258: 非表示になったパネルへ通知（node-add のフィルタ解除等）。開閉変化を外部にも通知。
+    if (prev !== id) {
+      if (prev !== null) panels.find((p) => p.id === prev)?.onHide?.();
+      options?.onActiveChange?.(id);
+    }
   }
 
   setActive(null); // 初期は折りたたみ
+
+  return {
+    open: (id) => { if (active !== id) setActive(id); },
+    close: () => setActive(null),
+    activeId: () => active,
+  };
 }

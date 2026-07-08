@@ -1,7 +1,9 @@
 // 入力ポートの分類（#74）。数値 param を入力ポートとして扱うための純粋ヘルパ。
 // - signal 入力: param を持たない純信号（pose/audio/texture や Sine の t など）
 // - param 入力: 数値 param（kind number/int）。接続時は手動値を上書きする
+// #258: エッジドロップ（出力ポート起点）の互換ノード判定・自動接続先の決定もここに置く。
 import type { NodeTypeDef, ParamDef, PortDef } from "./node-type";
+import { isCompatible, type PortType } from "./port-types";
 
 export function isNumericParam(p: ParamDef): boolean {
   return p.kind === "number" || p.kind === "int";
@@ -33,4 +35,23 @@ export function effectiveInputPorts(def: NodeTypeDef): PortDef[] {
 /** その入力ポート id が数値 param 由来か（= 接続時に手動値を上書きする対象か）。 */
 export function isParamInput(def: NodeTypeDef, portId: string): boolean {
   return def.params.some((p) => p.id === portId && isConnectableParam(p));
+}
+
+/**
+ * #258: 出力ポート型 fromType と接続できる最初の実効入力ポート（signal ∪ param・宣言順）。
+ * エッジドロップからのノード追加時、自動接続先のポートを決めるのに使う。無ければ undefined。
+ */
+export function firstCompatibleInput(def: NodeTypeDef, fromType: PortType): PortDef | undefined {
+  return effectiveInputPorts(def).find((p) => isCompatible(fromType, p.type));
+}
+
+/**
+ * #258: 出力ポート型 fromType と互換な入力ポート（数値 param の自動入力ポート化を含む）を
+ * 1 つ以上持つノード型名の一覧（定義順を維持）。エッジドロップの互換フィルタに使う。
+ */
+export function compatibleNodeTypes(
+  defs: ReadonlyArray<NodeTypeDef>,
+  fromType: PortType,
+): string[] {
+  return defs.filter((d) => firstCompatibleInput(d, fromType) !== undefined).map((d) => d.type);
 }

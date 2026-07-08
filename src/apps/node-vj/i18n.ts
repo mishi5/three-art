@@ -161,6 +161,15 @@ export const CATALOG = {
   "clipboard.label.empty": { ja: "(空)", en: "(empty)" },
   "clipboard.label.more": { ja: "{types} 他 {n} 件", en: "{types} +{n} more" },
 
+  // --- ノード追加パネルの互換フィルタ（#258 エッジドロップ） ---
+  "nodeAdd.filter.badge": { ja: "{type} に接続可能", en: "Connectable to {type}" },
+  "nodeAdd.filter.clear": { ja: "解除", en: "Show all" },
+  "nodeAdd.filter.clearTitle": {
+    ja: "フィルタを解除して全ノードを表示",
+    en: "Clear the filter and show all nodes",
+  },
+  "nodeAdd.filter.empty": { ja: "(接続可能なノードなし)", en: "(no connectable nodes)" },
+
   // --- コントロールパネル（main.ts の各セクション） ---
   "controls.section.input": { ja: "入力", en: "Input" },
   "controls.section.output": { ja: "出力・録画", en: "Output & Recording" },

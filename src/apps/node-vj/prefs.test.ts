@@ -91,6 +91,28 @@ describe("parsePrefs (#229)", () => {
     expect(parsePrefs('{"wsBridgeUrl":null}').wsBridgeUrl).toBe("ws://localhost:8787");
   });
 
+  // #258: 右ドック（ノード追加パネル）のピン状態
+  it("dockPinnedRight の既定値は false", () => {
+    expect(parsePrefs(null).dockPinnedRight).toBe(false);
+    expect(parsePrefs("{}").dockPinnedRight).toBe(false);
+  });
+
+  it("dockPinnedRight: true / false を読み取れる", () => {
+    expect(parsePrefs('{"dockPinnedRight":true}').dockPinnedRight).toBe(true);
+    expect(parsePrefs('{"dockPinnedRight":false}').dockPinnedRight).toBe(false);
+  });
+
+  it("dockPinnedRight が boolean 以外なら既定（false）へフォールバック", () => {
+    expect(parsePrefs('{"dockPinnedRight":"true"}').dockPinnedRight).toBe(false);
+    expect(parsePrefs('{"dockPinnedRight":1}').dockPinnedRight).toBe(false);
+  });
+
+  it("dockPinnedRight は dockPinned（左）と独立に読み取れる", () => {
+    const p = parsePrefs('{"dockPinned":true,"dockPinnedRight":false}');
+    expect(p.dockPinned).toBe(true);
+    expect(p.dockPinnedRight).toBe(false);
+  });
+
   // #244: UI 言語
   it("lang の既定値は ja（既存ユーザの見た目を変えない）", () => {
     expect(parsePrefs(null).lang).toBe("ja");
@@ -153,6 +175,17 @@ describe("PrefsStore (#229)", () => {
     store.save({ panMode: "legacy" });
     store.save({ dockPinned: true });
     expect(store.load()).toEqual({ ...DEFAULT_PREFS, panMode: "legacy", dockPinned: true });
+  });
+
+  // #258: dockPinnedRight（右ドック）の永続化と左ピンとの独立性
+  it("dockPinnedRight を save → load で保持し、dockPinned（左）を壊さない", () => {
+    const store = new PrefsStore(memoryAdapter());
+    store.save({ dockPinned: true });
+    store.save({ dockPinnedRight: true });
+    expect(store.load()).toEqual({ ...DEFAULT_PREFS, dockPinned: true, dockPinnedRight: true });
+    store.save({ dockPinnedRight: false });
+    expect(store.load().dockPinned).toBe(true);
+    expect(store.load().dockPinnedRight).toBe(false);
   });
 
   // #237: AI ブリッジ設定の永続化と他フィールドとの独立性

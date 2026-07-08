@@ -1,5 +1,7 @@
 import { expect, test, describe } from "bun:test";
-import { nextActivePanel, shouldAutoClose, activityButtonStyle, headerUnderline } from "./side-dock";
+import {
+  nextActivePanel, shouldAutoClose, activityButtonStyle, headerUnderline, dockPlacement, BAR_W,
+} from "./side-dock";
 
 describe("nextActivePanel", () => {
   test("別パネルをクリックしたらそれをアクティブに", () => {
@@ -39,6 +41,27 @@ describe("activityButtonStyle", () => {
   });
   test("アクティブは従来のハイライト（accent では着色しない）", () => {
     expect(activityButtonStyle(true)).toEqual({ background: "#243042", color: "#cfe" });
+  });
+});
+
+// #258: 左右対応。バー/パネルの配置 CSS 断片を side から決める。
+describe("dockPlacement", () => {
+  test("left はバーが画面左端・パネルがバーの右（従来配置）", () => {
+    const p = dockPlacement("left");
+    expect(p.bar).toContain("left:0;");
+    expect(p.bar).toContain("border-right");
+    expect(p.pane).toContain(`left:${BAR_W}px;`);
+    expect(p.pane).toContain("border-right");
+    expect(p.pane).toContain("border-radius:0 6px 6px 0;");
+  });
+
+  test("right はバーが画面右端・パネルがバーの左（左右鏡像）", () => {
+    const p = dockPlacement("right");
+    expect(p.bar).toContain("right:0;");
+    expect(p.bar).toContain("border-left");
+    expect(p.pane).toContain(`right:${BAR_W}px;`);
+    expect(p.pane).toContain("border-left");
+    expect(p.pane).toContain("border-radius:6px 0 0 6px;");
   });
 });
 
