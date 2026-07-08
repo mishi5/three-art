@@ -51,6 +51,42 @@ export const NODE_CATALOG = {
     ja: "記録した手打ちタイミングで 1 フレーム発火する trigger（末尾でループ）。",
     en: "Trigger that fires for one frame at the recorded tap timings (loops at the end).",
   },
+  "node.Automation.desc": {
+    ja: "arm で in の時間軌跡を記録し（もう一度 arm で確定・可変長）、ループ再生できる loop station 的なノード。再生中は記録値を線形補間して出力、記録中は in をパススルーする。再 arm すると前の記録を破棄して新規記録。",
+    en: "Records the in signal's trajectory over time while armed (arm again to finalize; variable length), a loop-station-style recorder. Outputs the interpolated recorded value while playing, and passes in through while recording. Re-arming discards the previous recording and starts a new one.",
+  },
+  "node.Automation.port.in": {
+    ja: "記録するソース値。記録中/未記録時はそのままパススルーされる。",
+    en: "Source value to record. Passed straight through while recording or before any recording exists.",
+  },
+  "node.Automation.port.arm": {
+    ja: "立ち上がりで記録の開始/確定をトグルするトリガ。",
+    en: "Trigger that toggles recording start/finalize on its rising edge.",
+  },
+  "node.Automation.port.reset": {
+    ja: "立ち上がりで再生位置を先頭へ戻すトリガ。",
+    en: "Trigger that returns the playback position to the start on its rising edge.",
+  },
+  "node.Automation.port.out": {
+    ja: "再生中は記録値を補間した値、記録中/未記録時は in をそのまま出力。",
+    en: "Interpolated recorded value while playing; outputs in as-is while recording or before any recording exists.",
+  },
+  "node.Automation.param.loopMode": {
+    ja: "ループ再生モード（once=末尾で停止 / loop=先頭へラップ / pingpong=往復）。",
+    en: "Loop playback mode (once = stop at the end / loop = wrap to the start / pingpong = back and forth).",
+  },
+  "node.Automation.param.speed": {
+    ja: "再生速度の倍率。",
+    en: "Playback speed multiplier.",
+  },
+  "node.Automation.param.recordedFrames": {
+    ja: "記録済みの (時刻, 値) 列（内部保存用・非表示）。",
+    en: "Recorded (time, value) sequence (internal storage, hidden).",
+  },
+  "node.Automation.param.recordedLoopLenSec": {
+    ja: "記録済みのループ長（秒・内部保存用・非表示）。",
+    en: "Recorded loop length in seconds (internal storage, hidden).",
+  },
   "node.RandomValue.desc": {
     ja: "min〜max のランダム値を出力。trigger の立ち上がり、または interval 秒ごとに再ロールする。",
     en: "Outputs a random value between min and max. Rerolls on a rising trigger edge or every interval seconds.",
