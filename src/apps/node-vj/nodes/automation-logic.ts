@@ -9,8 +9,11 @@
 // 純関数は edge 検出のみを担う（旧 armToggle の trigger 版と異なりフェーズ遷移は
 // AutomationRuntime.step が行う。edge 検出とフェーズ遷移を分離した方が責務が明確なため）。
 
-/** 状態機械のフェーズ。idle（未記録）→ recording（記録中）→ playing（ループ再生中）。 */
-export type AutomationPhase = "idle" | "recording" | "playing";
+/**
+ * 状態機械のフェーズ。idle（未記録）→ recording（記録中）→ playing（ループ再生中）⇄ stopped
+ * （#278: 停止/再生トグルで追加。停止中は playhead を進めず現在位置を凍結する）。
+ */
+export type AutomationPhase = "idle" | "recording" | "playing" | "stopped";
 
 /** ループ再生モード。once=末尾で停止 / loop=先頭へラップ / pingpong=往復。 */
 export type LoopMode = "once" | "loop" | "pingpong";

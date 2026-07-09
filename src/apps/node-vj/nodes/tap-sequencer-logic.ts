@@ -55,9 +55,3 @@ function wrapMod(x: number, L: number): number {
   const m = x % L;
   return m < 0 ? m + L : m;
 }
-
-/** 再生経過秒 → ループ内位置（0..loopLen）。表示用。loopLen<=0・非有限は 0。 */
-export function playPositionSec(elapsedSec: number, loopLenSec: number): number {
-  if (!Number.isFinite(elapsedSec) || !Number.isFinite(loopLenSec) || loopLenSec <= 0) return 0;
-  return wrapMod(elapsedSec, loopLenSec);
-}
