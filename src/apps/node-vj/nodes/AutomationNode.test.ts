@@ -312,3 +312,75 @@ describe("#186 evaluate（AutomationNode 経由）", () => {
     expect(past.out).toBeCloseTo(10); // 末尾で停止し続ける
   });
 });
+
+describe("#278 AutomationRuntime: 停止/再生トグル（stopped フェーズ）", () => {
+  test("toggleStopPlay: playing → stopped で playhead を凍結し、出力値も止まる", () => {
+    const rt = new AutomationRuntime();
+    rt.startRecording();
+    rt.step(0, false, 0, "loop", 1, () => {});
+    rt.step(10, false, 1.0, "loop", 1, () => {});
+    rt.stopRecording();
+    rt.step(0, false, 2.0, "loop", 1, () => {}); // 確定 loopLen=2・playhead=0
+    rt.step(0, false, 2.5, "loop", 1, () => {}); // 0.5s 進む → t=0.5 は補間で 5
+    expect(rt.status().phase).toBe("playing");
+    rt.toggleStopPlay();
+    expect(rt.status().phase).toBe("stopped");
+    // stopped 中は timeSec が進んでも playhead が動かない＝出力値も凍結される。
+    const frozen1 = rt.step(0, false, 3.0, "loop", 1, () => {});
+    const frozen2 = rt.step(0, false, 4.0, "loop", 1, () => {});
+    expect(frozen1).toBeCloseTo(5);
+    expect(frozen2).toBeCloseTo(5);
+    expect(rt.status().playPosSec).toBeCloseTo(0.5);
+  });
+
+  test("toggleStopPlay: stopped → playing で同じ位置から連続的に再開する（停止時間ぶんの先読みが起きない）", () => {
+    const rt = new AutomationRuntime();
+    rt.startRecording();
+    rt.step(0, false, 0, "loop", 1, () => {});
+    rt.step(10, false, 1.0, "loop", 1, () => {});
+    rt.stopRecording();
+    rt.step(0, false, 2.0, "loop", 1, () => {}); // 確定 loopLen=2
+    rt.step(0, false, 2.5, "loop", 1, () => {}); // playhead=0.5
+    rt.toggleStopPlay(); // → stopped
+    rt.step(0, false, 5.0, "loop", 1, () => {}); // stopped 中に大きく時間が経過
+    rt.toggleStopPlay(); // → playing
+    const out = rt.step(0, false, 5.1, "loop", 1, () => {}); // dt=0.1（停止していた 2.5s は加算されない）
+    expect(out).toBeCloseTo(6); // playhead=0.5+0.1=0.6 → frames=[(0,0),(1,10)] で t=0.6 は補間で 6
+  });
+
+  test("toggleStopPlay: idle・recording 中は無効（no-op）", () => {
+    const rt = new AutomationRuntime();
+    rt.toggleStopPlay();
+    expect(rt.status().phase).toBe("idle");
+    rt.startRecording();
+    rt.step(0, false, 0, "loop", 1, () => {});
+    rt.toggleStopPlay();
+    expect(rt.status().phase).toBe("recording");
+  });
+
+  test("status().playPosSec は stopped 中も値を返す", () => {
+    const rt = new AutomationRuntime();
+    rt.startRecording();
+    rt.step(0, false, 0, "loop", 1, () => {});
+    rt.step(10, false, 1.0, "loop", 1, () => {});
+    rt.stopRecording();
+    rt.step(0, false, 2.0, "loop", 1, () => {});
+    rt.step(0, false, 2.3, "loop", 1, () => {});
+    rt.toggleStopPlay();
+    expect(rt.status().playPosSec).toBeCloseTo(0.3);
+  });
+
+  test("reset は stopped 中でも先頭へシークする", () => {
+    const rt = new AutomationRuntime();
+    rt.startRecording();
+    rt.step(0, false, 0, "loop", 1, () => {});
+    rt.step(10, false, 1.0, "loop", 1, () => {});
+    rt.stopRecording();
+    rt.step(0, false, 2.0, "loop", 1, () => {});
+    rt.step(0, false, 2.5, "loop", 1, () => {}); // playhead=0.5
+    rt.toggleStopPlay(); // → stopped
+    rt.step(0, true, 2.6, "loop", 1, () => {}); // reset 立ち上がり
+    expect(rt.status().playPosSec).toBeCloseTo(0);
+    expect(rt.status().phase).toBe("stopped");
+  });
+});

@@ -1,5 +1,5 @@
 import { expect, test, describe } from "bun:test";
-import { finalizeRecording, firedBetween, playPositionSec } from "./tap-sequencer-logic";
+import { finalizeRecording, firedBetween } from "./tap-sequencer-logic";
 
 describe("#204 finalizeRecording", () => {
   test("タップ列とループ長をそのまま確定する", () => {
@@ -98,15 +98,5 @@ describe("#204 firedBetween（半開区間 [prev, cur)）", () => {
   });
 });
 
-describe("#204 playPositionSec", () => {
-  test("経過秒をループ内位置に wrap する", () => {
-    expect(playPositionSec(0.5, 2.0)).toBeCloseTo(0.5);
-    expect(playPositionSec(2.5, 2.0)).toBeCloseTo(0.5);
-    expect(playPositionSec(4.0, 2.0)).toBeCloseTo(0);
-  });
-
-  test("loopLen<=0 / 非有限は 0", () => {
-    expect(playPositionSec(1.0, 0)).toBe(0);
-    expect(playPositionSec(Number.NaN, 2.0)).toBe(0);
-  });
-});
+// #278: playPositionSec は TapSequencerRuntime が AutomationRuntime と同じ累積 playhead 方式へ
+// 移行したため使われなくなり削除した（表示位置は automation-logic.ts の loopPosition を使う）。

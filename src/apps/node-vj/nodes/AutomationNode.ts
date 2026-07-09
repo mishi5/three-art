@@ -93,6 +93,17 @@ export class AutomationRuntime {
   }
 
   /**
+   * #278: 停止/再生トグル（playing ⇄ stopped）。idle・recording 中は無効（no-op）。
+   * stopped 中は step() が playhead を進めないため現在位置が凍結され、再度トグルすると
+   * 同じ位置から再開する（dt は lastEvalSec 経由で毎フレーム更新され続けるため、
+   * 停止していた間の経過時間が再開時に一気に加算されることはない）。
+   */
+  toggleStopPlay(): void {
+    if (this.phase === "playing") { this.phase = "stopped"; return; }
+    if (this.phase === "stopped") { this.phase = "playing"; return; }
+  }
+
+  /**
    * 1 フレーム分の状態更新。onCommit は録音確定時（frames 非空）に 1 度だけ呼ばれ、
    * 呼び出し側（AutomationNode.evaluate）が params へ書き戻す（YAML 永続化・#65 に乗せる）。
    * 戻り値は out ポートへ出す値。
@@ -159,6 +170,12 @@ export class AutomationRuntime {
       return sampleAt(this.frames, pos);
     }
 
+    if (this.phase === "stopped") {
+      // #278: playhead を進めない（凍結）。出力値も現在位置のまま止まる。
+      const pos = loopPosition(this.playhead, this.loopLenSec, loopMode);
+      return sampleAt(this.frames, pos);
+    }
+
     return value; // idle: 録音前は value をそのまま通す
   }
 
@@ -168,7 +185,8 @@ export class AutomationRuntime {
       phase: this.phase,
       frameCount: this.frames.length,
       loopLenSec: this.loopLenSec,
-      playPosSec: this.phase === "playing" ? loopPosition(this.playhead, this.loopLenSec, "loop") : 0,
+      playPosSec: this.phase === "playing" || this.phase === "stopped"
+        ? loopPosition(this.playhead, this.loopLenSec, "loop") : 0,
       recordElapsedSec: this.phase === "recording" && this.recordStartSec !== null
         ? Math.max(0, (this.lastEvalSec ?? this.recordStartSec) - this.recordStartSec) : 0,
     };

@@ -70,20 +70,20 @@ export function hasSceneRow(def: NodeTypeDef): boolean {
   return !!def.sceneInput;
 }
 
-/** #204: TapSequencer のタップ録音 UI（コントロール行＋ステータス行）を出すか。 */
+/** #204/#278: TapSequencer のタップ録音 UI（シークバー行＋コントロール行）を出すか。 */
 export function hasTapRows(def: NodeTypeDef): boolean {
   return !!def.tapSequencer;
 }
 
-/** #204: TapSequencer が追加する行数（録音/クリアのコントロール行＋ステータス行）。 */
+/** #204/#278: TapSequencer が追加する行数（シークバー行＋停止/再生・クリア・ステータスのコントロール行）。 */
 const TAP_ROWS = 2;
 
-/** #186: Automation の記録/再生 UI（シークバー行＋クリア/ステータス行）を出すか。 */
+/** #186: Automation の記録/再生 UI（シークバー行＋コントロール行）を出すか。 */
 export function hasAutomationRows(def: NodeTypeDef): boolean {
   return !!def.automation;
 }
 
-/** #186: Automation が追加する行数（シークバー行＋クリア/ステータス行）。 */
+/** #186/#278: Automation が追加する行数（シークバー行＋停止/再生・クリア・ステータスのコントロール行）。 */
 const AUTOMATION_ROWS = 2;
 
 /** #154: ノード UI に行を描く param の数（hidden を除く）。末尾の hidden param 行は詰める。 */
@@ -258,8 +258,11 @@ export function padIndexAt(
   return null;
 }
 
-/** #204: タップ録音コントロール行（録音/クリアボタン）の領域（params 直下・tapSequencer 無しは null）。 */
-export function tapControlRowRect(
+/**
+ * #278: タップ録音シークバー行の領域（params 直下・tapSequencer 無しは null）。
+ * automationSeekRowRect と同型（Automation・TapSequencer でレイアウトを統一）。
+ */
+export function tapSeekRowRect(
   node: NodeInstance, def: NodeTypeDef,
 ): { x: number; y: number; w: number; h: number } | null {
   if (!hasTapRows(def)) return null;
@@ -267,31 +270,54 @@ export function tapControlRowRect(
   return { x: p.x, y: p.y + TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H, w: NODE_WIDTH, h: ROW_H };
 }
 
-/** #204: タップ録音ステータス行（記録数/ループ長/再生位置）の領域（コントロール行の直下）。 */
-export function tapStatusRowRect(
+/**
+ * #204/#278: タップ録音コントロール行（停止/再生・クリアボタン・ステータス表示）の領域
+ * （シークバー行の直下。#278 でステータス行を統合し、Automation と同じ 2 行構成にした）。
+ */
+export function tapControlRowRect(
   node: NodeInstance, def: NodeTypeDef,
 ): { x: number; y: number; w: number; h: number } | null {
-  const cr = tapControlRowRect(node, def);
-  if (!cr) return null;
-  return { x: cr.x, y: cr.y + ROW_H, w: cr.w, h: ROW_H };
-}
-
-/** #204: コントロール行を「● 録音（ホールド）」と「✕ クリア」の 2 ボタンに分割する。 */
-export function tapControlLayout(rect: { x: number; y: number; w: number; h: number }): {
-  rec: { x: number; y: number; w: number; h: number };
-  clear: { x: number; y: number; w: number; h: number };
-} {
-  const pad = 6, gap = 6;
-  const inner = rect.w - 2 * pad;
-  const recW = Math.round(inner * 0.56); // 録音を広め（主操作）
-  const rec = { x: rect.x + pad, y: rect.y + 2, w: recW, h: rect.h - 4 };
-  const clear = { x: rec.x + recW + gap, y: rect.y + 2, w: inner - recW - gap, h: rect.h - 4 };
-  return { rec, clear };
+  const sr = tapSeekRowRect(node, def);
+  if (!sr) return null;
+  return { x: sr.x, y: sr.y + ROW_H, w: sr.w, h: ROW_H };
 }
 
 /**
- * #204: ステータス行のラベル。recording は打数＋経過秒、playing は打数/ループ長＋再生位置、
- * それ以外（idle・state 未生成）は「記録なし」。
+ * #278: コントロール行を「停止/再生」「✕ クリア」「ステータス表示」の 3 分割にする共有 helper。
+ * automationControlLayout/tapControlLayout の中身が完全に同一の計算になるため、重複を避けて
+ * ここに 1 つだけ定義する（呼び出し側のエクスポート名・シグネチャは維持）。
+ */
+function loopControlLayout(rect: { x: number; y: number; w: number; h: number }): {
+  stopPlay: { x: number; y: number; w: number; h: number };
+  clear: { x: number; y: number; w: number; h: number };
+  status: { x: number; y: number; w: number; h: number };
+} {
+  const pad = 6, gap = 6, stopW = 28, clearW = 54;
+  const stopPlay = { x: rect.x + pad, y: rect.y + 2, w: stopW, h: rect.h - 4 };
+  const clear = { x: stopPlay.x + stopW + gap, y: rect.y + 2, w: clearW, h: rect.h - 4 };
+  const status = {
+    x: clear.x + clearW + gap, y: rect.y + 2,
+    w: rect.w - 2 * pad - stopW - clearW - 2 * gap, h: rect.h - 4,
+  };
+  return { stopPlay, clear, status };
+}
+
+/**
+ * #275/#278: コントロール行のレイアウト（停止/再生ボタン・「✕ クリア」ボタン・ステータス表示の 3 分割）。
+ * automationControlLayout と完全に同じ形（loopControlLayout を共有）。
+ */
+export function tapControlLayout(rect: { x: number; y: number; w: number; h: number }): {
+  stopPlay: { x: number; y: number; w: number; h: number };
+  clear: { x: number; y: number; w: number; h: number };
+  status: { x: number; y: number; w: number; h: number };
+} {
+  return loopControlLayout(rect);
+}
+
+/**
+ * #204/#278: ステータス行のラベル。recording は打数＋経過秒、playing は打数/ループ長＋再生位置、
+ * stopped は playing と同内容に停止であることが分かる接頭辞を付けたもの、それ以外
+ * （idle・state 未生成）は「記録なし」。
  */
 export function tapStatusLabel(
   s: { phase: string; tapCount: number; loopLenSec: number; playPosSec: number; recordElapsedSec: number } | null | undefined,
@@ -300,6 +326,9 @@ export function tapStatusLabel(
   if (s.phase === "recording") return t("node.tap.recording", { n: s.tapCount, sec: s.recordElapsedSec.toFixed(1) });
   if (s.phase === "playing") {
     return t("node.tap.playing", { n: s.tapCount, len: s.loopLenSec.toFixed(1), pos: s.playPosSec.toFixed(1) });
+  }
+  if (s.phase === "stopped") {
+    return t("node.tap.stopped", { n: s.tapCount, len: s.loopLenSec.toFixed(1), pos: s.playPosSec.toFixed(1) });
   }
   return t("node.tap.none");
 }
@@ -313,7 +342,7 @@ export function automationSeekRowRect(
   return { x: p.x, y: p.y + TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H, w: NODE_WIDTH, h: ROW_H };
 }
 
-/** #186: Automation のクリアボタン＋ステータス行の領域（シークバー行の直下）。 */
+/** #186: Automation のコントロール行（停止/再生・クリアボタン・ステータス表示）の領域（シークバー行の直下）。 */
 export function automationControlRowRect(
   node: NodeInstance, def: NodeTypeDef,
 ): { x: number; y: number; w: number; h: number } | null {
@@ -322,15 +351,16 @@ export function automationControlRowRect(
   return { x: sr.x, y: sr.y + ROW_H, w: sr.w, h: ROW_H };
 }
 
-/** #186: コントロール行を「✕ クリア」ボタンとステータス表示に分割する（#204 tapControlLayout と同型）。 */
+/**
+ * #186/#278: コントロール行を「停止/再生」「✕ クリア」「ステータス表示」の 3 分割にする
+ * （#204/#278 tapControlLayout と完全に同じ形・loopControlLayout を共有）。
+ */
 export function automationControlLayout(rect: { x: number; y: number; w: number; h: number }): {
+  stopPlay: { x: number; y: number; w: number; h: number };
   clear: { x: number; y: number; w: number; h: number };
   status: { x: number; y: number; w: number; h: number };
 } {
-  const pad = 6, gap = 6, clearW = 54;
-  const clear = { x: rect.x + pad, y: rect.y + 2, w: clearW, h: rect.h - 4 };
-  const status = { x: clear.x + clearW + gap, y: rect.y + 2, w: rect.w - 2 * pad - clearW - gap, h: rect.h - 4 };
-  return { clear, status };
+  return loopControlLayout(rect);
 }
 
 /**
@@ -346,8 +376,9 @@ export function automationSeekFraction(
 }
 
 /**
- * #186: ステータス行のラベル。recording は記録点数＋経過秒、playing はループ長＋再生位置、
- * それ以外（idle・state 未生成）は「記録なし」。
+ * #186/#278: ステータス行のラベル。recording は記録点数＋経過秒、playing はループ長＋再生位置、
+ * stopped は playing と同内容に停止であることが分かる接頭辞を付けたもの、それ以外
+ * （idle・state 未生成）は「記録なし」。
  */
 export function automationStatusLabel(
   s: { phase: string; frameCount: number; loopLenSec: number; playPosSec: number; recordElapsedSec: number } | null | undefined,
@@ -358,6 +389,9 @@ export function automationStatusLabel(
   }
   if (s.phase === "playing") {
     return t("node.automation.playing", { len: s.loopLenSec.toFixed(1), pos: s.playPosSec.toFixed(1) });
+  }
+  if (s.phase === "stopped") {
+    return t("node.automation.stopped", { len: s.loopLenSec.toFixed(1), pos: s.playPosSec.toFixed(1) });
   }
   return t("node.automation.none");
 }

@@ -44,12 +44,24 @@ export const NODE_CATALOG = {
     en: "Firing interval (seconds).",
   },
   "node.TapSequencer.desc": {
-    ja: "録音ボタンを押しているあいだスペースキーの手打ちタイミングを記録し（ループ長＝押していた時間）、離すと記録どおりに trigger をループ発火する。録音中のタップも即時発火。Envelope/Flash 等へ。",
-    en: "While the record button is held, records Space-key tap timings (loop length = hold duration); on release, loops trigger firings exactly as recorded. Taps also fire immediately while recording. Feed into Envelope/Flash etc.",
+    ja: "ノードを選択して物理キー 'r' をホールドしているあいだスペースキーの手打ちタイミングを記録し（ループ長＝ホールドしていた時間）、離すと記録どおりに trigger をループ発火する。録音中のタップも即時発火。Envelope/Flash 等へ。",
+    en: "While the node is selected and physical key 'r' is held, records Space-key tap timings (loop length = hold duration); on release, loops trigger firings exactly as recorded. Taps also fire immediately while recording. Feed into Envelope/Flash etc.",
   },
   "node.TapSequencer.port.trigger": {
     ja: "記録した手打ちタイミングで 1 フレーム発火する trigger（末尾でループ）。",
     en: "Trigger that fires for one frame at the recorded tap timings (loops at the end).",
+  },
+  "node.TapSequencer.port.reset": {
+    ja: "立ち上がりで再生位置を先頭へ戻すトリガ。",
+    en: "Trigger that returns the playback position to the start on its rising edge.",
+  },
+  "node.TapSequencer.param.loopMode": {
+    ja: "ループ再生モード（once=末尾で停止 / loop=先頭へラップ）。",
+    en: "Loop playback mode (once = stop at the end / loop = wrap to the start).",
+  },
+  "node.TapSequencer.param.speed": {
+    ja: "再生速度の倍率。",
+    en: "Playback speed multiplier.",
   },
   "node.Automation.desc": {
     ja: "ノードを選択して物理キー 'r' をホールドしているあいだ value の時間軌跡を記録し（離すと確定・可変長）、ループ再生できる loop station 的なノード。再生中は記録値を線形補間して出力、記録中は value をパススルーする。再度 'r' で記録すると前の記録を破棄して新規記録。",

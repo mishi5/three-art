@@ -6,7 +6,7 @@
 export type TapSeqPhase = "idle" | "recording" | "playing";
 
 /**
- * 録音確定。押下時刻列（録音開始からの相対秒）とループ長（＝録音ボタンを押していた時間）を
+ * 録音確定。押下時刻列（録音開始からの相対秒）とループ長（＝#275: 'r' キーをホールドしていた時間）を
  * 正規化して返す。タップ 0 回・ループ長 0 以下は null（＝再生しない）。
  * 通常タップは 0..loopLen 内に収まるが、停止と競合した場合に備えて防御的に
  * 負→0・loopLen 以上→wrap（% loopLen）で [0, loopLen) に正規化し、昇順に整列する。
@@ -54,10 +54,4 @@ export function firedBetween(
 function wrapMod(x: number, L: number): number {
   const m = x % L;
   return m < 0 ? m + L : m;
-}
-
-/** 再生経過秒 → ループ内位置（0..loopLen）。表示用。loopLen<=0・非有限は 0。 */
-export function playPositionSec(elapsedSec: number, loopLenSec: number): number {
-  if (!Number.isFinite(elapsedSec) || !Number.isFinite(loopLenSec) || loopLenSec <= 0) return 0;
-  return wrapMod(elapsedSec, loopLenSec);
 }
