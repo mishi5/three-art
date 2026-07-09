@@ -2,7 +2,7 @@ import type { GraphDoc } from "../graph/graph-doc";
 
 /**
  * グラフ内のアセット参照。slot 省略＝単一 assetId（ImageFileInput 等）、
- * slot あり＝配列 params.padAssets の slot 番目（#205 MidiPad のパッド割当）。
+ * slot あり＝配列 params.padAssets の slot 番目（#205 SamplePad のパッド割当）。
  */
 export interface AssetRef { nodeId: string; assetId: string; slot?: number; }
 

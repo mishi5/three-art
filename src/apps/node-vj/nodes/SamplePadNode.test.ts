@@ -1,5 +1,5 @@
 import { expect, test, describe } from "bun:test";
-import { MidiPadNode, MidiPadRuntime, shortPadLabel, PAD_COUNT, PAD_ROWS, PAD_COLS } from "./MidiPadNode";
+import { SamplePadNode, SamplePadRuntime, shortPadLabel, PAD_COUNT, PAD_ROWS, PAD_COLS } from "./SamplePadNode";
 
 /** #205: bun には AudioContext が無いため、最小限のフェイクで Runtime を検証する。 */
 function fakeAudioContext(): AudioContext {
@@ -9,28 +9,28 @@ function fakeAudioContext(): AudioContext {
   } as unknown as AudioContext;
 }
 
-describe("#205 MidiPadNode 定義", () => {
+describe("#205 SamplePadNode 定義", () => {
   test("4×4 のパッドグリッド・input カテゴリ", () => {
-    expect(MidiPadNode.type).toBe("MidiPad");
-    expect(MidiPadNode.category).toBe("source");
-    expect(MidiPadNode.padGrid).toEqual({ rows: PAD_ROWS, cols: PAD_COLS });
+    expect(SamplePadNode.type).toBe("SamplePad");
+    expect(SamplePadNode.category).toBe("source");
+    expect(SamplePadNode.padGrid).toEqual({ rows: PAD_ROWS, cols: PAD_COLS });
     expect(PAD_COUNT).toBe(16);
   });
 
   test("audio 出力と trigger 出力を持つ", () => {
-    expect(MidiPadNode.outputs.map((o) => o.id)).toEqual(["audio", "trigger"]);
-    expect(MidiPadNode.outputs[0]!.type).toBe("audio");
-    expect(MidiPadNode.outputs[1]!.type).toBe("trigger");
-    expect(MidiPadNode.inputs).toEqual([]);
+    expect(SamplePadNode.outputs.map((o) => o.id)).toEqual(["audio", "trigger"]);
+    expect(SamplePadNode.outputs[0]!.type).toBe("audio");
+    expect(SamplePadNode.outputs[1]!.type).toBe("trigger");
+    expect(SamplePadNode.inputs).toEqual([]);
   });
 
   test("volume param（0..1 既定1）と hidden の padAssets を持つ", () => {
-    const vol = MidiPadNode.params.find((p) => p.id === "volume")!;
+    const vol = SamplePadNode.params.find((p) => p.id === "volume")!;
     expect(vol.kind).toBe("number");
     expect(vol.default).toBe(1);
     expect(vol.min).toBe(0);
     expect(vol.max).toBe(1);
-    const pad = MidiPadNode.params.find((p) => p.id === "padAssets")!;
+    const pad = SamplePadNode.params.find((p) => p.id === "padAssets")!;
     expect(pad.hidden).toBe(true);
     expect(pad.noInput).toBe(true);
     expect(pad.default).toEqual([]);
@@ -55,9 +55,9 @@ describe("#205 shortPadLabel", () => {
   });
 });
 
-describe("#205 MidiPadRuntime trigger ラッチ", () => {
+describe("#205 SamplePadRuntime trigger ラッチ", () => {
   test("初期は false / 押下したフレームのみ true・次フレーム false", () => {
-    const rt = new MidiPadRuntime(fakeAudioContext());
+    const rt = new SamplePadRuntime(fakeAudioContext());
     expect(rt.consumeTrigger()).toBe(false);
     // パッド 0 に buffer を割り当てた体にして発音（押下）。
     (rt as unknown as { buffers: unknown[] }).buffers[0] = {};
@@ -67,15 +67,15 @@ describe("#205 MidiPadRuntime trigger ラッチ", () => {
   });
 
   test("未割当パッドの playPad はラッチを立てない", () => {
-    const rt = new MidiPadRuntime(fakeAudioContext());
+    const rt = new SamplePadRuntime(fakeAudioContext());
     rt.playPad(3); // buffer 無し
     expect(rt.consumeTrigger()).toBe(false);
   });
 });
 
-describe("#205 MidiPadRuntime stopAll", () => {
+describe("#205 SamplePadRuntime stopAll", () => {
   test("発音中の全ソースを止め active を空にする（mixGain は維持）", () => {
-    const rt = new MidiPadRuntime(fakeAudioContext());
+    const rt = new SamplePadRuntime(fakeAudioContext());
     (rt as unknown as { buffers: unknown[] }).buffers[0] = {};
     rt.playPad(0);
     rt.playPad(0);
@@ -88,9 +88,9 @@ describe("#205 MidiPadRuntime stopAll", () => {
   });
 });
 
-describe("#205 MidiPadRuntime stopPad / clearPad", () => {
+describe("#205 SamplePadRuntime stopPad / clearPad", () => {
   test("stopPad は指定パッドの音だけ止める（他パッドは残る）", () => {
-    const rt = new MidiPadRuntime(fakeAudioContext());
+    const rt = new SamplePadRuntime(fakeAudioContext());
     const buffers = (rt as unknown as { buffers: unknown[] }).buffers;
     buffers[0] = {}; buffers[1] = {};
     rt.playPad(0); rt.playPad(0); rt.playPad(1);
@@ -101,7 +101,7 @@ describe("#205 MidiPadRuntime stopPad / clearPad", () => {
   });
 
   test("clearPad は割当を解除し（hasPad=false）そのパッドの音を止める", () => {
-    const rt = new MidiPadRuntime(fakeAudioContext());
+    const rt = new SamplePadRuntime(fakeAudioContext());
     (rt as unknown as { buffers: unknown[] }).buffers[2] = {};
     rt.playPad(2);
     expect(rt.hasPad(2)).toBe(true);

@@ -215,7 +215,7 @@ export function fileRowLabel(name: string | null | undefined): string {
 
 /**
  * #205: パッドグリッド全体の領域（params 直下・padGrid 無しは null）。
- * グリッドはファイル行/scene 行を持たないノード（MidiPad）の params の下に置く。
+ * グリッドはファイル行/scene 行を持たないノード（SamplePad）の params の下に置く。
  */
 export function padGridRect(
   node: NodeInstance, def: NodeTypeDef,
@@ -419,7 +419,7 @@ export function previewButtonRect(node: NodeInstance): { x: number; y: number; w
   return { x: p.x + NODE_WIDTH - 22, y: p.y + 4, w: 18, h: TITLE_H - 8 };
 }
 
-/** #205: MidiPad タイトルバー右端の「拡大表示」ボタン領域（⛶）。 */
+/** #205: SamplePad タイトルバー右端の「拡大表示」ボタン領域（⛶）。 */
 export function padExpandButtonRect(node: NodeInstance): { x: number; y: number; w: number; h: number } {
   const p = nodePos(node);
   return { x: p.x + NODE_WIDTH - 22, y: p.y + 4, w: 18, h: TITLE_H - 8 };
