@@ -6,7 +6,7 @@ import {
   hasPadGrid, padGridMetrics, padGridHeight, padGridRect, padRect, padIndexAt,
   padExpandButtonRect, padStopButtonRect,
   PAD_MARGIN_X, PAD_MARGIN_TOP,
-  hasTapRows, tapControlRowRect, tapStatusRowRect, tapControlLayout, tapStatusLabel,
+  hasTapRows, tapSeekRowRect, tapControlRowRect, tapControlLayout, tapStatusLabel,
   hasAutomationRows, automationSeekRowRect, automationControlRowRect, automationControlLayout,
   automationSeekFraction, automationStatusLabel,
   CATEGORY_COLORS,
@@ -166,12 +166,18 @@ describe("#205 padGrid layout", () => {
   });
 });
 
-describe("#204 TapSequencer layout", () => {
-  // 入力なし・trigger 出力 1・params なし・tapSequencer フラグ。
+describe("#204/#278 TapSequencer layout", () => {
+  // reset (trigger) 入力・trigger 出力・loopMode/speed の 2 可視 param・tapSequencer フラグ
+  // （#278 で Automation とレイアウトを統一した実ノードの形に合わせる）。
   const tapDef: NodeTypeDef = {
     type: "TapSequencer", category: "control",
-    inputs: [], outputs: [{ id: "trigger", label: "trig", type: "trigger" }],
-    params: [], tapSequencer: true, evaluate: () => ({}),
+    inputs: [{ id: "reset", label: "reset", type: "trigger" }],
+    outputs: [{ id: "trigger", label: "trig", type: "trigger" }],
+    params: [
+      { id: "loopMode", label: "loopMode", kind: "enum", default: "loop", options: ["once", "loop"] },
+      { id: "speed", label: "speed", kind: "number", default: 1 },
+    ],
+    tapSequencer: true, evaluate: () => ({}),
   };
   const tapNode: NodeInstance = { id: "t", type: "TapSequencer", params: {}, position: { x: 100, y: 50 } };
 
@@ -180,28 +186,31 @@ describe("#204 TapSequencer layout", () => {
     expect(hasTapRows(def)).toBe(false);
   });
 
-  test("nodeHeight はコントロール行＋ステータス行の 2 行ぶん増える", () => {
-    // portRows = max(0, 1) = 1・params = 0 → base + 2 行
-    const base = TITLE_H + 1 * ROW_H + 8;
+  test("nodeHeight はシークバー行＋コントロール行の 2 行ぶん増える", () => {
+    // portRows = max(1 signal入力, 1 出力) = 1・可視 param = 2 → base + 2 行
+    const base = TITLE_H + 1 * ROW_H + 2 * ROW_H + 8;
     expect(nodeHeight(tapDef)).toBe(base + 2 * ROW_H);
   });
 
-  test("コントロール行は params 直下・ステータス行はその下（tapSequencer 無しは null）", () => {
+  test("シークバー行は params 直下・コントロール行はその下（tapSequencer 無しは null）", () => {
+    const sr = tapSeekRowRect(tapNode, tapDef)!;
+    expect(sr).toEqual({ x: 100, y: 50 + TITLE_H + 1 * ROW_H + 2 * ROW_H, w: NODE_WIDTH, h: ROW_H });
     const cr = tapControlRowRect(tapNode, tapDef)!;
-    expect(cr).toEqual({ x: 100, y: 50 + TITLE_H + 1 * ROW_H, w: NODE_WIDTH, h: ROW_H });
-    const sr = tapStatusRowRect(tapNode, tapDef)!;
-    expect(sr).toEqual({ x: 100, y: cr.y + ROW_H, w: NODE_WIDTH, h: ROW_H });
-    expect(tapControlRowRect(node, def)).toBeNull();
-    expect(tapStatusRowRect(node, def)).toBeNull();
+    expect(cr).toEqual({ x: 100, y: sr.y + ROW_H, w: NODE_WIDTH, h: ROW_H });
+    expect(tapSeekRowRect(tapNode, def)).toBeNull();
+    expect(tapControlRowRect(tapNode, def)).toBeNull();
   });
 
-  test("tapControlLayout: #275 クリアボタンのみが行内に収まる（録音ボタンは撤去済み）", () => {
+  test("tapControlLayout: #278 停止/再生・クリア・ステータスの3分割が行内に収まり重ならない", () => {
     const cr = tapControlRowRect(tapNode, tapDef)!;
-    const { clear } = tapControlLayout(cr);
-    expect(clear.x).toBeGreaterThanOrEqual(cr.x);
-    expect(clear.x + clear.w).toBeLessThanOrEqual(cr.x + cr.w);
-    expect(clear.y).toBeGreaterThanOrEqual(cr.y);
-    expect(clear.y + clear.h).toBeLessThanOrEqual(cr.y + cr.h);
+    const { stopPlay, clear, status } = tapControlLayout(cr);
+    expect(stopPlay.x).toBeGreaterThanOrEqual(cr.x);
+    expect(stopPlay.x + stopPlay.w).toBeLessThanOrEqual(clear.x);
+    expect(clear.x + clear.w).toBeLessThanOrEqual(status.x);
+    expect(status.x + status.w).toBeLessThanOrEqual(cr.x + cr.w);
+    expect(stopPlay.y).toBeGreaterThanOrEqual(cr.y);
+    expect(stopPlay.y + stopPlay.h).toBeLessThanOrEqual(cr.y + cr.h);
+    expect(status.y + status.h).toBeLessThanOrEqual(cr.y + cr.h);
   });
 
   test("tapStatusLabel: フェーズごとの表示", () => {
@@ -212,6 +221,8 @@ describe("#204 TapSequencer layout", () => {
       .toBe("録音中 3打 1.2s");
     expect(tapStatusLabel({ phase: "playing", tapCount: 4, loopLenSec: 2.5, playPosSec: 0.78, recordElapsedSec: 0 }))
       .toBe("4打 / 2.5s ループ ▶0.8s");
+    expect(tapStatusLabel({ phase: "stopped", tapCount: 4, loopLenSec: 2.5, playPosSec: 0.78, recordElapsedSec: 0 }))
+      .toBe("■ 停止中 4打 / 2.5s ⏸0.8s");
   });
 });
 
@@ -250,14 +261,15 @@ describe("#186 Automation layout", () => {
     expect(automationControlRowRect(autoNode, def)).toBeNull();
   });
 
-  test("automationControlLayout: クリアボタンとステータス表示が行内に収まり重ならない", () => {
+  test("automationControlLayout: 停止/再生・クリア・ステータス表示の3分割が行内に収まり重ならない", () => {
     const cr = automationControlRowRect(autoNode, autoDef)!;
-    const { clear, status } = automationControlLayout(cr);
-    expect(clear.x).toBeGreaterThanOrEqual(cr.x);
+    const { stopPlay, clear, status } = automationControlLayout(cr);
+    expect(stopPlay.x).toBeGreaterThanOrEqual(cr.x);
+    expect(stopPlay.x + stopPlay.w).toBeLessThanOrEqual(clear.x);
     expect(clear.x + clear.w).toBeLessThanOrEqual(status.x);
     expect(status.x + status.w).toBeLessThanOrEqual(cr.x + cr.w);
-    expect(clear.y).toBeGreaterThanOrEqual(cr.y);
-    expect(clear.y + clear.h).toBeLessThanOrEqual(cr.y + cr.h);
+    expect(stopPlay.y).toBeGreaterThanOrEqual(cr.y);
+    expect(stopPlay.y + stopPlay.h).toBeLessThanOrEqual(cr.y + cr.h);
     expect(status.y + status.h).toBeLessThanOrEqual(cr.y + cr.h);
   });
 
@@ -283,6 +295,8 @@ describe("#186 Automation layout", () => {
       .toBe("録音中 12点 1.2s");
     expect(automationStatusLabel({ phase: "playing", frameCount: 20, loopLenSec: 2.5, playPosSec: 0.78, recordElapsedSec: 0 }))
       .toBe("2.5s ループ ▶0.8s");
+    expect(automationStatusLabel({ phase: "stopped", frameCount: 20, loopLenSec: 2.5, playPosSec: 0.78, recordElapsedSec: 0 }))
+      .toBe("■ 停止中 2.5s ⏸0.8s");
   });
 });
 
