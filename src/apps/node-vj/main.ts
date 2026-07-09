@@ -326,6 +326,10 @@ type TapSeqControl = {
   stopRecording?: (nowSec: number) => void;
   tap?: (nowSec: number) => void;
   clear?: () => void;
+  /** #278: シークバードラッグ（fraction は 0..1）。 */
+  seekToFraction?: (frac: number) => void;
+  /** #278: 停止/再生トグル。 */
+  toggleStopPlay?: () => void;
   status?: (nowSec?: number) => { phase: string; tapCount: number; loopLenSec: number; playPosSec: number; recordElapsedSec: number };
 };
 // #204: 録音系の時刻源。保持するのは相対秒だけなので wall clock（performance.now）でよい。
@@ -334,6 +338,8 @@ editor.onTapRecordStart = (id) => (runtime.getState(id) as TapSeqControl | undef
 editor.onTapRecordStop = (id) => (runtime.getState(id) as TapSeqControl | undefined)?.stopRecording?.(tapNowSec());
 editor.onTap = (id) => (runtime.getState(id) as TapSeqControl | undefined)?.tap?.(tapNowSec());
 editor.onTapClear = (id) => (runtime.getState(id) as TapSeqControl | undefined)?.clear?.();
+editor.onTapSeek = (id, frac) => (runtime.getState(id) as TapSeqControl | undefined)?.seekToFraction?.(frac);
+editor.onTapStopToggle = (id) => (runtime.getState(id) as TapSeqControl | undefined)?.toggleStopPlay?.();
 editor.tapSeqInfo = (id) => (runtime.getState(id) as TapSeqControl | undefined)?.status?.(tapNowSec());
 // #186: Automation ランタイムの duck-type（'r' キーホールド録音・シーク・クリア・状態参照）。
 // TapSequencer と異なり startRecording/stopRecording は引数なし（wall clock 不要・evaluate 内で
@@ -343,12 +349,15 @@ type AutomationControl = {
   stopRecording?: () => void;
   clear?: () => void;
   seekToFraction?: (frac: number) => void;
+  /** #278: 停止/再生トグル。 */
+  toggleStopPlay?: () => void;
   status?: () => { phase: string; frameCount: number; loopLenSec: number; playPosSec: number; recordElapsedSec: number };
 };
 editor.onAutomationRecordStart = (id) => (runtime.getState(id) as AutomationControl | undefined)?.startRecording?.();
 editor.onAutomationRecordStop = (id) => (runtime.getState(id) as AutomationControl | undefined)?.stopRecording?.();
 editor.onAutomationClear = (id) => (runtime.getState(id) as AutomationControl | undefined)?.clear?.();
 editor.onAutomationSeek = (id, frac) => (runtime.getState(id) as AutomationControl | undefined)?.seekToFraction?.(frac);
+editor.onAutomationStopToggle = (id) => (runtime.getState(id) as AutomationControl | undefined)?.toggleStopPlay?.();
 editor.automationInfo = (id) => (runtime.getState(id) as AutomationControl | undefined)?.status?.();
 // #205: アセットをパッド上にドロップ → そのパッドへ割当（再割当も上書き）。
 editor.onDropAssetToPad = (id, idx, assetId) => {

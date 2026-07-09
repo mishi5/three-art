@@ -16,7 +16,7 @@ import {
   hasSceneRow, sceneRowRect, sceneRowLabel,
   outputScaleChipRect, CATEGORY_COLORS,
   hasPadGrid, padRect, padIndexAt, padExpandButtonRect, padStopButtonRect,
-  hasTapRows, tapControlRowRect, tapStatusRowRect, tapControlLayout, tapStatusLabel,
+  hasTapRows, tapSeekRowRect, tapControlRowRect, tapControlLayout, tapStatusLabel,
   hasAutomationRows, automationSeekRowRect, automationControlRowRect, automationControlLayout,
   automationSeekFraction, automationStatusLabel,
 } from "./layout";
@@ -40,7 +40,7 @@ import { containRect } from "./fit";
 import { absoluteSliderValue, scrubValue, fillRatio, isAbsoluteSlider } from "./slider-logic";
 import { isToggleParam, toggleOnValue, toggledValue } from "./toggle-param";
 import type { ParamDef } from "../graph/node-type";
-import { t } from "../i18n";
+import { t, type MsgKey } from "../i18n";
 
 /** スライダドラッグで編集できる param（数値のみ。enum/boolean/string はクリック編集）。 */
 function isParamEditableBySlider(pd: ParamDef): boolean {
@@ -74,6 +74,8 @@ type Drag =
   | { kind: "label"; id: string; dx: number; dy: number; moved: boolean }
   // #186: Automation のシークバードラッグ（ライブスクラブ・onMove のたび fraction を再計算）。
   | { kind: "automationSeek"; nodeId: string; seek: { x: number; w: number } }
+  // #278: TapSequencer のシークバードラッグ（automationSeek と同型・同ロジック）。
+  | { kind: "tapSeek"; nodeId: string; seek: { x: number; w: number } }
   | null;
 
 /** #176: ノード名をノード上端からどれだけ上に表示するか（px・world）。グループ枠もこの分だけ上へ広げる。 */
@@ -178,6 +180,10 @@ export class NodeEditor {
   onTap?: (nodeId: string) => void;
   /** #204: TapSequencer 記録クリア（クリアボタン）。任意。 */
   onTapClear?: (nodeId: string) => void;
+  /** #278: TapSequencer シークバードラッグ（fraction は 0..1）。任意。 */
+  onTapSeek?: (nodeId: string, fraction: number) => void;
+  /** #278: TapSequencer の停止/再生トグルボタン。任意。 */
+  onTapStopToggle?: (nodeId: string) => void;
   /** #204: TapSequencer の状態（録音/再生・記録数など）を引く。任意。 */
   tapSeqInfo?: (nodeId: string) =>
     { phase: string; tapCount: number; loopLenSec: number; playPosSec: number; recordElapsedSec: number } | undefined;
@@ -189,6 +195,8 @@ export class NodeEditor {
   onAutomationSeek?: (nodeId: string, fraction: number) => void;
   /** #186: Automation 記録クリア（クリアボタン）。任意。 */
   onAutomationClear?: (nodeId: string) => void;
+  /** #278: Automation の停止/再生トグルボタン。任意。 */
+  onAutomationStopToggle?: (nodeId: string) => void;
   /** #186: Automation の状態（録音/再生・記録数など）を引く。任意。 */
   automationInfo?: (nodeId: string) =>
     { phase: string; frameCount: number; loopLenSec: number; playPosSec: number; recordElapsedSec: number } | undefined;
@@ -547,18 +555,32 @@ export class NodeEditor {
           return;
         }
       }
-      // #275: TapSequencer のクリアボタン（録音トリガは 'r' キーホールドへ移行・onTapSeqKeyDown/Up 参照）。
+      // #204/#278: TapSequencer のシークバー（クリック即シーク＋ドラッグでライブスクラブ）とコントロール行
+      // （停止/再生・クリアボタン。録音トリガは 'r' キーホールドへ移行・onTapSeqKeyDown/Up 参照）。
+      // Automation と全く同じ挙動・レイアウト（#278 で統一）。
       if (def?.tapSequencer) {
+        const sr = tapSeekRowRect(hit.node, def);
+        if (sr && w.x >= sr.x && w.x <= sr.x + sr.w && w.y >= sr.y && w.y <= sr.y + sr.h) {
+          const seek = { x: sr.x, w: sr.w };
+          this.onTapSeek?.(hit.node.id, automationSeekFraction(seek, w.x));
+          this.drag = { kind: "tapSeek", nodeId: hit.node.id, seek };
+          return;
+        }
         const cr = tapControlRowRect(hit.node, def);
         if (cr) {
-          const { clear } = tapControlLayout(cr);
+          const { stopPlay, clear } = tapControlLayout(cr);
+          if (w.x >= stopPlay.x && w.x <= stopPlay.x + stopPlay.w && w.y >= stopPlay.y && w.y <= stopPlay.y + stopPlay.h) {
+            this.onTapStopToggle?.(hit.node.id);
+            return;
+          }
           if (w.x >= clear.x && w.x <= clear.x + clear.w && w.y >= clear.y && w.y <= clear.y + clear.h) {
             this.onTapClear?.(hit.node.id);
             return;
           }
         }
       }
-      // #186: Automation のシークバー（クリック即シーク＋ドラッグでライブスクラブ）とクリアボタン。
+      // #186/#278: Automation のシークバー（クリック即シーク＋ドラッグでライブスクラブ）とコントロール行
+      // （停止/再生・クリアボタン）。
       if (def?.automation) {
         const sr = automationSeekRowRect(hit.node, def);
         if (sr && w.x >= sr.x && w.x <= sr.x + sr.w && w.y >= sr.y && w.y <= sr.y + sr.h) {
@@ -569,7 +591,11 @@ export class NodeEditor {
         }
         const cr = automationControlRowRect(hit.node, def);
         if (cr) {
-          const { clear } = automationControlLayout(cr);
+          const { stopPlay, clear } = automationControlLayout(cr);
+          if (w.x >= stopPlay.x && w.x <= stopPlay.x + stopPlay.w && w.y >= stopPlay.y && w.y <= stopPlay.y + stopPlay.h) {
+            this.onAutomationStopToggle?.(hit.node.id);
+            return;
+          }
           if (w.x >= clear.x && w.x <= clear.x + clear.w && w.y >= clear.y && w.y <= clear.y + clear.h) {
             this.onAutomationClear?.(hit.node.id);
             return;
@@ -720,6 +746,9 @@ export class NodeEditor {
     } else if (this.drag.kind === "automationSeek") {
       // #186: ライブスクラブ（ドラッグ中は毎 move で fraction を再計算して呼び続ける）。
       this.onAutomationSeek?.(this.drag.nodeId, automationSeekFraction(this.drag.seek, this.cursor.x));
+    } else if (this.drag.kind === "tapSeek") {
+      // #278: TapSequencer のライブスクラブ（automationSeek と同ロジック）。
+      this.onTapSeek?.(this.drag.nodeId, automationSeekFraction(this.drag.seek, this.cursor.x));
     } else if (this.drag.kind === "label") {
       // #176: 自由ラベルの移動。最初に動いた時点で履歴記録。
       const lab = this.graph.labels?.find((l) => l.id === (this.drag as { id: string }).id);
@@ -758,8 +787,8 @@ export class NodeEditor {
   }
 
   private onUp = (e: PointerEvent): void => {
-    // #186: シークバードラッグの終了（値は onMove で都度反映済み・ここでは drag を畳むだけ）。
-    if (this.drag?.kind === "automationSeek") {
+    // #186/#278: シークバードラッグの終了（値は onMove で都度反映済み・ここでは drag を畳むだけ）。
+    if (this.drag?.kind === "automationSeek" || this.drag?.kind === "tapSeek") {
       this.drag = null;
       return;
     }
@@ -1797,13 +1826,30 @@ export class NodeEditor {
       }
       ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.font = "11px system-ui";
     }
-    // #275: TapSequencer のクリアボタン（録音トリガは 'r' キーホールドへ移行済み）とステータス行。
+    // #204/#278: TapSequencer のシークバー（再生位置の可視化＋ドラッグでシーク）とコントロール行
+    // （停止/再生・クリアボタン・ステータス表示）。Automation と同じ見た目・レイアウト（#278 で統一）。
     if (hasTapRows(def)) {
-      const cr = tapControlRowRect(node, def)!;
-      const { clear } = tapControlLayout(cr);
       const info = this.tapSeqInfo?.(node.id);
       const recording = info?.phase === "recording";
-      // クリアボタン。
+      // シークバー（背景＋進捗。録音中は赤系にして「今は再生位置ではなく録音中」だと分かるようにする）。
+      const sr = tapSeekRowRect(node, def)!;
+      ctx.fillStyle = "#2a2a33";
+      roundRect(ctx, sr.x + 6, sr.y + 6, sr.w - 12, sr.h - 12, (sr.h - 12) / 2);
+      ctx.fill();
+      if (!recording && info && info.loopLenSec > 0) {
+        const ratio = Math.max(0, Math.min(1, info.playPosSec / info.loopLenSec));
+        ctx.fillStyle = "#6c9";
+        roundRect(ctx, sr.x + 6, sr.y + 6, Math.max(sr.h - 12, (sr.w - 12) * ratio), sr.h - 12, (sr.h - 12) / 2);
+        ctx.fill();
+      }
+      if (recording) {
+        ctx.strokeStyle = "#ff8f9f"; ctx.lineWidth = 1;
+        ctx.strokeRect(sr.x + 6, sr.y + 6, sr.w - 12, sr.h - 12);
+      }
+      // コントロール行（停止/再生・クリア・ステータス）。
+      const cr = tapControlRowRect(node, def)!;
+      const { stopPlay, clear, status } = tapControlLayout(cr);
+      this.drawStopPlayButton(stopPlay, info?.phase, "node.tap.pauseBtn", "node.tap.resumeBtn");
       ctx.fillStyle = "#262630";
       roundRect(ctx, clear.x, clear.y, clear.w, clear.h, 4);
       ctx.fill();
@@ -1811,14 +1857,14 @@ export class NodeEditor {
       ctx.fillStyle = "#9ab";
       ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "11px system-ui";
       ctx.fillText(t("node.tap.clearBtn"), clear.x + clear.w / 2, clear.y + clear.h / 2);
-      // ステータス行（記録数/ループ長/再生位置）。
-      const st = tapStatusRowRect(node, def)!;
       ctx.fillStyle = recording ? "#f9b" : "#9ab";
       ctx.textAlign = "left"; ctx.font = "10px system-ui";
-      ctx.fillText(ellipsizeEnd(ctx, tapStatusLabel(info), st.w - 20), st.x + 10, st.y + st.h / 2);
+      ctx.fillText(ellipsizeEnd(ctx, tapStatusLabel(info), status.w - 8), status.x + 4, status.y + status.h / 2);
       ctx.font = "11px system-ui";
+      ctx.textAlign = "left"; ctx.textBaseline = "middle";
     }
-    // #186: Automation のシークバー（再生位置の可視化＋ドラッグでシーク）とクリアボタン＋ステータス行。
+    // #186/#278: Automation のシークバー（再生位置の可視化＋ドラッグでシーク）とコントロール行
+    // （停止/再生・クリアボタン・ステータス表示）。
     if (hasAutomationRows(def)) {
       const info = this.automationInfo?.(node.id);
       const recording = info?.phase === "recording";
@@ -1837,9 +1883,10 @@ export class NodeEditor {
         ctx.strokeStyle = "#ff8f9f"; ctx.lineWidth = 1;
         ctx.strokeRect(sr.x + 6, sr.y + 6, sr.w - 12, sr.h - 12);
       }
-      // クリアボタン＋ステータス行（TapSequencer のコントロール/ステータス行と同じ描き方）。
+      // コントロール行（停止/再生・クリア・ステータス。TapSequencer のコントロール行と同じ描き方）。
       const cr = automationControlRowRect(node, def)!;
-      const { clear, status } = automationControlLayout(cr);
+      const { stopPlay, clear, status } = automationControlLayout(cr);
+      this.drawStopPlayButton(stopPlay, info?.phase, "node.automation.pauseBtn", "node.automation.resumeBtn");
       ctx.fillStyle = "#262630";
       roundRect(ctx, clear.x, clear.y, clear.w, clear.h, 4);
       ctx.fill();
@@ -1864,6 +1911,27 @@ export class NodeEditor {
       ctx.fillText(t("node.randomBtn"), rr.x + rr.w / 2, rr.y + rr.h / 2);
       ctx.textAlign = "left";
     }
+  }
+
+  /**
+   * #278: TapSequencer/Automation 共通の停止/再生トグルボタン描画。playing 中は ⏸（クリックで停止）、
+   * stopped 中は ▶（クリックで再生）。idle/recording/state 未生成はグレーアウト（クリックしても
+   * no-op なので実害はないが、視覚的に無効に見えるようにする）。
+   */
+  private drawStopPlayButton(
+    rect: { x: number; y: number; w: number; h: number }, phase: string | undefined,
+    pauseKey: MsgKey, resumeKey: MsgKey,
+  ): void {
+    const ctx = this.ctx;
+    const active = phase === "playing" || phase === "stopped";
+    ctx.fillStyle = active ? "#262630" : "#1c1c22";
+    roundRect(ctx, rect.x, rect.y, rect.w, rect.h, 4);
+    ctx.fill();
+    ctx.strokeStyle = active ? "#4a5566" : "#33383f";
+    ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = active ? "#cde" : "#4a4f57";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "11px system-ui";
+    ctx.fillText(t(phase === "stopped" ? resumeKey : pauseKey), rect.x + rect.w / 2, rect.y + rect.h / 2);
   }
 
   private drawPort(x: number, y: number, type: PortType): void {

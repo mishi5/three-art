@@ -265,12 +265,23 @@ export const CATALOG = {
   "node.tap.none": { ja: "記録なし", en: "No recording" },
   "node.tap.recording": { ja: "録音中 {n}打 {sec}s", en: "Recording {n} taps {sec}s" },
   "node.tap.playing": { ja: "{n}打 / {len}s ループ ▶{pos}s", en: "{n} taps / {len}s loop ▶{pos}s" },
+  // #278: 停止/再生トグルで停止中（playhead 凍結）のステータス表示。playing とほぼ同内容に
+  // 「■ 停止中」の接頭辞と ⏸（一時停止マーク）を付ける。
+  "node.tap.stopped": { ja: "■ 停止中 {n}打 / {len}s ⏸{pos}s", en: "■ Stopped {n} taps / {len}s ⏸{pos}s" },
   "node.tap.clearBtn": { ja: "✕ クリア", en: "✕ Clear" },
+  // #278: 停止/再生トグルボタン（playing 中は ⏸=停止、stopped 中は ▶=再開）。
+  "node.tap.pauseBtn": { ja: "⏸", en: "⏸" },
+  "node.tap.resumeBtn": { ja: "▶", en: "▶" },
   // #186: Automation（選択中に物理キー 'r' をホールドして記録）のステータス行/クリアボタン。
   "node.automation.none": { ja: "記録なし", en: "No recording" },
   "node.automation.recording": { ja: "録音中 {n}点 {sec}s", en: "Recording {n} pts {sec}s" },
   "node.automation.playing": { ja: "{len}s ループ ▶{pos}s", en: "{len}s loop ▶{pos}s" },
+  // #278: 停止/再生トグルで停止中（playhead 凍結）のステータス表示。
+  "node.automation.stopped": { ja: "■ 停止中 {len}s ⏸{pos}s", en: "■ Stopped {len}s ⏸{pos}s" },
   "node.automation.clearBtn": { ja: "✕ クリア", en: "✕ Clear" },
+  // #278: 停止/再生トグルボタン（playing 中は ⏸=停止、stopped 中は ▶=再開）。
+  "node.automation.pauseBtn": { ja: "⏸", en: "⏸" },
+  "node.automation.resumeBtn": { ja: "▶", en: "▶" },
   "node.randomBtn": { ja: "🎲 ランダム", en: "🎲 Random" },
   "label.default": { ja: "ラベル", en: "Label" },
 

@@ -51,6 +51,18 @@ export const NODE_CATALOG = {
     ja: "記録した手打ちタイミングで 1 フレーム発火する trigger（末尾でループ）。",
     en: "Trigger that fires for one frame at the recorded tap timings (loops at the end).",
   },
+  "node.TapSequencer.port.reset": {
+    ja: "立ち上がりで再生位置を先頭へ戻すトリガ。",
+    en: "Trigger that returns the playback position to the start on its rising edge.",
+  },
+  "node.TapSequencer.param.loopMode": {
+    ja: "ループ再生モード（once=末尾で停止 / loop=先頭へラップ）。",
+    en: "Loop playback mode (once = stop at the end / loop = wrap to the start).",
+  },
+  "node.TapSequencer.param.speed": {
+    ja: "再生速度の倍率。",
+    en: "Playback speed multiplier.",
+  },
   "node.Automation.desc": {
     ja: "ノードを選択して物理キー 'r' をホールドしているあいだ value の時間軌跡を記録し（離すと確定・可変長）、ループ再生できる loop station 的なノード。再生中は記録値を線形補間して出力、記録中は value をパススルーする。再度 'r' で記録すると前の記録を破棄して新規記録。",
     en: "While the node is selected and physical key 'r' is held, records the value param's trajectory over time (release to finalize; variable length), a loop-station-style recorder. Outputs the interpolated recorded value while playing, and passes value through while recording. Recording again with 'r' discards the previous recording and starts a new one.",
