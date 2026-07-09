@@ -267,19 +267,19 @@ export const NODE_CATALOG = {
     ja: "割り当てられたアセットの id（アセットライブラリ管理・UI 非表示）。",
     en: "Assigned asset id (managed by the asset library; hidden in UI).",
   },
-  "node.MidiPad.desc": {
+  "node.SamplePad.desc": {
     ja: "4×4 のパッドに音声ファイルを割り当て、クリックでワンショット発音する。連続クリックで重ねて鳴り、audio 出力を Audio Mix / Audio 出力へ繋げる。",
     en: "Assign audio files to a 4×4 pad grid and play one-shots by clicking. Repeated clicks layer sounds; connect the audio output to Audio Mix / Audio Output.",
   },
-  "node.MidiPad.port.trigger": {
+  "node.SamplePad.port.trigger": {
     ja: "いずれかのパッド押下時に1フレーム発火する trigger。",
     en: "Trigger that fires for one frame when any pad is pressed.",
   },
-  "node.MidiPad.param.volume": {
+  "node.SamplePad.param.volume": {
     ja: "出力全体の音量（master・0〜1）。",
     en: "Overall output volume (master, 0–1).",
   },
-  "node.MidiPad.param.padAssets": {
+  "node.SamplePad.param.padAssets": {
     ja: "各パッドに割り当てたアセットの id 配列（slot=パッド番号・UI 非表示）。",
     en: "Array of asset ids assigned to pads (slot = pad number; hidden in UI).",
   },

@@ -214,7 +214,7 @@ export const AutomationNode: NodeTypeDef = {
       description: "node.Automation.param.loopMode" },
     { id: "speed", label: "speed", kind: "number", default: 1, min: 0.1, max: 4, step: 0.01,
       description: "node.Automation.param.speed" },
-    // #186: 記録データの永続化（YAML #65 にそのまま乗せる・MidiPad の padAssets と同じ流儀で
+    // #186: 記録データの永続化（YAML #65 にそのまま乗せる・SamplePad の padAssets と同じ流儀で
     // kind: "string" だが実体は配列。noInput/hidden でノード UI には出さない）。
     { id: "recordedFrames", label: "recordedFrames", kind: "string", default: [], noInput: true, hidden: true,
       description: "node.Automation.param.recordedFrames" },

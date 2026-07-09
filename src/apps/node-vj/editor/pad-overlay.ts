@@ -1,6 +1,6 @@
-// #205: MidiPad のパッドを画面全体に拡大表示する DOM オーバーレイ。
+// #205: SamplePad のパッドを画面全体に拡大表示する DOM オーバーレイ。
 // 大きな 4×4 パッドを並べ、click で発音（deps.play）・Shift+click で再割当（deps.assign）。
-// 上部に Stop（全停止）と ✕（閉じる）。Esc でも閉じる。複数 MidiPad があっても対象ノードのみ表示する。
+// 上部に Stop（全停止）と ✕（閉じる）。Esc でも閉じる。複数 SamplePad があっても対象ノードのみ表示する。
 import { t } from "../i18n";
 
 /** オーバーレイが対象ノードのパッド状態・操作を引くための依存。 */
@@ -28,7 +28,7 @@ let currentOverlay: HTMLDivElement | null = null;
 let currentTimer: number | null = null;
 
 /**
- * #205: 対象 MidiPad のパッドを全画面オーバーレイで開く。既に開いていれば一旦閉じてから開き直す。
+ * #205: 対象 SamplePad のパッドを全画面オーバーレイで開く。既に開いていれば一旦閉じてから開き直す。
  */
 export function openPadOverlay(nodeId: string, deps: PadOverlayDeps): void {
   closePadOverlay();

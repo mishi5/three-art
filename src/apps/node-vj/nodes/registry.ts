@@ -16,7 +16,7 @@ import { VideoFileInputNode } from "./VideoFileInputNode";
 import { MicInputNode } from "./MicInputNode";
 import { DisplayInputNode } from "./DisplayInputNode";
 import { AudioFileInputNode } from "./AudioFileInputNode";
-import { MidiPadNode } from "./MidiPadNode";
+import { SamplePadNode } from "./SamplePadNode";
 import { ImageFileInputNode } from "./ImageFileInputNode";
 import { TextureGeneratorNode } from "./TextureGeneratorNode";
 import { RainVisualNode } from "./RainVisualNode";
@@ -65,7 +65,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(AudioFileInputNode);
   r.register(ImageFileInputNode);
   r.register(SceneInputNode);
-  r.register(MidiPadNode);
+  r.register(SamplePadNode);
   r.register(TextureGeneratorNode);
   r.register(NumberNode);
   r.register(TimeNode);

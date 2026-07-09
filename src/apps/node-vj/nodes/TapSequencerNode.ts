@@ -54,7 +54,7 @@ export class TapSequencerRuntime {
   private prevReset = false;
   /** recording→playing 遷移フレームだけ true（このフレームの dt を捨てて先読みを防ぐ）。 */
   private justStartedPlaying = false;
-  /** 録音中タップの即時 trigger ラッチ（MidiPad の pressed と同じ・evaluate で消費）。 */
+  /** 録音中タップの即時 trigger ラッチ（SamplePad の pressed と同じ・evaluate で消費）。 */
   private pressed = false;
 
   /** 録音開始。前の記録（再生中含む）を破棄して recording へ。 */
@@ -133,7 +133,7 @@ export class TapSequencerRuntime {
     if (this.phase === "stopped") { this.phase = "playing"; return; }
   }
 
-  /** 録音中タップのラッチを消費して返す（1 フレームだけ true・MidiPad と同じ表現）。 */
+  /** 録音中タップのラッチを消費して返す（1 フレームだけ true・SamplePad と同じ表現）。 */
   consumeTapTrigger(): boolean {
     const p = this.pressed;
     this.pressed = false;

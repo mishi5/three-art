@@ -189,7 +189,7 @@ function openPadFileDialog(nodeId: string, slot: number): void {
 const history = new History();
 type FileLoadable = { loadFile?: (f: File) => Promise<void> };
 type Named = { fileName?: string | null };
-// #205: MidiPad ランタイムの duck-type（パッド割当/発音/状態参照）。
+// #205: SamplePad ランタイムの duck-type（パッド割当/発音/状態参照）。
 type PadLoadable = {
   loadPadFile?: (index: number, file: File) => Promise<void>;
   playPad?: (index: number) => void;
@@ -263,7 +263,7 @@ function loadAssetIntoNode(nodeId: string, assetId: string, file: File): void {
 // #206: ノードのアプリ内クリップボード（Cmd+C コピー / Cmd+V 貼付 / パネルからのドロップ貼付）。
 const clipboard = new NodeClipboard();
 editor.clipboard = clipboard;
-// #205: MidiPad のパッド操作配線（発音・割当・状態参照）。
+// #205: SamplePad のパッド操作配線（発音・割当・状態参照）。
 editor.onHitPad = (id, idx) => {
   runtime.resumeAudio(); // user gesture で共有 AudioContext を起こす
   (runtime.getState(id) as PadLoadable | undefined)?.playPad?.(idx);
@@ -394,7 +394,7 @@ editor.onDropAsset = (assetId, x, y) => {
 /** #154: グラフ読込後、params.assetId を持つノードへライブラリからファイルを復元する。 */
 async function restoreAssets(): Promise<void> {
   for (const ref of collectAssetRefs(graph)) {
-    // #205: slot 付き参照（MidiPad のパッド）は loadPadFile で復元する。
+    // #205: slot 付き参照（SamplePad のパッド）は loadPadFile で復元する。
     if (ref.slot !== undefined) {
       const pad = runtime.getState(ref.nodeId) as PadLoadable | undefined;
       if (pad?.hasPad?.(ref.slot)) continue; // 既に割当済みは再読込しない

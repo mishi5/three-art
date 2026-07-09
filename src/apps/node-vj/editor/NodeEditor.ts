@@ -442,7 +442,7 @@ export class NodeEditor {
     if (!id) return;
     e.preventDefault();
     const w = screenToWorld(e.clientX, e.clientY, this.offset, this.scale);
-    // #205: MidiPad のパッド上へドロップしたら、そのパッドへ割当（再割当も上書き）。
+    // #205: SamplePad のパッド上へドロップしたら、そのパッドへ割当（再割当も上書き）。
     const hit = hitTest(this.graph.nodes, this.registry, w.x, w.y);
     if (hit?.kind === "node") {
       const def = this.registry.get(hit.node.type);
@@ -542,7 +542,7 @@ export class NodeEditor {
           return;
         }
       }
-      // #205: MidiPad タイトルバーの拡大（⛶）/ 全停止（■）ボタン。
+      // #205: SamplePad タイトルバーの拡大（⛶）/ 全停止（■）ボタン。
       if (def?.padGrid) {
         const eb = padExpandButtonRect(hit.node);
         if (w.x >= eb.x && w.x <= eb.x + eb.w && w.y >= eb.y && w.y <= eb.y + eb.h) {
@@ -1062,7 +1062,7 @@ export class NodeEditor {
     if (lab) { this.showLabelMenu(e.clientX, e.clientY, lab); return; }
     const hit = hitTest(this.graph.nodes, this.registry, w.x, w.y);
     if (hit && hit.kind !== "port") {
-      // #205: MidiPad のパッド上で右クリックしたらパッド操作メニュー（割当/停止/解除）。
+      // #205: SamplePad のパッド上で右クリックしたらパッド操作メニュー（割当/停止/解除）。
       const def = this.registry.get(hit.node.type);
       if (def?.padGrid) {
         const idx = padIndexAt(hit.node, def, w.x, w.y);

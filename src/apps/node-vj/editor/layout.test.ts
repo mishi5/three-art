@@ -89,7 +89,7 @@ describe("editor layout", () => {
 describe("#205 padGrid layout", () => {
   // 4×4 グリッド・出力 audio・volume param のみ可視（padAssets は hidden）。
   const padDef: NodeTypeDef = {
-    type: "MidiPad", category: "source",
+    type: "SamplePad", category: "source",
     inputs: [], outputs: [{ id: "audio", label: "audio", type: "audio" }],
     params: [
       { id: "volume", label: "volume", kind: "number", default: 1 },
@@ -97,7 +97,7 @@ describe("#205 padGrid layout", () => {
     ],
     padGrid: { rows: 4, cols: 4 }, evaluate: () => ({}),
   };
-  const padNode: NodeInstance = { id: "m", type: "MidiPad", params: {}, position: { x: 100, y: 50 } };
+  const padNode: NodeInstance = { id: "m", type: "SamplePad", params: {}, position: { x: 100, y: 50 } };
 
   test("hasPadGrid 判定", () => {
     expect(hasPadGrid(padDef)).toBe(true);
