@@ -86,6 +86,14 @@ export function hasAutomationRows(def: NodeTypeDef): boolean {
 /** #186/#278: Automation が追加する行数（シークバー行＋停止/再生・クリア・ステータスのコントロール行）。 */
 const AUTOMATION_ROWS = 2;
 
+/** #270: BeatClock のビートクロック UI（TAP ボタン＋ BPM ステータス行）を出すか。 */
+export function hasBeatClockRow(def: NodeTypeDef): boolean {
+  return !!def.beatClock;
+}
+
+/** #270: BeatClock が追加する行数（TAP ボタン＋ステータスの 1 行）。 */
+const BEATCLOCK_ROWS = 1;
+
 /** #154: ノード UI に行を描く param の数（hidden を除く）。末尾の hidden param 行は詰める。 */
 export function visibleParamCount(def: NodeTypeDef): number {
   return def.params.reduce((n, p) => (p.hidden ? n : n + 1), 0);
@@ -101,8 +109,10 @@ export function nodeHeight(def: NodeTypeDef): number {
   const tapRows = hasTapRows(def) ? TAP_ROWS * ROW_H : 0;
   // #186: Automation の記録/再生 UI（シークバー行＋クリア/ステータス行）。
   const automationRows = hasAutomationRows(def) ? AUTOMATION_ROWS * ROW_H : 0;
+  // #270: BeatClock のビートクロック UI（TAP ボタン＋ステータス行）。
+  const beatClockRows = hasBeatClockRow(def) ? BEATCLOCK_ROWS * ROW_H : 0;
   return TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H + randomRow + fileRows + sceneRow
-    + padRows + tapRows + automationRows + PADDING;
+    + padRows + tapRows + automationRows + beatClockRows + PADDING;
 }
 
 export function nodePos(node: NodeInstance): { x: number; y: number } {
@@ -394,6 +404,40 @@ export function automationStatusLabel(
     return t("node.automation.stopped", { len: s.loopLenSec.toFixed(1), pos: s.playPosSec.toFixed(1) });
   }
   return t("node.automation.none");
+}
+
+/** #270: BeatClock のビートクロック行（TAP ボタン＋ステータス）の領域（params 直下・beatClock 無しは null）。 */
+export function beatClockRowRect(
+  node: NodeInstance, def: NodeTypeDef,
+): { x: number; y: number; w: number; h: number } | null {
+  if (!hasBeatClockRow(def)) return null;
+  const p = nodePos(node);
+  return { x: p.x, y: p.y + TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H, w: NODE_WIDTH, h: ROW_H };
+}
+
+/**
+ * #270: ビートクロック行を「TAP ボタン」「ステータス表示（ビートインジケータ＋ BPM）」の
+ * 2 分割にする（寸法は loopControlLayout のボタン類と同じ感覚: pad 6・gap 6・ボタン幅 54）。
+ */
+export function beatClockRowLayout(rect: { x: number; y: number; w: number; h: number }): {
+  tap: { x: number; y: number; w: number; h: number };
+  status: { x: number; y: number; w: number; h: number };
+} {
+  const pad = 6, gap = 6, tapW = 54;
+  const tap = { x: rect.x + pad, y: rect.y + 2, w: tapW, h: rect.h - 4 };
+  const status = {
+    x: tap.x + tapW + gap, y: rect.y + 2,
+    w: rect.w - 2 * pad - tapW - gap, h: rect.h - 4,
+  };
+  return { tap, status };
+}
+
+/** #270: ビートクロック行のステータスラベル。state 未生成（null/undefined）は「BPM --」。 */
+export function beatClockStatusLabel(
+  s: { bpm: number; phase: number; tapActive: boolean } | null | undefined,
+): string {
+  if (!s) return t("node.beatclock.none");
+  return t("node.beatclock.status", { bpm: s.bpm.toFixed(1) });
 }
 
 /** #152: シーン選択行の領域（params 直下・sceneInput 無しは null）。 */
