@@ -216,6 +216,18 @@ describe("#270 BeatClockRuntime: タップテンポ", () => {
     expect(commits.length).toBe(1);
     expect(commits[0]!).toBeCloseTo(100, 6);
   });
+
+  test("タップは fold されない（正規化帯外の 174BPM がそのまま推定される）", () => {
+    const rt = new BeatClockRuntime();
+    const commits: number[] = [];
+    const iv = 60 / 174;
+    for (let i = 0; i < 4; i++) {
+      rt.tapNow();
+      rt.step(100, false, false, i * iv, "1", (v) => commits.push(v));
+    }
+    expect(commits.length).toBe(1);
+    expect(commits[0]!).toBeCloseTo(174, 6);
+  });
 });
 
 describe("#270 BeatClockRuntime: onset 追従", () => {

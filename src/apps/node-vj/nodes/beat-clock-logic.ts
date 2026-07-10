@@ -38,7 +38,7 @@ export function foldIntervalToBpmRange(intervalSec: number): number | null {
 }
 
 /**
- * 間隔列から BPM を推定する。各間隔を fold → 有効数が minCount 未満なら null →
+ * 間隔列から BPM を推定する（onset 用）。各間隔を fold → 有効数が minCount 未満なら null →
  * 中央値（偶数個は中央 2 点の平均）→ 60/median。中央値ベースなので単発の外れ値に頑健。
  */
 export function estimateBpm(intervalsSec: readonly number[], minCount = 3): number | null {
@@ -47,10 +47,38 @@ export function estimateBpm(intervalsSec: readonly number[], minCount = 3): numb
     const f = foldIntervalToBpmRange(iv);
     if (f !== null) folded.push(f);
   }
-  if (folded.length === 0 || folded.length < minCount) return null;
-  folded.sort((a, b) => a - b);
-  const mid = folded.length >> 1;
-  const median = folded.length % 2 === 1 ? folded[mid]! : (folded[mid - 1]! + folded[mid]!) / 2;
+  return medianBpm(folded, minCount);
+}
+
+/** タップテンポで受理する BPM の範囲（bpm param の可動域と同じ）。 */
+export const TAP_BPM_MIN = 30;
+export const TAP_BPM_MAX = 300;
+
+/**
+ * タップテンポ用の BPM 推定。タップは「ユーザが拍そのものを叩いた」明示入力なので
+ * fold（倍テン/半テン正規化）を行わず、生の間隔の中央値をそのまま BPM にする
+ * （fold すると正規化帯 ≈79〜158 の外、例えば 174BPM のタップが 87 と推定されてしまう）。
+ * TAP_BPM_MIN..TAP_BPM_MAX（bpm param の可動域）の外の間隔だけ外れ値として棄却する。
+ */
+export function estimateBpmFromTaps(intervalsSec: readonly number[], minCount = 3): number | null {
+  const valid: number[] = [];
+  for (const iv of intervalsSec) {
+    if (!Number.isFinite(iv) || iv <= 0) continue;
+    const bpm = 60 / iv;
+    if (bpm < TAP_BPM_MIN || bpm > TAP_BPM_MAX) continue;
+    valid.push(iv);
+  }
+  return medianBpm(valid, minCount);
+}
+
+/** 間隔列（棄却済み）の中央値 → BPM。有効数が minCount 未満なら null。 */
+function medianBpm(intervalsSec: number[], minCount: number): number | null {
+  if (intervalsSec.length === 0 || intervalsSec.length < minCount) return null;
+  intervalsSec.sort((a, b) => a - b);
+  const mid = intervalsSec.length >> 1;
+  const median = intervalsSec.length % 2 === 1
+    ? intervalsSec[mid]!
+    : (intervalsSec[mid - 1]! + intervalsSec[mid]!) / 2;
   return 60 / median;
 }
 

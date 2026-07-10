@@ -1,8 +1,9 @@
 // #270: BeatClock（BPM ビートクロック）純粋ロジックのテスト。
 import { describe, expect, test } from "bun:test";
 import {
-  BPM_MIN, BPM_MAX, GAP_RESET_SEC,
-  foldIntervalToBpmRange, estimateBpm, recentIntervals, crossedDivision, divisionToBeats,
+  BPM_MIN, BPM_MAX, GAP_RESET_SEC, TAP_BPM_MIN, TAP_BPM_MAX,
+  foldIntervalToBpmRange, estimateBpm, estimateBpmFromTaps, recentIntervals,
+  crossedDivision, divisionToBeats,
 } from "./beat-clock-logic";
 
 describe("#270 foldIntervalToBpmRange", () => {
@@ -76,6 +77,39 @@ describe("#270 estimateBpm", () => {
   test("単発の外れ値（帯内に fold される値）にも中央値ベースで頑健", () => {
     // 0.7 が 1 つ混ざっても中央値は 0.5 のまま。
     expect(estimateBpm([0.5, 0.5, 0.7, 0.5, 0.5])).toBeCloseTo(120, 6);
+  });
+});
+
+describe("#270 estimateBpmFromTaps", () => {
+  test("fold しない: 正規化帯外の 174BPM タップ（60/174 s 間隔）がそのまま 174 と推定される", () => {
+    const iv = 60 / 174;
+    expect(estimateBpmFromTaps([iv, iv, iv])).toBeCloseTo(174, 6);
+    // 参考: onset 用 estimateBpm は同じ間隔を帯へ折り込んで 87 にする（用途の違い）。
+    expect(estimateBpm([iv, iv, iv])).toBeCloseTo(87, 6);
+  });
+
+  test("低速側も fold しない（60BPM タップは 60 のまま）", () => {
+    expect(estimateBpmFromTaps([1.0, 1.0, 1.0])).toBeCloseTo(60, 6);
+  });
+
+  test("bpm param 可動域（30..300）外の間隔は外れ値として棄却する", () => {
+    const tooFast = 60 / (TAP_BPM_MAX + 50); // 350BPM 相当（チャタリング）
+    const tooSlow = 60 / (TAP_BPM_MIN - 10); // 20BPM 相当
+    expect(estimateBpmFromTaps([0.5, tooFast, 0.5, 0.5])).toBeCloseTo(120, 6);
+    expect(estimateBpmFromTaps([0.5, tooSlow, 0.5, 0.5])).toBeCloseTo(120, 6);
+    // 棄却で有効数が minCount を割れば null。
+    expect(estimateBpmFromTaps([0.5, tooFast, 0.5])).toBeNull();
+  });
+
+  test("有効数が minCount 未満なら null（default 3）・ジッタは中央値で吸収", () => {
+    expect(estimateBpmFromTaps([])).toBeNull();
+    expect(estimateBpmFromTaps([0.5, 0.5])).toBeNull();
+    expect(estimateBpmFromTaps([0.5, 0.5], 2)).toBeCloseTo(120, 6);
+    expect(estimateBpmFromTaps([0.45, 0.5, 0.55, 0.5])).toBeCloseTo(120, 6);
+  });
+
+  test("非有限・0 以下の間隔は棄却する", () => {
+    expect(estimateBpmFromTaps([0.5, Number.NaN, 0.5, -1, 0.5, 0])).toBeCloseTo(120, 6);
   });
 });
 

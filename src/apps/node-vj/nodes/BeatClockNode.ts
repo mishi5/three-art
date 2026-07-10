@@ -6,7 +6,8 @@
 // AutomationRuntime/TapSequencerRuntime と同じ流儀のクラスで持つ。
 import type { NodeState, NodeTypeDef } from "../graph/node-type";
 import {
-  GAP_RESET_SEC, crossedDivision, divisionToBeats, estimateBpm, recentIntervals,
+  GAP_RESET_SEC, crossedDivision, divisionToBeats, estimateBpm, estimateBpmFromTaps,
+  recentIntervals,
 } from "./beat-clock-logic";
 
 /** onset 由来 BPM の指数平滑係数。onset は間隔が揺れるため推定を鈍らせてガタつきを抑える。 */
@@ -94,7 +95,9 @@ export class BeatClockRuntime {
     this.pendingTap = false;
     if (tapFired) {
       pushTime(this.tapTimes, timeSec);
-      const est = estimateBpm(recentIntervals(this.tapTimes));
+      // タップは拍そのものの明示入力なので fold しない（onset と違い倍テン/半テンの曖昧さがない。
+      // fold すると正規化帯外のテンポ——例: 174BPM——が半分に推定されてしまう）。
+      const est = estimateBpmFromTaps(recentIntervals(this.tapTimes));
       if (est !== null) {
         onCommitBpm(est);
         outBpm = est;
