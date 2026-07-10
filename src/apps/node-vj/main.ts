@@ -359,6 +359,14 @@ editor.onAutomationClear = (id) => (runtime.getState(id) as AutomationControl | 
 editor.onAutomationSeek = (id, frac) => (runtime.getState(id) as AutomationControl | undefined)?.seekToFraction?.(frac);
 editor.onAutomationStopToggle = (id) => (runtime.getState(id) as AutomationControl | undefined)?.toggleStopPlay?.();
 editor.automationInfo = (id) => (runtime.getState(id) as AutomationControl | undefined)?.status?.();
+// #270: BeatClock ランタイムの duck-type（TAP ボタン・状態参照）。tapNow はラッチを立てるだけで、
+// 実処理は次フレームの evaluate（step）が tap 入力と同経路で行う。
+type BeatClockControl = {
+  tapNow?: () => void;
+  status?: () => { bpm: number; phase: number; tapActive: boolean };
+};
+editor.onBeatClockTap = (id) => (runtime.getState(id) as BeatClockControl | undefined)?.tapNow?.();
+editor.beatClockInfo = (id) => (runtime.getState(id) as BeatClockControl | undefined)?.status?.();
 // #205: アセットをパッド上にドロップ → そのパッドへ割当（再割当も上書き）。
 editor.onDropAssetToPad = (id, idx, assetId) => {
   runtime.resumeAudio();

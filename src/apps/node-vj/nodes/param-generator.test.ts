@@ -37,10 +37,11 @@ describe("randomRange (#155)", () => {
 });
 
 describe("PulseNode (#155)", () => {
-  test("generator・入力なし・trigger 出力", () => {
+  test("generator・sync trigger 入力（#270）・trigger 出力", () => {
     expect(PulseNode.type).toBe("Pulse");
     expect(PulseNode.category).toBe("control");
-    expect(PulseNode.inputs).toEqual([]);
+    expect(PulseNode.inputs.map((p) => p.id)).toEqual(["sync"]);
+    expect(PulseNode.inputs[0]?.type).toBe("trigger");
     expect(PulseNode.outputs.map((p) => p.id)).toEqual(["trigger"]);
     expect(PulseNode.outputs[0]?.type).toBe("trigger");
     expect(PulseNode.params.find((p) => p.id === "interval")?.kind).toBe("number");
@@ -52,6 +53,34 @@ describe("PulseNode (#155)", () => {
     expect(mk(0.3).trigger).toBe(false);
     expect(mk(0.6).trigger).toBe(true);   // 0.5 経過で発火
     expect(mk(0.7).trigger).toBe(false);
+  });
+});
+
+describe("PulseNode: sync（#270）", () => {
+  const mk = (s: unknown) => (t: number, sync?: boolean) => PulseNode.evaluate({
+    timeSec: t, input: (id: string) => (id === "sync" ? sync : undefined), param: () => 0.5,
+    node: { id: "p", type: "Pulse", params: {} }, state: s,
+  } as never);
+
+  test("sync の立ち上がりでそのフレームに発火し、lastFire がリセットされる", () => {
+    const ev = mk(PulseNode.createState!({} as never));
+    expect(ev(0).trigger).toBe(false);        // prime
+    expect(ev(0.3, true).trigger).toBe(true); // sync エッジ → 即発火＋lastFire=0.3
+    expect(ev(0.6).trigger).toBe(false);      // 0.3 経過（<0.5）: リセットが効いている
+    expect(ev(0.85).trigger).toBe(true);      // 0.55 経過で通常発火
+  });
+
+  test("sync 押しっぱなし（エッジなし）では連続発火しない", () => {
+    const ev = mk(PulseNode.createState!({} as never));
+    ev(0);
+    expect(ev(0.3, true).trigger).toBe(true);
+    expect(ev(0.35, true).trigger).toBe(false); // エッジではないので通常判定（0.05<0.5）
+  });
+
+  test("sync 未接続時は従来どおり", () => {
+    const ev = mk(PulseNode.createState!({} as never));
+    expect(ev(0).trigger).toBe(false);
+    expect(ev(0.6).trigger).toBe(true);
   });
 });
 

@@ -43,6 +43,50 @@ export const NODE_CATALOG = {
     ja: "発火間隔（秒）。",
     en: "Firing interval (seconds).",
   },
+  "node.Pulse.port.sync": {
+    ja: "立ち上がりで即発火し、以後の周期をその時刻から刻み直すトリガ（BeatClock.beat を繋ぐと拍アンカーの定期発火になる）。",
+    en: "Trigger that fires immediately on its rising edge and restarts the interval from that moment (connect BeatClock.beat for beat-anchored periodic firing).",
+  },
+  "node.BeatClock.desc": {
+    ja: "BPM ビートクロック。テンポは bpm param（手動）／TAP ボタン・tap 入力（タップテンポ＝拍頭合わせ＋テンポ）／onset 入力（テンポのみ自動追従。拍頭はタップで合わせる）の 3 系統。毎拍 beat・division 拍ごと div のトリガを出し、beats 出力を Sine/Noise の t へ繋ぐとビート単位 LFO になる。",
+    en: "BPM beat clock. Tempo comes from three sources: the bpm param (manual), the TAP button / tap input (tap tempo = aligns the downbeat and sets tempo), and the onset input (auto-follows tempo only; align the downbeat by tapping). Emits a beat trigger every beat and a div trigger every division beats; feed the beats output into Sine/Noise t for a beat-domain LFO.",
+  },
+  "node.BeatClock.port.tap": {
+    ja: "タップテンポ入力。立ち上がりをタップとして数え、間隔から BPM を推定して bpm param に反映。タップ＝拍頭として位相もスナップする。",
+    en: "Tap-tempo input. Rising edges count as taps; BPM is estimated from the intervals and written back to the bpm param. Each tap also snaps the phase to the downbeat.",
+  },
+  "node.BeatClock.port.onset": {
+    ja: "onset（音の立ち上がり）トリガから BPM を自動推定する入力。倍/半テンポは折り込み・推定は平滑化。位相は動かさない（拍頭はタップで合わせる）。",
+    en: "Input that auto-estimates BPM from onset triggers. Double/half tempo is folded in and the estimate is smoothed. The phase is left untouched (align the downbeat by tapping).",
+  },
+  "node.BeatClock.port.bpm": {
+    ja: "現在の実効 BPM。",
+    en: "Current effective BPM.",
+  },
+  "node.BeatClock.port.beats": {
+    ja: "累積拍数。Sine/Noise の t へ繋ぐとビート単位の LFO になる。",
+    en: "Cumulative beat count. Connect to Sine/Noise t for a beat-domain LFO.",
+  },
+  "node.BeatClock.port.phase": {
+    ja: "拍内位相 0..1（拍頭で 0）。",
+    en: "Phase within the beat, 0..1 (0 at the downbeat).",
+  },
+  "node.BeatClock.port.beat": {
+    ja: "毎拍 1 フレーム発火する trigger。",
+    en: "Trigger that fires for one frame every beat.",
+  },
+  "node.BeatClock.port.div": {
+    ja: "division 拍ごとに 1 フレーム発火する分周 trigger。",
+    en: "Division trigger that fires for one frame every division beats.",
+  },
+  "node.BeatClock.param.bpm": {
+    ja: "テンポ（BPM）。手動設定のほか、タップ/onset 推定の結果もここへ書き戻される。",
+    en: "Tempo (BPM). Set manually; tap/onset estimates are also written back here.",
+  },
+  "node.BeatClock.param.division": {
+    ja: "div トリガの分周（拍数。1/4〜8 拍）。",
+    en: "Division of the div trigger (in beats, 1/4 to 8).",
+  },
   "node.TapSequencer.desc": {
     ja: "ノードを選択して物理キー 'r' をホールドしているあいだスペースキーの手打ちタイミングを記録し（ループ長＝ホールドしていた時間）、離すと記録どおりに trigger をループ発火する。録音中のタップも即時発火。Envelope/Flash 等へ。",
     en: "While the node is selected and physical key 'r' is held, records Space-key tap timings (loop length = hold duration); on release, loops trigger firings exactly as recorded. Taps also fire immediately while recording. Feed into Envelope/Flash etc.",
@@ -363,6 +407,10 @@ export const NODE_CATALOG = {
     ja: "位相に使う時間入力（未接続なら経過秒 timeSec）。",
     en: "Time input for the phase (elapsed seconds timeSec when unconnected).",
   },
+  "node.Sine.port.sync": {
+    ja: "立ち上がりで位相を 0（sin の立ち上がり）にリセットするトリガ（BeatClock.beat を繋ぐと拍頭同期 LFO になる）。",
+    en: "Trigger that resets the phase to 0 (rising sine) on its rising edge (connect BeatClock.beat for a downbeat-synced LFO).",
+  },
   "node.Sine.param.freq": {
     ja: "周波数（Hz, 1 秒あたりの振動回数）。",
     en: "Frequency (Hz, oscillations per second).",
@@ -382,6 +430,10 @@ export const NODE_CATALOG = {
   "node.Noise.port.t": {
     ja: "ノイズの時間軸に使う入力（未接続なら経過秒 timeSec）。",
     en: "Input used as the noise time axis (elapsed seconds timeSec when unconnected).",
+  },
+  "node.Noise.port.sync": {
+    ja: "立ち上がりでノイズの走査位置を原点（t=0 相当）へ戻すトリガ。",
+    en: "Trigger that resets the noise scan position to the origin (t=0) on its rising edge.",
   },
   "node.Noise.param.speed": {
     ja: "揺らぎの速さ（時間の進行倍率）。",

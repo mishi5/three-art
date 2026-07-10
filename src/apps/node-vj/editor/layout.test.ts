@@ -9,6 +9,7 @@ import {
   hasTapRows, tapSeekRowRect, tapControlRowRect, tapControlLayout, tapStatusLabel,
   hasAutomationRows, automationSeekRowRect, automationControlRowRect, automationControlLayout,
   automationSeekFraction, automationStatusLabel,
+  hasBeatClockRow, beatClockRowRect, beatClockRowLayout, beatClockStatusLabel,
   CATEGORY_COLORS,
 } from "./layout";
 import { NODE_CATEGORIES, type NodeTypeDef } from "../graph/node-type";
@@ -297,6 +298,67 @@ describe("#186 Automation layout", () => {
       .toBe("2.5s ループ ▶0.8s");
     expect(automationStatusLabel({ phase: "stopped", frameCount: 20, loopLenSec: 2.5, playPosSec: 0.78, recordElapsedSec: 0 }))
       .toBe("■ 停止中 2.5s ⏸0.8s");
+  });
+});
+
+describe("#270 BeatClock layout", () => {
+  // tap/onset (trigger) 入力・bpm/beats/phase/beat/div の 5 出力・bpm/division の 2 可視 param・
+  // beatClock フラグ（実ノードの形に合わせる）。
+  const bcDef: NodeTypeDef = {
+    type: "BeatClock", category: "control",
+    inputs: [
+      { id: "tap", label: "tap", type: "trigger" },
+      { id: "onset", label: "onset", type: "trigger" },
+    ],
+    outputs: [
+      { id: "bpm", label: "bpm", type: "number" },
+      { id: "beats", label: "beats", type: "number" },
+      { id: "phase", label: "phase", type: "number" },
+      { id: "beat", label: "beat", type: "trigger" },
+      { id: "div", label: "div", type: "trigger" },
+    ],
+    params: [
+      { id: "bpm", label: "bpm", kind: "number", default: 120 },
+      { id: "division", label: "division", kind: "enum", default: "1", options: ["1/4", "1/2", "1", "2", "4", "8"] },
+    ],
+    beatClock: true, evaluate: () => ({}),
+  };
+  const bcNode: NodeInstance = { id: "b", type: "BeatClock", params: {}, position: { x: 100, y: 50 } };
+
+  test("hasBeatClockRow 判定", () => {
+    expect(hasBeatClockRow(bcDef)).toBe(true);
+    expect(hasBeatClockRow(def)).toBe(false);
+  });
+
+  test("nodeHeight は TAP/ステータス行の 1 行ぶん増える", () => {
+    // portRows = max(2 signal入力, 5 出力) = 5・可視 param = 2 → base + 1 行
+    const base = TITLE_H + 5 * ROW_H + 2 * ROW_H + 8;
+    expect(nodeHeight(bcDef)).toBe(base + 1 * ROW_H);
+  });
+
+  test("beatClockRowRect は params 直下（beatClock 無しは null）", () => {
+    const br = beatClockRowRect(bcNode, bcDef)!;
+    expect(br).toEqual({ x: 100, y: 50 + TITLE_H + 5 * ROW_H + 2 * ROW_H, w: NODE_WIDTH, h: ROW_H });
+    expect(beatClockRowRect(bcNode, def)).toBeNull();
+  });
+
+  test("beatClockRowLayout: TAP ボタンとステータスが行内に収まり重ならない", () => {
+    const br = beatClockRowRect(bcNode, bcDef)!;
+    const { tap, status } = beatClockRowLayout(br);
+    expect(tap.w).toBe(54);
+    expect(tap.x).toBeGreaterThanOrEqual(br.x);
+    expect(tap.x + tap.w).toBeLessThanOrEqual(status.x);
+    expect(status.x + status.w).toBeLessThanOrEqual(br.x + br.w);
+    expect(tap.y).toBeGreaterThanOrEqual(br.y);
+    expect(tap.y + tap.h).toBeLessThanOrEqual(br.y + br.h);
+    expect(status.y + status.h).toBeLessThanOrEqual(br.y + br.h);
+  });
+
+  test("beatClockStatusLabel: BPM 表示・state 未生成は既定文言", () => {
+    expect(beatClockStatusLabel(null)).toBe("BPM --");
+    expect(beatClockStatusLabel(undefined)).toBe("BPM --");
+    expect(beatClockStatusLabel({ bpm: 120.04, phase: 0.5, tapActive: false })).toBe("120.0 BPM");
+    expect(beatClockStatusLabel({ bpm: 98.25, phase: 0, tapActive: true })).toBe("98.3 BPM");
   });
 });
 

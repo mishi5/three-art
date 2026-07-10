@@ -282,6 +282,10 @@ export const CATALOG = {
   // #278: 停止/再生トグルボタン（playing 中は ⏸=停止、stopped 中は ▶=再開）。
   "node.automation.pauseBtn": { ja: "⏸", en: "⏸" },
   "node.automation.resumeBtn": { ja: "▶", en: "▶" },
+  // #270: BeatClock（TAP ボタン＋ BPM ステータス行）。
+  "node.beatclock.tapBtn": { ja: "TAP", en: "TAP" },
+  "node.beatclock.status": { ja: "{bpm} BPM", en: "{bpm} BPM" },
+  "node.beatclock.none": { ja: "BPM --", en: "BPM --" },
   "node.randomBtn": { ja: "🎲 ランダム", en: "🎲 Random" },
   "label.default": { ja: "ラベル", en: "Label" },
 
