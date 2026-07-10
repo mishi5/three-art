@@ -180,7 +180,8 @@ export const BeatClockNode: NodeTypeDef = {
   evaluate: (ctx) => {
     const s = ctx.state as BeatClockRuntime | undefined;
     if (!s) return { bpm: FALLBACK_BPM, beats: 0, phase: 0, beat: false, div: false };
-    return s.step(
+    // spread は BeatClockOutputs（interface）→ Record<string, unknown> の型合わせのため。
+    return { ...s.step(
       Number(ctx.param("bpm") ?? FALLBACK_BPM),
       Boolean(ctx.input("tap")),
       Boolean(ctx.input("onset")),
@@ -191,7 +192,7 @@ export const BeatClockNode: NodeTypeDef = {
         // history 非経由。スライダー表示にも反映され、YAML 永続化にも乗る）。0.1 刻みに丸める。
         ctx.node.params.bpm = Math.round(v * 10) / 10;
       },
-    );
+    ) };
   },
   disposeState: (_state: NodeState) => { /* no-op（確保資源なし） */ },
 };

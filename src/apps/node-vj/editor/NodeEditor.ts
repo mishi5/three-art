@@ -19,6 +19,7 @@ import {
   hasTapRows, tapSeekRowRect, tapControlRowRect, tapControlLayout, tapStatusLabel,
   hasAutomationRows, automationSeekRowRect, automationControlRowRect, automationControlLayout,
   automationSeekFraction, automationStatusLabel,
+  hasBeatClockRow, beatClockRowRect, beatClockRowLayout, beatClockStatusLabel,
 } from "./layout";
 import { getOutputScale, setOutputScale, formatScale, DEFAULT_OUTPUT_SCALE } from "../graph/output-scale";
 import { randomInRange } from "./random-value";
@@ -200,6 +201,10 @@ export class NodeEditor {
   /** #186: Automation の状態（録音/再生・記録数など）を引く。任意。 */
   automationInfo?: (nodeId: string) =>
     { phase: string; frameCount: number; loopLenSec: number; playPosSec: number; recordElapsedSec: number } | undefined;
+  /** #270: BeatClock の TAP ボタン（タップテンポ）。任意。 */
+  onBeatClockTap?: (nodeId: string) => void;
+  /** #270: BeatClock の状態（BPM・拍内位相・タップ受付中）を引く。任意。 */
+  beatClockInfo?: (nodeId: string) => { bpm: number; phase: number; tapActive: boolean } | undefined;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -598,6 +603,18 @@ export class NodeEditor {
           }
           if (w.x >= clear.x && w.x <= clear.x + clear.w && w.y >= clear.y && w.y <= clear.y + clear.h) {
             this.onAutomationClear?.(hit.node.id);
+            return;
+          }
+        }
+      }
+      // #270: BeatClock の TAP ボタン（タップテンポ。クリア/停止ボタンと同じパターン・
+      // 後続のノードドラッグへ流さない）。
+      if (def?.beatClock) {
+        const br = beatClockRowRect(hit.node, def);
+        if (br) {
+          const { tap } = beatClockRowLayout(br);
+          if (w.x >= tap.x && w.x <= tap.x + tap.w && w.y >= tap.y && w.y <= tap.y + tap.h) {
+            this.onBeatClockTap?.(hit.node.id);
             return;
           }
         }
@@ -1897,6 +1914,39 @@ export class NodeEditor {
       ctx.fillStyle = recording ? "#f9b" : "#9ab";
       ctx.textAlign = "left"; ctx.font = "10px system-ui";
       ctx.fillText(ellipsizeEnd(ctx, automationStatusLabel(info), status.w - 8), status.x + 4, status.y + status.h / 2);
+      ctx.font = "11px system-ui";
+      ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    }
+    // #270: BeatClock のビートクロック行（TAP ボタン＋ BPM ステータス＋ビートインジケータ）。
+    if (hasBeatClockRow(def)) {
+      const info = this.beatClockInfo?.(node.id);
+      const br = beatClockRowRect(node, def)!;
+      const { tap, status } = beatClockRowLayout(br);
+      // TAP ボタン（クリア/停止ボタンと同じ roundRect スタイル。タップ受付中は枠を明るくする）。
+      ctx.fillStyle = "#262630";
+      roundRect(ctx, tap.x, tap.y, tap.w, tap.h, 4);
+      ctx.fill();
+      ctx.strokeStyle = info?.tapActive ? "#7fb3d5" : "#4a5566";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = "#9ab";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "11px system-ui";
+      ctx.fillText(t("node.beatclock.tapBtn"), tap.x + tap.w / 2, tap.y + tap.h / 2);
+      // ビートインジケータ（拍頭直後 phase<0.2 のフレームだけ明るい ● を描く）＋ BPM ステータス。
+      let textX = status.x + 4;
+      if (info && info.phase < 0.2) {
+        ctx.fillStyle = "#6fc";
+        ctx.beginPath();
+        ctx.arc(status.x + 8, status.y + status.h / 2, 4, 0, Math.PI * 2);
+        ctx.fill();
+        textX = status.x + 16;
+      }
+      ctx.fillStyle = info?.tapActive ? "#bde" : "#9ab";
+      ctx.textAlign = "left"; ctx.font = "10px system-ui";
+      ctx.fillText(
+        ellipsizeEnd(ctx, beatClockStatusLabel(info), status.w - (textX - status.x) - 4),
+        textX, status.y + status.h / 2,
+      );
       ctx.font = "11px system-ui";
       ctx.textAlign = "left"; ctx.textBaseline = "middle";
     }
