@@ -135,6 +135,11 @@ export interface NodeTypeDef {
    * ランタイム state に startRecording/stopRecording/clear/seekToFraction/status を持つ前提。
    */
   automation?: boolean;
+  /**
+   * #270: ノード上にビートクロック UI（TAP ボタン＋ BPM ステータス行＋ビートインジケータ）を
+   * 描く目印（BeatClock）。ランタイム state に tapNow/status を持つ前提。
+   */
+  beatClock?: boolean;
   /** visual/sink ノードの初期化（THREE オブジェクト生成・scene 追加等）。1 度だけ呼ばれる。 */
   createState?(env: NodeEnv): NodeState;
   /**
