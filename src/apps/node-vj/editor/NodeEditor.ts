@@ -1932,15 +1932,13 @@ export class NodeEditor {
       ctx.fillStyle = "#9ab";
       ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "11px system-ui";
       ctx.fillText(t("node.beatclock.tapBtn"), tap.x + tap.w / 2, tap.y + tap.h / 2);
-      // ビートインジケータ（拍頭直後 phase<0.2 のフレームだけ明るい ● を描く）＋ BPM ステータス。
-      let textX = status.x + 4;
-      if (info && info.phase < 0.2) {
-        ctx.fillStyle = "#6fc";
-        ctx.beginPath();
-        ctx.arc(status.x + 8, status.y + status.h / 2, 4, 0, Math.PI * 2);
-        ctx.fill();
-        textX = status.x + 16;
-      }
+      // ビートインジケータ＋ BPM ステータス。● の幅は常に確保し（textX 固定）、拍頭直後
+      // （phase<0.2）だけ明るく点灯・それ以外は暗い ● を描く（点滅のたびにテキストがずれない）。
+      const textX = status.x + 16;
+      ctx.fillStyle = info && info.phase < 0.2 ? "#6fc" : "#3a4048";
+      ctx.beginPath();
+      ctx.arc(status.x + 8, status.y + status.h / 2, 4, 0, Math.PI * 2);
+      ctx.fill();
       ctx.fillStyle = info?.tapActive ? "#bde" : "#9ab";
       ctx.textAlign = "left"; ctx.font = "10px system-ui";
       ctx.fillText(
