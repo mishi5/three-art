@@ -34,6 +34,49 @@ describe("SineNode", () => {
   });
 });
 
+describe("SineNode: sync（#270）", () => {
+  const params = { freq: 1, amplitude: 1, offset: 0 };
+
+  test("sync trigger 入力を持つ", () => {
+    const sync = SineNode.inputs.find((p) => p.id === "sync")!;
+    expect(sync.type).toBe("trigger");
+  });
+
+  test("sync 未接続時は state があっても従来どおり（t0=0）", () => {
+    const s = SineNode.createState!({} as never);
+    const out = SineNode.evaluate(ctx({ timeSec: 0.25, params, state: s }));
+    expect(out.out as number).toBeCloseTo(1, 6); // sin(2π·0.25)=1
+  });
+
+  test("sync の立ち上がりエッジで位相 0（sin の立ち上がり）から再開する", () => {
+    const s = SineNode.createState!({} as never);
+    expect(SineNode.evaluate(ctx({ timeSec: 0.25, params, state: s })).out as number).toBeCloseTo(1, 6);
+    // sync エッジ → t0=0.4 → sin(0)=0。
+    expect(SineNode.evaluate(ctx({ timeSec: 0.4, inputs: { sync: true }, params, state: s })).out as number)
+      .toBeCloseTo(0, 6);
+    // sync 押しっぱなし（エッジなし）→ 再リセットせず t-t0=0.25 → 1。
+    expect(SineNode.evaluate(ctx({ timeSec: 0.65, inputs: { sync: true }, params, state: s })).out as number)
+      .toBeCloseTo(1, 6);
+    // 一度 false に戻して再度 true → 再リセット。
+    SineNode.evaluate(ctx({ timeSec: 0.9, inputs: { sync: false }, params, state: s }));
+    expect(SineNode.evaluate(ctx({ timeSec: 1.17, inputs: { sync: true }, params, state: s })).out as number)
+      .toBeCloseTo(0, 6);
+  });
+
+  test("t 入力接続時は実効 t（入力値）を基準にリセットする", () => {
+    const s = SineNode.createState!({} as never);
+    expect(SineNode.evaluate(ctx({ timeSec: 99, inputs: { t: 5, sync: true }, params, state: s })).out as number)
+      .toBeCloseTo(0, 6); // t0=5
+    expect(SineNode.evaluate(ctx({ timeSec: 99, inputs: { t: 5.25 }, params, state: s })).out as number)
+      .toBeCloseTo(1, 6); // t-t0=0.25
+  });
+
+  test("state 無し（旧テスト互換）でも sync を無視して従来出力", () => {
+    const out = SineNode.evaluate(ctx({ timeSec: 0.25, inputs: { sync: true }, params }));
+    expect(out.out as number).toBeCloseTo(1, 6);
+  });
+});
+
 describe("NoiseNode", () => {
   test("決定的（同じ t/seed で同じ値）", () => {
     const p = { speed: 1, seed: 1, amplitude: 1, offset: 0 };
@@ -42,6 +85,33 @@ describe("NoiseNode", () => {
     expect(a).toBe(b);
     expect(a).toBeGreaterThanOrEqual(-1);
     expect(a).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("NoiseNode: sync（#270）", () => {
+  const params = { speed: 1, seed: 1, amplitude: 1, offset: 0 };
+
+  test("sync trigger 入力を持つ", () => {
+    const sync = NoiseNode.inputs.find((p) => p.id === "sync")!;
+    expect(sync.type).toBe("trigger");
+  });
+
+  test("sync 未接続時は state があっても従来どおり（t0=0）", () => {
+    const s = NoiseNode.createState!({} as never);
+    const plain = NoiseNode.evaluate(ctx({ timeSec: 2.5, params })).out as number;
+    const withState = NoiseNode.evaluate(ctx({ timeSec: 2.5, params, state: s })).out as number;
+    expect(withState).toBe(plain);
+  });
+
+  test("sync の立ち上がりエッジで noise3D の走査位置が原点（t=0 相当）に戻る", () => {
+    const s = NoiseNode.createState!({} as never);
+    const origin = NoiseNode.evaluate(ctx({ timeSec: 0, params })).out as number; // t=0 の値
+    const synced = NoiseNode.evaluate(ctx({ timeSec: 7.3, inputs: { sync: true }, params, state: s })).out as number;
+    expect(synced).toBe(origin);
+    // リセット後は t-t0 で従来と同じ軌跡を辿る。
+    const after = NoiseNode.evaluate(ctx({ timeSec: 7.8, params, state: s })).out as number;
+    const expected = NoiseNode.evaluate(ctx({ timeSec: 0.5, params })).out as number;
+    expect(after).toBe(expected);
   });
 });
 
