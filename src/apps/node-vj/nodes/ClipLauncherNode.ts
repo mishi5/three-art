@@ -1,10 +1,12 @@
 // #281: クリップランチャーノード（SamplePad の映像版）。4×4 パッドに動画/画像を割り当て、
 // パッド押下で texture 出力をそのクリップへ切り替える。sync（trigger）接続時は押下を
 // 「アーム（予約）」とし、sync の立ち上がりエッジで切り替える（クオンタイズ起動）。未接続なら即時切替。
-// 音声は扱わない（video は muted 常時＝自動再生と evaluate 内 play() の許可に必須。
-// 音は SamplePad / AudioFileInput の担当）。
+// 音声は extractAudio=on のときのみ、アクティブクリップの音声を audio(signal) として出力する
+// （VideoFileInput #116 と同じ createMediaElementSource 経由・音響特徴量は出力しない）。
+// off（既定）では全 video muted＝無音（muted は自動再生と evaluate 内 play() の許可にも必要）。
 import type * as THREE from "three";
 import type { NodeState, NodeTypeDef } from "../graph/node-type";
+import { SIGNAL_OUTPUT, signalOutput } from "../graph/audio-signal";
 import { PREVIEW_W, PREVIEW_H } from "../graph/preview";
 import { containRect } from "../editor/fit";
 import { VideoTextureSurface } from "../graph/video-surface";
@@ -75,7 +77,18 @@ export class ClipLauncherRuntime {
   private imageSurface = new ImageTextureSurface();
   private previewCanvas: HTMLCanvasElement | null = null;
 
-  constructor(deps: ClipMediaDeps = domClipMediaDeps()) {
+  // --- #281 音声抽出（extractAudio・VideoFileInput #116 と同じ構図） ---
+  /** 共有 AudioContext（#127/#128。headless テストや state 移譲前は null もあり得る）。 */
+  private audioCtx: AudioContext | null;
+  /** 全クリップ音声の合流先（= signal 出力ノード）。extractAudio 初回 on で遅延構築。 */
+  private mixGain: GainNode | null = null;
+  /** MediaElementAudioSourceNode は要素ごとに 1 度しか生成できないため Map で保持する。 */
+  private mediaSources = new Map<HTMLVideoElement, MediaElementAudioSourceNode>();
+  /** 現在 audio 抽出が有効か（signal 公開と muted 反映の基準）。 */
+  private audioEnabled = false;
+
+  constructor(audioCtx: AudioContext | null = null, deps: ClipMediaDeps = domClipMediaDeps()) {
+    this.audioCtx = audioCtx;
     this.deps = deps;
   }
 
@@ -105,6 +118,8 @@ export class ClipLauncherRuntime {
     // 再割当は古いクリップを破棄してから差し替える（アクティブ/アーム解除も含む）。
     if (this.clips[index]) this.clearPad(index);
     this.clips[index] = clip;
+    // #281: 音声グラフ構築済みなら新しい動画も遅延接続する（要素ごとに 1 度だけ）。
+    if (clip.kind === "video" && this.mixGain) this.connectClipAudio(clip.video);
   }
 
   /** パッドにクリップが割り当て済みか。 */
@@ -141,11 +156,61 @@ export class ClipLauncherRuntime {
     const r = resolveLaunch(this.pending, syncConnected, syncEdge);
     this.pending = r.armed;
     if (r.switchTo !== null) this.activate(r.switchTo);
-    // loop は全 video 要素へ反映（アクティブだけだと切替時に反映漏れするため）。
-    for (const clip of this.clips) {
-      if (clip?.kind === "video") clip.video.loop = loop;
-    }
+    // loop / muted は全 video 要素へ反映（アクティブだけだと切替時に反映漏れするため）。
+    // muted は extractAudio=on のときアクティブ video のみ false（非アクティブは paused で
+    // 音が出ないはずだが、シーク等での漏れに対する防御として毎フレーム明示する）。
+    this.clips.forEach((clip, i) => {
+      if (clip?.kind !== "video") return;
+      clip.video.loop = loop;
+      clip.video.muted = !(this.audioEnabled && this.active === i);
+    });
     return { switched: r.switchTo !== null };
+  }
+
+  /**
+   * #281: 音声抽出の ON/OFF（evaluate から毎フレーム・extractAudio param を反映）。
+   * ON の初回に mixGain（signal 出力）＋ gain 0 の keepalive → destination を構築し、
+   * 既存の全動画クリップを createMediaElementSource で接続する（要素ごとに 1 度だけ）。
+   * destination へ直結しない理由は VideoFileInput #128 と同じ（発音は Audio 出力ノード経由）。
+   * AudioContext が無い環境（headless）では無効のまま＝signal null・全 video muted。
+   */
+  setAudioEnabled(enabled: boolean): void {
+    if (enabled && !this.audioEnabled) {
+      this.ensureAudioGraph();
+      if (this.mixGain) {
+        for (const clip of this.clips) {
+          if (clip?.kind === "video") this.connectClipAudio(clip.video);
+        }
+        void this.audioCtx?.resume().catch(() => { /* gesture 不足時は次回 */ });
+      }
+    }
+    this.audioEnabled = enabled && this.mixGain !== null;
+  }
+
+  /** 音声グラフを 1 度だけ構築する（共有 ctx・destination 非接続の keepalive 付き）。 */
+  private ensureAudioGraph(): void {
+    if (this.mixGain || !this.audioCtx) return;
+    const ctx = this.audioCtx;
+    this.mixGain = ctx.createGain();
+    this.mixGain.gain.value = 1;
+    // 無音(gain 0)の keep-alive で MediaElementSource のグラフを生かす（VideoFileInput と同じ）。
+    const keep = ctx.createGain();
+    keep.gain.value = 0;
+    this.mixGain.connect(keep);
+    keep.connect(ctx.destination);
+  }
+
+  /** video 要素を mixGain へ接続する（MediaElementAudioSourceNode は要素ごとに 1 度だけ）。 */
+  private connectClipAudio(video: HTMLVideoElement): void {
+    if (!this.mixGain || !this.audioCtx || this.mediaSources.has(video)) return;
+    const src = this.audioCtx.createMediaElementSource(video);
+    src.connect(this.mixGain);
+    this.mediaSources.set(video, src);
+  }
+
+  /** #281: audio(signal) 出力用の AudioNode（extractAudio=off / 未構築なら null）。 */
+  audioSignalNode(): AudioNode | null {
+    return this.audioEnabled ? this.mixGain : null;
   }
 
   /** 切替を実行する（前のアクティブ video を pause・動画は頭から再生＝リトリガ）。 */
@@ -210,6 +275,12 @@ export class ClipLauncherRuntime {
   private disposeClip(clip: Clip): void {
     if (clip.kind === "video") {
       clip.video.pause();
+      // #281: mediaSource は要素と 1:1。要素破棄と同時に切断する（共有 ctx は close しない）。
+      const src = this.mediaSources.get(clip.video);
+      if (src) {
+        try { src.disconnect(); } catch { /* already disconnected */ }
+        this.mediaSources.delete(clip.video);
+      }
       clip.video.remove();
     }
     this.deps.revokeObjectURL(clip.url);
@@ -247,7 +318,7 @@ export class ClipLauncherRuntime {
     return this.previewCanvas;
   }
 
-  /** 全クリップ・surface の解放。 */
+  /** 全クリップ・surface・音声グラフの解放（共有 AudioContext は close しない）。 */
   dispose(): void {
     this.stopAll();
     for (let i = 0; i < CLIP_PAD_COUNT; i++) {
@@ -255,6 +326,9 @@ export class ClipLauncherRuntime {
       if (clip) this.disposeClip(clip);
       this.clips[i] = null;
     }
+    try { this.mixGain?.disconnect(); } catch { /* ignore */ }
+    this.mixGain = null;
+    this.audioEnabled = false;
     this.videoSurface.dispose();
     this.imageSurface.dispose();
   }
@@ -274,23 +348,31 @@ export const ClipLauncherNode: NodeTypeDef = {
     { id: "texture", label: "tex", type: "texture", description: "node.ClipLauncher.port.texture" },
     // 実際に切替が起きたフレームに 1 回発火（アーム時ではない）。Flash 等の演出同期用。
     { id: "trigger", label: "trig", type: "trigger", description: "node.ClipLauncher.port.trigger" },
+    // #281: extractAudio=on でアクティブクリップの実音声信号（AudioMix/AudioOutput へ）。
+    // 音響特徴量（AUDIO_FEATURE_OUTPUTS）は onset の "trigger" ポートが切替発火 trigger と
+    // id 衝突するため付けない（特徴量が要る場合は AudioFileInput 等を使う）。
+    SIGNAL_OUTPUT,
   ],
   params: [
     { id: "loop", label: "loop", kind: "enum", default: "on", options: ["on", "off"],
       description: "node.ClipLauncher.param.loop" },
+    { id: "extractAudio", label: "extractAudio", kind: "enum", default: "off", options: ["off", "on"],
+      description: "node.ClipLauncher.param.extractAudio" },
     // 各パッドの割当アセット id（string[]・長さ可変・hidden）。SamplePad と同名 param を使うことで
     // collectAssetRefs / main.ts のパッド復元がそのまま効く。
     { id: "padAssets", label: "padAssets", kind: "string", default: [], noInput: true, hidden: true,
       description: "node.ClipLauncher.param.padAssets" },
   ],
-  createState: () => new ClipLauncherRuntime(),
+  createState: (env) => new ClipLauncherRuntime(env.audioContext),
   disposeState: (state: NodeState) => (state as ClipLauncherRuntime).dispose(),
   previewSource: (state: NodeState) => (state as ClipLauncherRuntime).previewFrame(),
   evaluate: (ctx) => {
     const s = ctx.state as ClipLauncherRuntime | undefined;
-    if (!s) return { trigger: false };
+    if (!s) return { trigger: false, ...signalOutput(null) };
+    // muted 反映は step 内なので、先に extractAudio を反映してから step する。
+    s.setAudioEnabled(ctx.param("extractAudio") === "on");
     const { switched } = s.step(ctx.input("sync"), ctx.param("loop") !== "off");
     const texture = (ctx.env ? s.getTexture(ctx.env.renderer) : null) ?? undefined;
-    return { texture, trigger: switched };
+    return { texture, trigger: switched, ...signalOutput(s.audioSignalNode()) };
   },
 };

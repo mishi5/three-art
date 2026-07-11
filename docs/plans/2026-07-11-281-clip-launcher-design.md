@@ -22,9 +22,10 @@ SamplePad（音声ワンショット）の映像版 `ClipLauncher` ノードを�
     `ctx.input("sync")` が undefined ⇒ 未接続、boolean ⇒ 接続済み、で判定する。
 - **trigger 出力は「実際に切替が起きたフレーム」に 1 回発火**（アーム時ではない）。
   Flash 等の演出同期用。
-- **音声は扱わない（video は muted 常時）**: muted は自動再生ポリシーと evaluate 内
-  `play()`（user gesture 外）の許可に必須。音は SamplePad / AudioFileInput の担当と
-  i18n の desc に明記する。
+- **音声は extractAudio=on のときのみ出力**（初版は非対応だったが、「音声を別ノードで
+  扱うのは面倒すぎる」とのユーザレビューを受け同ブランチで追加。詳細は後述の
+  「音声対応（extractAudio）」節）。off（既定）では全 video muted 常時＝無音。
+  muted は自動再生ポリシーと evaluate 内 `play()`（user gesture 外）の許可に必須。
 - **loop param**: on/off を全パッドの video 要素へ毎フレーム反映。
 - 動画は `loadPadFile` 時に要素を作って preload（paused のまま）。再生するのは
   アクティブな 1 本だけ（切替時: 前を pause → 次を currentTime=0 → play()）。
@@ -91,6 +92,40 @@ muted/playsInline/preload の設定は Runtime 側で行い、fake でも検証�
   （texture null → 出力 undefined＝下流は黒）。アーム/pending も解除。
 - stopPad(index): そのパッドがアクティブなら停止・アーム中ならアーム解除。
 - clearPad(index): 割当解除（objectURL revoke・要素破棄。アクティブ/アーム中なら解除）。
+
+## 音声対応（extractAudio・ユーザレビュー後の追加）
+
+VideoFileInput の #116 パターン（`createMediaElementSource` → WebAudio → signal 出力）に倣い、
+アクティブクリップの音声を audio(signal) として出力できるようにする。
+
+- **`extractAudio` param**（enum on/off・既定 off）。off は従来どおり全 video muted＝無音。
+- **`SIGNAL_OUTPUT`（audio）出力を追加**。AudioOutput/AudioMix へ接続して発音する。
+  port の description は共通キー `node.common.audioSignal.audio`（SIGNAL_OUTPUT 定義に内蔵・
+  AudioFileInput/VideoFileInput と同じ）なので専用キーは追加しない。
+- **音響特徴量（bass/onset 等）は付けない**: `AUDIO_FEATURE_OUTPUTS` は onset の
+  `trigger` ポートを含み、ClipLauncher 既存の `trigger`（切替発火）と port id が衝突するため。
+  特徴量が要る場合は AudioFileInput 等を使う（desc に明記）。
+- **音声グラフ（extractAudio 初回 on で遅延構築）**: 各 video 要素の
+  `MediaElementAudioSourceNode`（**要素ごとに 1 度しか作れない**ため Map で保持）→
+  共有 `mixGain`（= signal 出力ノード）→ gain 0 の keepalive → destination
+  （VideoFileInput の ensureAudioGraph と同じ理由・destination へは直結しない）。
+  `createState: (env) => new ClipLauncherRuntime(env.audioContext)` で共有 AudioContext を
+  受け取る（ClipMediaDeps 注入は維持・headless で ctx 無しなら安全に無効のまま）。
+- **muted の毎フレーム反映（step 内・loop と同じ場所）**: 非アクティブ動画は paused なので
+  音は出ないはずだが、防御として on のときはアクティブ video のみ muted=false・他は
+  muted=true、off のときは全 video muted=true を明示する。
+- 音声グラフ構築後の loadPadFile は mediaSource を遅延作成して接続。clearPad/dispose で
+  mediaSource を disconnect（AudioContext は共有なので close しない）。
+
+### 制約: muted=false での gesture 外 play()
+
+extractAudio=on 中の切替は muted=false の video に対する `play()` になり、ブラウザの
+自動再生ポリシー上、user gesture 外では理論上拒否されうる。実際にはパッド押下
+（pointerdown）直後の evaluate で呼ばれるため gesture 文脈が生きているのが通常だが、
+sync クオンタイズ起動（拍待ち）では gesture から時間が空く。拒否された場合も既存の
+`.catch(() => {})` に落ちるだけでクラッシュしない（映像・音声とも出ないまま次の押下で
+再試行）。ページ操作済みなら Chrome は音付き play() も許可するのが実態で、
+VJ 用途（操作しながら使う）では実害は小さいと判断した。
 
 ## i18n / registry
 

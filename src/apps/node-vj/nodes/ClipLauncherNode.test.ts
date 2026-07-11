@@ -1,12 +1,31 @@
 // #281: ClipLauncher ノードのテスト。
 // DOM の video/Image には依存せず、ClipMediaDeps を fake 注入して Runtime を検証する
-// （SamplePadNode.test.ts の fakeAudioContext と同じ流儀）。
+// （SamplePadNode.test.ts の fakeAudioContext と同じ流儀。AudioContext も fake 注入）。
 import { expect, test, describe } from "bun:test";
 import {
   ClipLauncherNode, ClipLauncherRuntime, type ClipMediaDeps,
 } from "./ClipLauncherNode";
 import { CLIP_PAD_COUNT, CLIP_PAD_ROWS, CLIP_PAD_COLS } from "./ClipLauncherNode";
 import type { EvalContext } from "../graph/node-type";
+
+/** createMediaElementSource の生成/切断履歴を記録する fake AudioContext（extractAudio 検証用）。 */
+function fakeAudioContext(): { ctx: AudioContext; mediaSources: { el: unknown; disconnects: number }[] } {
+  const mediaSources: { el: unknown; disconnects: number }[] = [];
+  const ctx = {
+    destination: {},
+    resume: () => Promise.resolve(),
+    createGain: () => ({ gain: { value: 1 }, connect() { /* no-op */ }, disconnect() { /* no-op */ } }),
+    createMediaElementSource(el: unknown) {
+      const rec = { el, disconnects: 0 };
+      mediaSources.push(rec);
+      return {
+        connect() { /* no-op */ },
+        disconnect() { rec.disconnects++; },
+      };
+    },
+  } as unknown as AudioContext;
+  return { ctx, mediaSources };
+}
 
 /** play/pause/remove の呼び出しを記録する fake video 要素。 */
 interface FakeVideo {
@@ -65,27 +84,32 @@ describe("#281 ClipLauncherNode 定義", () => {
     expect(CLIP_PAD_COUNT).toBe(16);
   });
 
-  test("sync 入力（trigger）と texture / trigger 出力を持つ", () => {
+  test("sync 入力（trigger）と texture / trigger / audio(signal) 出力を持つ", () => {
     expect(ClipLauncherNode.inputs.map((p) => p.id)).toEqual(["sync"]);
     expect(ClipLauncherNode.inputs[0]!.type).toBe("trigger");
-    expect(ClipLauncherNode.outputs.map((p) => p.id)).toEqual(["texture", "trigger"]);
+    expect(ClipLauncherNode.outputs.map((p) => p.id)).toEqual(["texture", "trigger", "audio"]);
     expect(ClipLauncherNode.outputs[0]!.type).toBe("texture");
     expect(ClipLauncherNode.outputs[1]!.type).toBe("trigger");
+    expect(ClipLauncherNode.outputs[2]!.type).toBe("audio");
   });
 
-  test("loop param（enum on/off 既定 on）と hidden の padAssets を持つ", () => {
-    expect(ClipLauncherNode.params.map((p) => p.id)).toEqual(["loop", "padAssets"]);
+  test("loop / extractAudio param（enum on/off）と hidden の padAssets を持つ", () => {
+    expect(ClipLauncherNode.params.map((p) => p.id)).toEqual(["loop", "extractAudio", "padAssets"]);
     const loop = ClipLauncherNode.params.find((p) => p.id === "loop")!;
     expect(loop.kind).toBe("enum");
     expect(loop.options).toEqual(["on", "off"]);
     expect(loop.default).toBe("on");
+    const ex = ClipLauncherNode.params.find((p) => p.id === "extractAudio")!;
+    expect(ex.kind).toBe("enum");
+    expect(ex.options).toEqual(["off", "on"]);
+    expect(ex.default).toBe("off"); // 既定 OFF で従来の無音挙動を維持
     const pad = ClipLauncherNode.params.find((p) => p.id === "padAssets")!;
     expect(pad.hidden).toBe(true);
     expect(pad.noInput).toBe(true);
     expect(pad.default).toEqual([]);
   });
 
-  test("state 無しの evaluate は texture 無し・trigger false（headless 安全）", () => {
+  test("state 無しの evaluate は texture 無し・trigger false・audio 未出力（headless 安全）", () => {
     const ctx: EvalContext = {
       timeSec: 0,
       input: () => undefined,
@@ -95,13 +119,14 @@ describe("#281 ClipLauncherNode 定義", () => {
     const out = ClipLauncherNode.evaluate(ctx);
     expect(out.texture).toBeUndefined();
     expect(out.trigger).toBe(false);
+    expect(out.audio).toBeUndefined();
   });
 });
 
 describe("#281 loadPadFile / hasPad / padLabel / clearPad（PadLoadable duck-type）", () => {
   test("動画割当: muted+playsInline+preload の video を作り src を設定（再生はしない）", async () => {
     const { deps, videos } = makeDeps();
-    const rt = new ClipLauncherRuntime(deps);
+    const rt = new ClipLauncherRuntime(null, deps);
     await rt.loadPadFile(0, videoFile("loop.mp4"));
     expect(videos.length).toBe(1);
     const v = videos[0]!;
@@ -116,7 +141,7 @@ describe("#281 loadPadFile / hasPad / padLabel / clearPad（PadLoadable duck-typ
 
   test("画像割当: loadImage で読み込み hasPad/padLabel が立つ", async () => {
     const { deps, videos } = makeDeps();
-    const rt = new ClipLauncherRuntime(deps);
+    const rt = new ClipLauncherRuntime(null, deps);
     await rt.loadPadFile(1, imageFile("still.png"));
     expect(videos.length).toBe(0); // video 要素は作らない
     expect(rt.hasPad(1)).toBe(true);
@@ -125,7 +150,7 @@ describe("#281 loadPadFile / hasPad / padLabel / clearPad（PadLoadable duck-typ
 
   test("範囲外 index / 未割当は安全（no-op / false / null）", async () => {
     const { deps } = makeDeps();
-    const rt = new ClipLauncherRuntime(deps);
+    const rt = new ClipLauncherRuntime(null, deps);
     await rt.loadPadFile(-1, videoFile());
     await rt.loadPadFile(CLIP_PAD_COUNT, videoFile());
     expect(rt.hasPad(-1)).toBe(false);
@@ -135,7 +160,7 @@ describe("#281 loadPadFile / hasPad / padLabel / clearPad（PadLoadable duck-typ
 
   test("再割当は古いクリップを破棄（revoke・video 除去）してから差し替える", async () => {
     const { deps, videos, revoked } = makeDeps();
-    const rt = new ClipLauncherRuntime(deps);
+    const rt = new ClipLauncherRuntime(null, deps);
     await rt.loadPadFile(0, videoFile("a.mp4"));
     await rt.loadPadFile(0, videoFile("b.mp4"));
     expect(videos.length).toBe(2);
@@ -146,7 +171,7 @@ describe("#281 loadPadFile / hasPad / padLabel / clearPad（PadLoadable duck-typ
 
   test("clearPad は割当解除・objectURL revoke・要素破棄（アクティブなら解除）", async () => {
     const { deps, videos, revoked } = makeDeps();
-    const rt = new ClipLauncherRuntime(deps);
+    const rt = new ClipLauncherRuntime(null, deps);
     await rt.loadPadFile(2, videoFile("c.mp4"));
     rt.playPad(2);
     rt.step(undefined, true); // 即時切替でアクティブ化
@@ -163,7 +188,7 @@ describe("#281 loadPadFile / hasPad / padLabel / clearPad（PadLoadable duck-typ
 describe("#281 playPad + step: sync 未接続は即時切替", () => {
   test("押下→次の step で切替（currentTime=0 から play・switched=true は 1 回だけ）", async () => {
     const { deps, videos } = makeDeps();
-    const rt = new ClipLauncherRuntime(deps);
+    const rt = new ClipLauncherRuntime(null, deps);
     await rt.loadPadFile(0, videoFile());
     rt.playPad(0);
     expect(rt.activeIndex()).toBeNull(); // 切替は step が行う
@@ -179,7 +204,7 @@ describe("#281 playPad + step: sync 未接続は即時切替", () => {
 
   test("未割当パッドの playPad は no-op（切替もトリガも発生しない）", () => {
     const { deps } = makeDeps();
-    const rt = new ClipLauncherRuntime(deps);
+    const rt = new ClipLauncherRuntime(null, deps);
     rt.playPad(4);
     const r = rt.step(undefined, true);
     expect(r.switched).toBe(false);
@@ -188,7 +213,7 @@ describe("#281 playPad + step: sync 未接続は即時切替", () => {
 
   test("別パッドへ切替時は前のアクティブ video を pause する", async () => {
     const { deps, videos } = makeDeps();
-    const rt = new ClipLauncherRuntime(deps);
+    const rt = new ClipLauncherRuntime(null, deps);
     await rt.loadPadFile(0, videoFile("a.mp4"));
     await rt.loadPadFile(1, videoFile("b.mp4"));
     rt.playPad(0);
@@ -202,7 +227,7 @@ describe("#281 playPad + step: sync 未接続は即時切替", () => {
 
   test("同じパッドの再押下は頭から再生し直す（リトリガ）", async () => {
     const { deps, videos } = makeDeps();
-    const rt = new ClipLauncherRuntime(deps);
+    const rt = new ClipLauncherRuntime(null, deps);
     await rt.loadPadFile(0, videoFile());
     rt.playPad(0);
     rt.step(undefined, true);
@@ -216,7 +241,7 @@ describe("#281 playPad + step: sync 未接続は即時切替", () => {
 
   test("画像パッドは切替のみ（video 操作なし・switched は発火）", async () => {
     const { deps } = makeDeps();
-    const rt = new ClipLauncherRuntime(deps);
+    const rt = new ClipLauncherRuntime(null, deps);
     await rt.loadPadFile(3, imageFile());
     rt.playPad(3);
     const r = rt.step(undefined, true);
@@ -228,7 +253,7 @@ describe("#281 playPad + step: sync 未接続は即時切替", () => {
 describe("#281 playPad + step: sync 接続時はアーム→エッジで切替", () => {
   test("sync=false の間はアーム保持（armedIndex）・エッジで切替", async () => {
     const { deps } = makeDeps();
-    const rt = new ClipLauncherRuntime(deps);
+    const rt = new ClipLauncherRuntime(null, deps);
     await rt.loadPadFile(0, videoFile());
     rt.playPad(0);
     let r = rt.step(false, true); // 接続済み・エッジなし
@@ -245,7 +270,7 @@ describe("#281 playPad + step: sync 接続時はアーム→エッジで切替",
 
   test("sync=true が続くフレームでは再発火しない（立ち上がりエッジのみ）", async () => {
     const { deps } = makeDeps();
-    const rt = new ClipLauncherRuntime(deps);
+    const rt = new ClipLauncherRuntime(null, deps);
     await rt.loadPadFile(0, videoFile("a.mp4"));
     await rt.loadPadFile(1, videoFile("b.mp4"));
     rt.playPad(0);
@@ -263,7 +288,7 @@ describe("#281 playPad + step: sync 接続時はアーム→エッジで切替",
 
   test("アーム中に押し直すと予約を上書きする", async () => {
     const { deps } = makeDeps();
-    const rt = new ClipLauncherRuntime(deps);
+    const rt = new ClipLauncherRuntime(null, deps);
     await rt.loadPadFile(0, videoFile("a.mp4"));
     await rt.loadPadFile(1, videoFile("b.mp4"));
     rt.playPad(0);
@@ -279,7 +304,7 @@ describe("#281 playPad + step: sync 接続時はアーム→エッジで切替",
 describe("#281 loop 反映", () => {
   test("step の loop を全 video 要素へ反映する", async () => {
     const { deps, videos } = makeDeps();
-    const rt = new ClipLauncherRuntime(deps);
+    const rt = new ClipLauncherRuntime(null, deps);
     await rt.loadPadFile(0, videoFile("a.mp4"));
     await rt.loadPadFile(1, videoFile("b.mp4"));
     rt.step(undefined, true);
@@ -293,7 +318,7 @@ describe("#281 loop 反映", () => {
 describe("#281 stopAll / stopPad（Stop ボタン・個別停止）", () => {
   test("stopAll はアクティブ video を pause しアクティブ/アームを解除", async () => {
     const { deps, videos } = makeDeps();
-    const rt = new ClipLauncherRuntime(deps);
+    const rt = new ClipLauncherRuntime(null, deps);
     await rt.loadPadFile(0, videoFile("a.mp4"));
     await rt.loadPadFile(1, videoFile("b.mp4"));
     rt.playPad(0);
@@ -310,7 +335,7 @@ describe("#281 stopAll / stopPad（Stop ボタン・個別停止）", () => {
 
   test("stopPad はそのパッドがアクティブなら停止・アーム中ならアーム解除", async () => {
     const { deps, videos } = makeDeps();
-    const rt = new ClipLauncherRuntime(deps);
+    const rt = new ClipLauncherRuntime(null, deps);
     await rt.loadPadFile(0, videoFile("a.mp4"));
     await rt.loadPadFile(1, videoFile("b.mp4"));
     rt.playPad(0);
@@ -327,7 +352,7 @@ describe("#281 stopAll / stopPad（Stop ボタン・個別停止）", () => {
 
   test("無関係なパッドの stopPad は何もしない", async () => {
     const { deps } = makeDeps();
-    const rt = new ClipLauncherRuntime(deps);
+    const rt = new ClipLauncherRuntime(null, deps);
     await rt.loadPadFile(0, videoFile());
     rt.playPad(0);
     rt.step(undefined, true);
@@ -339,7 +364,7 @@ describe("#281 stopAll / stopPad（Stop ボタン・個別停止）", () => {
 describe("#281 padActive / padArmed（パッド表示用）", () => {
   test("アクティブ/アーム中のパッドだけ true を返す", async () => {
     const { deps } = makeDeps();
-    const rt = new ClipLauncherRuntime(deps);
+    const rt = new ClipLauncherRuntime(null, deps);
     await rt.loadPadFile(0, videoFile("a.mp4"));
     await rt.loadPadFile(1, videoFile("b.mp4"));
     rt.playPad(0);
@@ -353,10 +378,125 @@ describe("#281 padActive / padArmed（パッド表示用）", () => {
   });
 });
 
+describe("#281 extractAudio（アクティブクリップの音声出力）", () => {
+  test("off（既定）: 全 video が muted のまま・signal 出力は null", async () => {
+    const { deps, videos } = makeDeps();
+    const { ctx } = fakeAudioContext();
+    const rt = new ClipLauncherRuntime(ctx, deps);
+    await rt.loadPadFile(0, videoFile());
+    rt.playPad(0);
+    rt.setAudioEnabled(false);
+    rt.step(undefined, true);
+    expect(videos[0]!.muted).toBe(true);
+    expect(rt.audioSignalNode()).toBeNull();
+  });
+
+  test("on: アクティブ video のみ muted=false・他は muted=true・signal 出力は mixGain", async () => {
+    const { deps, videos } = makeDeps();
+    const { ctx } = fakeAudioContext();
+    const rt = new ClipLauncherRuntime(ctx, deps);
+    await rt.loadPadFile(0, videoFile("a.mp4"));
+    await rt.loadPadFile(1, videoFile("b.mp4"));
+    rt.setAudioEnabled(true);
+    rt.playPad(0);
+    rt.step(undefined, true);
+    expect(videos[0]!.muted).toBe(false);
+    expect(videos[1]!.muted).toBe(true);
+    expect(rt.audioSignalNode()).not.toBeNull();
+    // 切替で muted も追従する。
+    rt.playPad(1);
+    rt.step(undefined, true);
+    expect(videos[0]!.muted).toBe(true);
+    expect(videos[1]!.muted).toBe(false);
+  });
+
+  test("on→off: 全 video が muted に戻り signal 出力も null に戻る", async () => {
+    const { deps, videos } = makeDeps();
+    const { ctx } = fakeAudioContext();
+    const rt = new ClipLauncherRuntime(ctx, deps);
+    await rt.loadPadFile(0, videoFile());
+    rt.setAudioEnabled(true);
+    rt.playPad(0);
+    rt.step(undefined, true);
+    expect(videos[0]!.muted).toBe(false);
+    rt.setAudioEnabled(false);
+    rt.step(undefined, true);
+    expect(videos[0]!.muted).toBe(true);
+    expect(rt.audioSignalNode()).toBeNull();
+  });
+
+  test("MediaElementAudioSourceNode は video 要素ごとに 1 度だけ作られる", async () => {
+    const { deps, videos } = makeDeps();
+    const { ctx, mediaSources } = fakeAudioContext();
+    const rt = new ClipLauncherRuntime(ctx, deps);
+    await rt.loadPadFile(0, videoFile("a.mp4"));
+    await rt.loadPadFile(1, videoFile("b.mp4"));
+    rt.setAudioEnabled(true);
+    rt.setAudioEnabled(true); // 再有効化しても再生成しない
+    rt.setAudioEnabled(false);
+    rt.setAudioEnabled(true); // off→on でも再生成しない
+    expect(mediaSources.length).toBe(2);
+    expect(mediaSources.map((m) => m.el)).toEqual([videos[0], videos[1]]);
+  });
+
+  test("音声グラフ構築後に loadPadFile した動画も遅延接続される（画像は接続しない）", async () => {
+    const { deps, videos } = makeDeps();
+    const { ctx, mediaSources } = fakeAudioContext();
+    const rt = new ClipLauncherRuntime(ctx, deps);
+    rt.setAudioEnabled(true); // クリップ 0 件で先に有効化
+    expect(mediaSources.length).toBe(0);
+    await rt.loadPadFile(0, videoFile());
+    await rt.loadPadFile(1, imageFile());
+    expect(mediaSources.length).toBe(1);
+    expect(mediaSources[0]!.el).toBe(videos[0]);
+  });
+
+  test("clearPad は mediaSource を disconnect する（再割当で作り直せる）", async () => {
+    const { deps } = makeDeps();
+    const { ctx, mediaSources } = fakeAudioContext();
+    const rt = new ClipLauncherRuntime(ctx, deps);
+    await rt.loadPadFile(0, videoFile());
+    rt.setAudioEnabled(true);
+    rt.clearPad(0);
+    expect(mediaSources[0]!.disconnects).toBe(1);
+    await rt.loadPadFile(0, videoFile("b.mp4"));
+    expect(mediaSources.length).toBe(2); // 新要素には新規 mediaSource
+  });
+
+  test("AudioContext 無し（headless）: on でも安全に無効のまま（signal null・muted true）", async () => {
+    const { deps, videos } = makeDeps();
+    const rt = new ClipLauncherRuntime(null, deps);
+    await rt.loadPadFile(0, videoFile());
+    rt.setAudioEnabled(true);
+    rt.playPad(0);
+    rt.step(undefined, true);
+    expect(rt.audioSignalNode()).toBeNull();
+    expect(videos[0]!.muted).toBe(true);
+  });
+
+  test("evaluate: extractAudio=on で audio 出力にノードが乗る（off は undefined）", async () => {
+    const { deps } = makeDeps();
+    const { ctx: audioCtx } = fakeAudioContext();
+    const rt = new ClipLauncherRuntime(audioCtx, deps);
+    await rt.loadPadFile(0, videoFile());
+    const evalCtx = (extractAudio: string): EvalContext => ({
+      timeSec: 0,
+      input: () => undefined,
+      param: (id) => (id === "extractAudio" ? extractAudio : "on"),
+      node: { id: "x", type: "ClipLauncher", params: {} },
+      state: rt,
+    });
+    const off = ClipLauncherNode.evaluate(evalCtx("off"));
+    expect(off.audio).toBeUndefined();
+    const on = ClipLauncherNode.evaluate(evalCtx("on"));
+    expect(on.audio).toBeDefined();
+  });
+});
+
 describe("#281 dispose", () => {
   test("全クリップの video を破棄し objectURL を revoke する", async () => {
     const { deps, videos, revoked } = makeDeps();
-    const rt = new ClipLauncherRuntime(deps);
+    const rt = new ClipLauncherRuntime(null, deps);
     await rt.loadPadFile(0, videoFile("a.mp4"));
     await rt.loadPadFile(1, videoFile("b.mp4"));
     await rt.loadPadFile(2, imageFile("c.png"));
