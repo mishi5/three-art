@@ -38,6 +38,12 @@ export class VideoTextureSurface {
   render(renderer: THREE.WebGLRenderer, video: HTMLVideoElement, fade = 1): THREE.Texture | null {
     if (video.videoWidth === 0) return null;
     this.setFade(fade);
+    // #281: 別の video 要素へ切り替えられたら texture を作り直す（ClipLauncher がパッドごとの
+    // 要素を 1 つの surface で使い回すため）。既存呼び出し元は常に同一要素なので挙動不変。
+    if (this.videoTexture && this.videoTexture.image !== video) {
+      this.videoTexture.dispose();
+      this.videoTexture = null;
+    }
     if (!this.videoTexture) {
       this.videoTexture = new THREE.VideoTexture(video);
       this.material.map = this.videoTexture;
