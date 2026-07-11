@@ -7,6 +7,7 @@ import { addConnection, addNode, createGraph, replaceGraph, type GraphDoc } from
 import { GraphRuntime } from "./graph/runtime";
 import { NodeEditor } from "./editor/NodeEditor";
 import { openPadOverlay } from "./editor/pad-overlay";
+import { padGridAccept } from "./editor/layout";
 import { mountGraphPresetControls, mountProjectControls, type ProjectIoHooks } from "./editor/graph-io-controls";
 import { GraphStore, localStorageAdapter } from "./graph/graph-store";
 import { History } from "./graph/history";
@@ -162,13 +163,16 @@ function recordPadAsset(nodeId: string, slot: number, file: File): void {
   }).catch((e) => console.warn(`[node-vj] library.add (pad) failed for ${nodeId}:`, e));
 }
 
-/** #205: パッドへの音声割当（user gesture 内でファイル選択ダイアログを開く）。 */
+/** #205: パッドへのファイル割当（user gesture 内でファイル選択ダイアログを開く）。 */
 function openPadFileDialog(nodeId: string, slot: number): void {
   // #205: 再割当を始めたら、そのパッドで鳴っている音を止める（古い音源を残さない）。
   (runtime.getState(nodeId) as PadLoadable | undefined)?.stopPad?.(slot);
   const input = document.createElement("input");
   input.type = "file";
-  input.accept = "audio/*";
+  // #281: accept はノード定義から引く（SamplePad="audio/*"（既定）・ClipLauncher="video/*,image/*"）。
+  const n = graph.nodes.find((x) => x.id === nodeId);
+  const def = n ? registry.get(n.type) : undefined;
+  input.accept = def ? padGridAccept(def) : "audio/*";
   input.style.display = "none";
   document.body.appendChild(input);
   input.addEventListener("change", () => {
@@ -189,7 +193,8 @@ function openPadFileDialog(nodeId: string, slot: number): void {
 const history = new History();
 type FileLoadable = { loadFile?: (f: File) => Promise<void> };
 type Named = { fileName?: string | null };
-// #205: SamplePad ランタイムの duck-type（パッド割当/発音/状態参照）。
+// #205: SamplePad/ClipLauncher ランタイムの duck-type（パッド割当/起動/状態参照）。
+// #281: padActive/padArmed は ClipLauncher の再生中強調・予約点滅用（SamplePad は持たない）。
 type PadLoadable = {
   loadPadFile?: (index: number, file: File) => Promise<void>;
   playPad?: (index: number) => void;
@@ -198,6 +203,8 @@ type PadLoadable = {
   stopAll?: () => void;
   stopPad?: (index: number) => void;
   clearPad?: (index: number) => void;
+  padActive?: (index: number) => boolean;
+  padArmed?: (index: number) => boolean;
 };
 // #229/#244: UI 設定（操作モード・言語等）。言語は UI 構築（t() を使う NodeEditor/パネル生成）
 // より前に確定させる必要があるため、ここで prefs を読み setLang する。
@@ -275,7 +282,11 @@ editor.onAssignPad = (id, idx) => {
 editor.padCellInfo = (id, idx) => {
   const s = runtime.getState(id) as PadLoadable | undefined;
   if (!s || typeof s.hasPad !== "function") return undefined;
-  return { filled: s.hasPad(idx), label: s.padLabel?.(idx) ?? null };
+  // #281: active/armed は ClipLauncher のみ返す（SamplePad は undefined ＝従来描画）。
+  return {
+    filled: s.hasPad(idx), label: s.padLabel?.(idx) ?? null,
+    active: s.padActive?.(idx), armed: s.padArmed?.(idx),
+  };
 };
 // #205: パッドへの（再）割当を 1 か所に集約（ファイル選択ダイアログ→loadPadFile＋padAssets 上書き）。
 function assignPad(nodeId: string, slot: number): void {
@@ -310,7 +321,10 @@ editor.onExpandPad = (id) => {
     info: (nodeId, idx) => {
       const s = runtime.getState(nodeId) as PadLoadable | undefined;
       if (!s || typeof s.hasPad !== "function") return undefined;
-      return { filled: s.hasPad(idx), label: s.padLabel?.(idx) ?? null };
+      return {
+        filled: s.hasPad(idx), label: s.padLabel?.(idx) ?? null,
+        active: s.padActive?.(idx), armed: s.padArmed?.(idx),
+      };
     },
   });
 };

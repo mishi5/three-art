@@ -3,7 +3,7 @@ import {
   NODE_WIDTH, TITLE_H, ROW_H, nodeHeight, inputPortPos, outputPortPos,
   portIndex, nodeRect, hasRandomRow, randomRowRect,
   hasSceneRow, sceneRowRect, sceneRowLabel,
-  hasPadGrid, padGridMetrics, padGridHeight, padGridRect, padRect, padIndexAt,
+  hasPadGrid, padGridAccept, padGridMetrics, padGridHeight, padGridRect, padRect, padIndexAt,
   padExpandButtonRect, padStopButtonRect,
   PAD_MARGIN_X, PAD_MARGIN_TOP,
   hasTapRows, tapSeekRowRect, tapControlRowRect, tapControlLayout, tapStatusLabel,
@@ -103,6 +103,16 @@ describe("#205 padGrid layout", () => {
   test("hasPadGrid 判定", () => {
     expect(hasPadGrid(padDef)).toBe(true);
     expect(hasPadGrid(def)).toBe(false);
+  });
+
+  test("#281 padGridAccept: accept 指定を返し、省略時は audio/*（SamplePad 従来動作）", () => {
+    expect(padGridAccept(padDef)).toBe("audio/*");
+    const clipDef: NodeTypeDef = {
+      ...padDef, type: "ClipLauncher",
+      padGrid: { rows: 4, cols: 4, accept: "video/*,image/*" },
+    };
+    expect(padGridAccept(clipDef)).toBe("video/*,image/*");
+    expect(padGridAccept(def)).toBe("audio/*"); // padGrid 無しも既定値
   });
 
   test("padGridMetrics: 4列はノード幅から正方形パッドを算出", () => {

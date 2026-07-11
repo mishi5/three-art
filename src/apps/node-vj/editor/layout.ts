@@ -42,6 +42,11 @@ export function hasPadGrid(def: NodeTypeDef): boolean {
   return !!def.padGrid;
 }
 
+/** #281: パッド割当ファイルダイアログの accept（省略時 "audio/*"＝SamplePad 従来動作）。 */
+export function padGridAccept(def: NodeTypeDef): string {
+  return def.padGrid?.accept ?? "audio/*";
+}
+
 /** #205: パッドグリッドのレイアウト定数（ノード内マージン・パッド間ギャップ）。 */
 export const PAD_GAP = 4;
 export const PAD_MARGIN_X = 8;
