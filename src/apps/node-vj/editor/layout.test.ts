@@ -2,8 +2,9 @@ import { expect, test, describe } from "bun:test";
 import {
   NODE_WIDTH, TITLE_H, ROW_H, nodeHeight, inputPortPos, outputPortPos,
   portIndex, nodeRect, hasRandomRow, randomRowRect,
+  hasTransportRow, transportRowRect,
   hasSceneRow, sceneRowRect, sceneRowLabel,
-  hasPadGrid, padGridMetrics, padGridHeight, padGridRect, padRect, padIndexAt,
+  hasPadGrid, padGridAccept, padGridMetrics, padGridHeight, padGridRect, padRect, padIndexAt,
   padExpandButtonRect, padStopButtonRect,
   PAD_MARGIN_X, PAD_MARGIN_TOP,
   hasTapRows, tapSeekRowRect, tapControlRowRect, tapControlLayout, tapStatusLabel,
@@ -51,6 +52,24 @@ describe("editor layout", () => {
   test("nodeRect は position と幅高さ", () => {
     const r = nodeRect(node, def);
     expect(r).toEqual({ x: 100, y: 50, w: NODE_WIDTH, h: nodeHeight(def) });
+  });
+
+  test("#281: transport 単体（fileInput なし）はトランスポート行 1 行ぶん増え、最下行に置かれる", () => {
+    const tp: NodeTypeDef = {
+      type: "TP", inputs: [], outputs: [{ id: "o", label: "o", type: "texture" }],
+      params: [], transport: true, evaluate: () => ({}),
+    };
+    expect(hasTransportRow(tp)).toBe(true);
+    expect(hasTransportRow(def)).toBe(false);
+    // portRows=1（出力1）, params=0 → transport +1 行
+    expect(nodeHeight(tp)).toBe(TITLE_H + 1 * ROW_H + ROW_H + 8);
+    const tr = transportRowRect(node, tp)!;
+    expect(tr).toEqual({ x: 100, y: 50 + nodeHeight(tp) - ROW_H, w: NODE_WIDTH, h: ROW_H });
+    expect(transportRowRect(node, def)).toBeNull();
+    // fileInput 持ちは従来どおり（transport フラグなしでも行が出る・高さ FILE_ROWS のまま）。
+    const fi: NodeTypeDef = { ...tp, transport: undefined, fileInput: { accept: "video/*" } };
+    expect(hasTransportRow(fi)).toBe(true);
+    expect(nodeHeight(fi)).toBe(TITLE_H + 1 * ROW_H + 2 * ROW_H + 8);
   });
 
   test("randomButton 持ちは行が1つ増え、ボタン行は params 直下に置かれる（#150）", () => {
@@ -103,6 +122,16 @@ describe("#205 padGrid layout", () => {
   test("hasPadGrid 判定", () => {
     expect(hasPadGrid(padDef)).toBe(true);
     expect(hasPadGrid(def)).toBe(false);
+  });
+
+  test("#281 padGridAccept: accept 指定を返し、省略時は audio/*（SamplePad 従来動作）", () => {
+    expect(padGridAccept(padDef)).toBe("audio/*");
+    const clipDef: NodeTypeDef = {
+      ...padDef, type: "ClipLauncher",
+      padGrid: { rows: 4, cols: 4, accept: "video/*,image/*" },
+    };
+    expect(padGridAccept(clipDef)).toBe("video/*,image/*");
+    expect(padGridAccept(def)).toBe("audio/*"); // padGrid 無しも既定値
   });
 
   test("padGridMetrics: 4列はノード幅から正方形パッドを算出", () => {

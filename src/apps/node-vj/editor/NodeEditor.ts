@@ -12,7 +12,7 @@ import {
   NODE_WIDTH, TITLE_H, ROW_H, PORT_R, nodeRect,
   inputPortPos, outputPortPos, paramRowY, paramPortPos, resolveInputPortPos,
   previewButtonRect, previewWindowRect, hasFileRow, fileRowRect, fileRowLabel,
-  transportRowRect, transportLayout, seekRatioAt, formatTime, randomRowRect,
+  hasTransportRow, transportRowRect, transportLayout, seekRatioAt, formatTime, randomRowRect,
   hasSceneRow, sceneRowRect, sceneRowLabel,
   outputScaleChipRect, CATEGORY_COLORS,
   hasPadGrid, padRect, padIndexAt, padExpandButtonRect, padStopButtonRect,
@@ -152,8 +152,11 @@ export class NodeEditor {
   onUnassignPad?: (nodeId: string, padIndex: number) => void;
   /** #205: 音入りパッドの Cmd/Ctrl+クリック（そのパッドの発音中の音だけ止める）。任意。 */
   onStopPadVoice?: (nodeId: string, padIndex: number) => void;
-  /** #205: パッドの状態（割当済みか・短縮ラベル）を引く。任意。 */
-  padCellInfo?: (nodeId: string, padIndex: number) => { filled: boolean; label: string | null } | undefined;
+  /** #205: パッドの状態（割当済みか・短縮ラベル）を引く。任意。
+   *  #281: active（再生中の強調）/ armed（予約中の点滅）は ClipLauncher 用の任意フィールド
+   *  （SamplePad 側は返さない＝undefined で従来描画）。 */
+  padCellInfo?: (nodeId: string, padIndex: number) =>
+    { filled: boolean; label: string | null; active?: boolean; armed?: boolean } | undefined;
   /** #205: 拡大表示ボタン（⛶）。画面全体のパッドオーバーレイを開く。任意。 */
   onExpandPad?: (nodeId: string) => void;
   /** #205: 全停止ボタン（■）。発音中の音をすべて止める。任意。 */
@@ -634,7 +637,10 @@ export class NodeEditor {
           this.openFileDialog(hit.node.id, def.fileInput.accept);
           return;
         }
-        // #99: transport 行（再生/停止ボタン・シークバー）。
+      }
+      // #99/#281: transport 行（再生/停止ボタン・シークバー）。fileInput 持ちに加え
+      // transport フラグ単体（ClipLauncher＝アクティブクリップの操作）でも有効。
+      if (def && hasTransportRow(def)) {
         const tr = transportRowRect(hit.node, def);
         if (tr && w.y >= tr.y && w.y <= tr.y + tr.h) {
           const { button, seek } = transportLayout(tr);
@@ -1771,8 +1777,10 @@ export class NodeEditor {
       ctx.fillStyle = selected ? "#cfe" : "#888";
       const maxW = fr.w - 38;
       ctx.fillText(ellipsizeEnd(ctx, label, maxW), fr.x + 30, fr.y + fr.h / 2);
-
-      // transport 行: 再生/停止ボタン・進捗付きシークバー・現在時刻。
+    }
+    // #99/#281: transport 行: 再生/停止ボタン・進捗付きシークバー・現在時刻
+    // （fileInput 持ちに加え transport フラグ単体＝ClipLauncher でも描く）。
+    if (hasTransportRow(def)) {
       const tr = transportRowRect(node, def)!;
       const { button, seek } = transportLayout(tr);
       const pb = this.playback?.get(node.id);
@@ -1830,13 +1838,16 @@ export class NodeEditor {
         if (!pr) continue;
         const info = this.padCellInfo?.(node.id, i);
         const filled = info?.filled ?? false;
-        ctx.fillStyle = filled ? "#2f5a44" : "#1e2228";
+        // #281: active は明るい塗り＋枠で強調、armed は 250ms 周期で枠色を点滅。
+        const active = info?.active ?? false;
+        const armedBlink = (info?.armed ?? false) && Math.floor(performance.now() / 250) % 2 === 0;
+        ctx.fillStyle = active ? "#3f7a58" : filled ? "#2f5a44" : "#1e2228";
         roundRect(ctx, pr.x, pr.y, pr.w, pr.h, 4);
         ctx.fill();
-        ctx.strokeStyle = filled ? "#5cc99a" : "#3a4048";
-        ctx.lineWidth = 1; ctx.stroke();
+        ctx.strokeStyle = armedBlink ? "#ffd27a" : active ? "#a5f2cd" : filled ? "#5cc99a" : "#3a4048";
+        ctx.lineWidth = active || armedBlink ? 2 : 1; ctx.stroke();
         const label = filled ? (info?.label ?? null) : null;
-        ctx.fillStyle = filled ? "#cfeede" : "#586068";
+        ctx.fillStyle = active ? "#eafff3" : filled ? "#cfeede" : "#586068";
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
         const text = label ?? String(i + 1);
         ctx.fillText(ellipsizeEnd(ctx, text, pr.w - 6), pr.x + pr.w / 2, pr.y + pr.h / 2);

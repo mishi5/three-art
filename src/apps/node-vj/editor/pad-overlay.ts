@@ -19,8 +19,10 @@ export interface PadOverlayDeps {
   assign: (nodeId: string, padIndex: number) => void;
   /** パッド index の割当を解除する（空に戻す）。 */
   unassign: (nodeId: string, padIndex: number) => void;
-  /** パッドの状態（割当済みか・短縮ラベル）を引く。 */
-  info: (nodeId: string, padIndex: number) => { filled: boolean; label: string | null } | undefined;
+  /** パッドの状態（割当済みか・短縮ラベル）を引く。
+   *  #281: active（再生中の強調）/ armed（予約中の点滅）は ClipLauncher 用の任意フィールド。 */
+  info: (nodeId: string, padIndex: number) =>
+    { filled: boolean; label: string | null; active?: boolean; armed?: boolean } | undefined;
 }
 
 /** 既に開いているオーバーレイ（多重オープンを防ぐ）。 */
@@ -82,11 +84,17 @@ export function openPadOverlay(nodeId: string, deps: PadOverlayDeps): void {
       const label = filled ? (info?.label ?? null) : null;
       btn.textContent = label ?? String(i + 1);
       btn.title = filled ? t("pad.cell.filledTitle") : t("pad.cell.emptyTitle");
+      // #281: active は明るい塗り＋枠で強調、armed は 250ms 周期で枠色を点滅（定期 refresh で再同期）。
+      const active = info?.active ?? false;
+      const armedBlink = (info?.armed ?? false) && Math.floor(performance.now() / 250) % 2 === 0;
+      const tone = active
+        ? "background:#3f7a58;color:#eafff3;border:2px solid #a5f2cd;"
+        : filled
+          ? "background:#2f5a44;color:#cfeede;border:2px solid #5cc99a;"
+          : "background:#1e2228;color:#586068;border:2px solid #3a4048;";
       btn.style.cssText =
         "border-radius:10px;cursor:pointer;font:16px system-ui;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:6px;" +
-        (filled
-          ? "background:#2f5a44;color:#cfeede;border:2px solid #5cc99a;"
-          : "background:#1e2228;color:#586068;border:2px solid #3a4048;");
+        tone + (armedBlink ? "border-color:#ffd27a;" : "");
     };
     sync();
     refresh.push(sync);
@@ -108,7 +116,8 @@ export function openPadOverlay(nodeId: string, deps: PadOverlayDeps): void {
   document.body.appendChild(root);
   currentOverlay = root;
   // #205: 割当/再割当はファイル選択が非同期で後から完了するため、表示中は定期的にボタン表示を再同期する。
-  currentTimer = window.setInterval(() => refresh.forEach((f) => f()), 300);
+  // #281: armed 点滅（250ms 周期）を目視できるよう 300ms → 125ms に短縮。
+  currentTimer = window.setInterval(() => refresh.forEach((f) => f()), 125);
   window.addEventListener("keydown", onOverlayKey);
 }
 

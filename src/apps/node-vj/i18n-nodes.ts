@@ -327,6 +327,34 @@ export const NODE_CATALOG = {
     ja: "各パッドに割り当てたアセットの id 配列（slot=パッド番号・UI 非表示）。",
     en: "Array of asset ids assigned to pads (slot = pad number; hidden in UI).",
   },
+  "node.ClipLauncher.desc": {
+    ja: "4×4 のパッドに動画/画像クリップを割り当て、押下で texture 出力を切り替える（SamplePad の映像版）。sync 接続時は次の sync トリガまで予約（クオンタイズ起動）、未接続なら即時切替。extractAudio=on でアクティブクリップの音声から実音声(audio)と音響特徴量（signal/各バンド/onset）を出力する（VideoFileInput と同等）。",
+    en: "Assign video/image clips to a 4×4 pad grid and switch the texture output by pressing pads (video counterpart of SamplePad). With sync connected, presses are armed until the next sync trigger (quantized launch); without sync, switching is immediate. With extractAudio=on, outputs the actual audio (audio) and audio features (signal/bands/onset) from the active clip's sound (equivalent to VideoFileInput).",
+  },
+  "node.ClipLauncher.port.sync": {
+    ja: "クオンタイズ起動用の trigger 入力（BeatClock の beat/div を接続する想定）。接続時はパッド押下を予約し、立ち上がりで切替。未接続なら押下で即時切替。",
+    en: "Trigger input for quantized launch (connect BeatClock's beat/div). When connected, pad presses are armed and switch on the rising edge; when unconnected, presses switch immediately.",
+  },
+  "node.ClipLauncher.port.texture": {
+    ja: "アクティブなクリップのテクスチャ（アスペクト比を入口で正規化済み。停止中は未出力＝下流は黒）。",
+    en: "Texture of the active clip (aspect ratio normalized at input; no output while stopped = black downstream).",
+  },
+  "node.ClipLauncher.port.launch": {
+    ja: "実際にクリップ切替が起きたフレームに 1 回発火する trigger（予約時ではない）。Flash 等の演出同期用。onset（trigger ポート）とは別。",
+    en: "Trigger that fires for one frame when the clip actually switches (not when armed). For syncing effects like Flash. Separate from the onset (trigger) port.",
+  },
+  "node.ClipLauncher.param.loop": {
+    ja: "動画クリップのループ再生 ON/OFF（全パッドへ反映）。",
+    en: "Loop playback ON/OFF for video clips (applied to all pads).",
+  },
+  "node.ClipLauncher.param.extractAudio": {
+    ja: "アクティブクリップ音声の抽出 ON/OFF。ON で音響特徴量(signal)と実音声(audio)を出力（発音は Audio 出力ノードへ繋いだとき）。既定 OFF=無音・映像のみ。",
+    en: "Active clip audio extraction ON/OFF. When ON, outputs audio features (signal) and the actual audio (audio); it sounds when connected to an Audio Output node. Default OFF = silent, video only.",
+  },
+  "node.ClipLauncher.param.padAssets": {
+    ja: "各パッドに割り当てたアセットの id 配列（slot=パッド番号・UI 非表示）。",
+    en: "Array of asset ids assigned to pads (slot = pad number; hidden in UI).",
+  },
   "node.ImageFileInput.desc": {
     ja: "静止画ファイルを読み込んで texture を出力するノード。PointShape の image モードや任意の texture 入力に繋ぐ。",
     en: "Loads a still image file and outputs a texture. Connect to PointShape's image mode or any texture input.",
