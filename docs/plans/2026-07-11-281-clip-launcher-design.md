@@ -109,6 +109,12 @@ VideoFileInput の #116 パターン（`createMediaElementSource` → WebAudio �
   使うため、**切替発火のポートは `launch` に改名**（PR 未マージのため互換性の影響なし）。
   解析（AudioAnalyzer）は mixGain（fade 反映先）より上流に置き、特徴量が fade の影響を
   受けない性質も VideoFileInput と同じ。
+- **トランスポート行（シークバー・ユーザ要望で追加）**: #99 のトランスポート行（再生/一時停止
+  ＋シークバー）を fileInput なしでも出せるよう `NodeTypeDef.transport` フラグを新設し
+  （`hasTransportRow = fileInput || transport`・高さは fileInput 持ちなら FILE_ROWS に内包・
+  transport 単体は +1 行）、ClipLauncherRuntime に PlaybackControl を実装して**アクティブ
+  クリップの video に委譲**する。画像/アクティブなしは duration 0（シークバー空・seek no-op）。
+  pause してもアクティブは維持され、映像は現フレームで停止したまま（クリップ解除は Stop ボタン）。
 - **音声グラフ（extractAudio 初回 on で遅延構築）**: 各 video 要素の
   `MediaElementAudioSourceNode`（**要素ごとに 1 度しか作れない**ため Map で保持）→
   共有 `mixGain`（= signal 出力ノード）→ gain 0 の keepalive → destination

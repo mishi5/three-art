@@ -57,7 +57,7 @@ function fakeAudioContext(): {
 /** play/pause/remove の呼び出しを記録する fake video 要素。 */
 interface FakeVideo {
   muted: boolean; playsInline: boolean; loop: boolean; preload: string;
-  src: string; currentTime: number; paused: boolean;
+  src: string; currentTime: number; paused: boolean; duration: number;
   videoWidth: number; videoHeight: number;
   playCalls: number; removed: boolean;
   play(): Promise<void>; pause(): void; remove(): void;
@@ -66,7 +66,7 @@ interface FakeVideo {
 function makeFakeVideo(): FakeVideo {
   return {
     muted: false, playsInline: false, loop: false, preload: "",
-    src: "", currentTime: 7, paused: true,
+    src: "", currentTime: 7, paused: true, duration: 10,
     videoWidth: 320, videoHeight: 240,
     playCalls: 0, removed: false,
     play() { this.paused = false; this.playCalls++; return Promise.resolve(); },
@@ -630,5 +630,75 @@ describe("#281 dispose", () => {
     rt.dispose();
     expect(videos.every((v) => v.removed && v.paused)).toBe(true);
     expect(revoked.sort()).toEqual(["blob:fake-0", "blob:fake-1", "blob:fake-2"]);
+  });
+});
+
+describe("#281 PlaybackControl（トランスポート行＝アクティブクリップの操作）", () => {
+  test("transport フラグが立っている", () => {
+    expect(ClipLauncherNode.transport).toBe(true);
+  });
+
+  test("アクティブなし/画像アクティブは duration 0・toggle/seek no-op", async () => {
+    const { deps } = makeDeps();
+    const rt = new ClipLauncherRuntime(null, deps);
+    expect(rt.getDuration()).toBe(0);
+    expect(rt.isPlaying()).toBe(false);
+    rt.togglePlay(); // no-op（例外なし）
+    rt.seek(3);
+    await rt.loadPadFile(0, imageFile());
+    rt.playPad(0);
+    rt.step(undefined, true);
+    expect(rt.getDuration()).toBe(0); // 画像は再生概念なし
+    expect(rt.isPlaying()).toBe(false);
+  });
+
+  test("動画アクティブ時は video に委譲（current/duration/playing）", async () => {
+    const { deps, videos } = makeDeps();
+    const rt = new ClipLauncherRuntime(null, deps);
+    await rt.loadPadFile(0, videoFile());
+    rt.playPad(0);
+    rt.step(undefined, true); // 即時切替（play → currentTime=0）
+    const v = videos[0]!;
+    expect(rt.isPlaying()).toBe(true);
+    expect(rt.getDuration()).toBe(10);
+    v.currentTime = 4.2;
+    expect(rt.getCurrentTime()).toBeCloseTo(4.2, 9);
+  });
+
+  test("togglePlay は pause⇄play（pause してもアクティブ維持）", async () => {
+    const { deps, videos } = makeDeps();
+    const rt = new ClipLauncherRuntime(null, deps);
+    await rt.loadPadFile(0, videoFile());
+    rt.playPad(0);
+    rt.step(undefined, true);
+    rt.togglePlay();
+    expect(videos[0]!.paused).toBe(true);
+    expect(rt.padActive(0)).toBe(true); // アクティブは維持
+    rt.togglePlay();
+    expect(videos[0]!.paused).toBe(false);
+  });
+
+  test("seek は 0..duration にクランプ", async () => {
+    const { deps, videos } = makeDeps();
+    const rt = new ClipLauncherRuntime(null, deps);
+    await rt.loadPadFile(0, videoFile());
+    rt.playPad(0);
+    rt.step(undefined, true);
+    rt.seek(-5);
+    expect(videos[0]!.currentTime).toBe(0);
+    rt.seek(99);
+    expect(videos[0]!.currentTime).toBeCloseTo(10 - 1e-3, 9);
+    rt.seek(5);
+    expect(videos[0]!.currentTime).toBe(5);
+  });
+
+  test("duration 非有限（メタデータ未着 NaN）は 0 扱い", async () => {
+    const { deps, videos } = makeDeps();
+    const rt = new ClipLauncherRuntime(null, deps);
+    await rt.loadPadFile(0, videoFile());
+    videos[0]!.duration = Number.NaN;
+    rt.playPad(0);
+    rt.step(undefined, true);
+    expect(rt.getDuration()).toBe(0);
   });
 });

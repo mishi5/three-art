@@ -106,6 +106,9 @@ export function visibleParamCount(def: NodeTypeDef): number {
 
 export function nodeHeight(def: NodeTypeDef): number {
   const fileRows = hasFileRow(def) ? FILE_ROWS * ROW_H : 0;
+  // #281: transport 単体（fileInput なし・ClipLauncher）はトランスポート行 1 行ぶんだけ足す
+  // （fileInput 持ちは FILE_ROWS にトランスポート行が含まれている）。
+  const transportRow = !hasFileRow(def) && hasTransportRow(def) ? ROW_H : 0;
   const randomRow = hasRandomRow(def) ? ROW_H : 0;
   const sceneRow = hasSceneRow(def) ? ROW_H : 0;
   // #205: パッドグリッドは params 直下に上マージン＋グリッド本体ぶん高さを足す。
@@ -116,8 +119,8 @@ export function nodeHeight(def: NodeTypeDef): number {
   const automationRows = hasAutomationRows(def) ? AUTOMATION_ROWS * ROW_H : 0;
   // #270: BeatClock のビートクロック UI（TAP ボタン＋ステータス行）。
   const beatClockRows = hasBeatClockRow(def) ? BEATCLOCK_ROWS * ROW_H : 0;
-  return TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H + randomRow + fileRows + sceneRow
-    + padRows + tapRows + automationRows + beatClockRows + PADDING;
+  return TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H + randomRow + fileRows + transportRow
+    + sceneRow + padRows + tapRows + automationRows + beatClockRows + PADDING;
 }
 
 export function nodePos(node: NodeInstance): { x: number; y: number } {
@@ -202,12 +205,20 @@ export function fileRowRect(
 }
 
 /**
- * #99: 再生コントロール（transport）行の領域。ノード最下行（fileInput 無しは null）。
+ * #99/#281: トランスポート行（再生/一時停止＋シークバー）を出すか。
+ * fileInput 持ち（従来）に加え、transport フラグ単体（ClipLauncher）でも出す。
+ */
+export function hasTransportRow(def: NodeTypeDef): boolean {
+  return hasFileRow(def) || !!def.transport;
+}
+
+/**
+ * #99: 再生コントロール（transport）行の領域。ノード最下行（fileInput/transport 無しは null）。
  */
 export function transportRowRect(
   node: NodeInstance, def: NodeTypeDef,
 ): { x: number; y: number; w: number; h: number } | null {
-  if (!hasFileRow(def)) return null;
+  if (!hasTransportRow(def)) return null;
   const p = nodePos(node);
   return { x: p.x, y: p.y + nodeHeight(def) - ROW_H, w: NODE_WIDTH, h: ROW_H };
 }

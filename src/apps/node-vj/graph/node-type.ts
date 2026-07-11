@@ -111,6 +111,13 @@ export interface NodeTypeDef {
    * fileName: string|null を持つ前提。
    */
   fileInput?: { accept: string };
+  /**
+   * #281: fileInput なしでトランスポート行（再生/一時停止＋シークバー・#99）だけを出す目印
+   * （ClipLauncher＝アクティブクリップの操作）。ランタイム state に PlaybackControl
+   * （isPlaying/togglePlay/getCurrentTime/getDuration/seek）を持つ前提。fileInput 持ちは
+   * この目印なしでもトランスポート行が付く（従来どおり）。
+   */
+  transport?: boolean;
   /** #152: ノードに「シーン選択行」を出す目印（SceneInput）。params.sceneId に参照先シーン id を持つ。 */
   sceneInput?: boolean;
   /**

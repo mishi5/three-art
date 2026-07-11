@@ -17,6 +17,7 @@ import { VideoTextureSurface } from "../graph/video-surface";
 import { ImageTextureSurface } from "../graph/image-surface";
 import { shortPadLabel } from "./SamplePadNode";
 import { resolveLaunch } from "./clip-launcher-logic";
+import type { PlaybackControl } from "./playback";
 import {
   AUDIO_FEATURE_OUTPUTS, ONSET_PARAMS, OnsetTracker,
   audioFeatureOutputs, readOnsetParams,
@@ -75,7 +76,7 @@ export function domClipMediaDeps(): ClipMediaDeps {
  * 切替の実行はフレーム同期が要るため playPad は pending を立てるだけにし、
  * evaluate から毎フレーム呼ばれる step() が resolveLaunch で確定する。
  */
-export class ClipLauncherRuntime {
+export class ClipLauncherRuntime implements PlaybackControl {
   private deps: ClipMediaDeps;
   private clips: (Clip | null)[] = new Array(CLIP_PAD_COUNT).fill(null);
   /** 押下されたが未消費のパッド（sync 接続時はアーム表示・未接続なら次 step で切替）。 */
@@ -279,6 +280,44 @@ export class ClipLauncherRuntime {
     return this.active;
   }
 
+  // --- PlaybackControl（#99/#281: トランスポート行＝アクティブクリップの操作）---
+  // アクティブが動画のときだけ有効。画像/アクティブなしは duration 0（シークバー空・seek no-op）。
+
+  /** アクティブな video クリップ（なし/画像は null）。 */
+  private activeVideo(): HTMLVideoElement | null {
+    const clip = this.active !== null ? this.clips[this.active] : null;
+    return clip?.kind === "video" ? clip.video : null;
+  }
+
+  isPlaying(): boolean {
+    const v = this.activeVideo();
+    return v !== null && !v.paused;
+  }
+
+  /** 再生/一時停止トグル。pause してもアクティブは維持（映像は現フレームで停止したまま）。 */
+  togglePlay(): void {
+    const v = this.activeVideo();
+    if (!v) return;
+    if (v.paused) void v.play().catch(() => { /* 自動再生拒否時は次の押下で再試行 */ });
+    else v.pause();
+  }
+
+  getCurrentTime(): number {
+    return this.activeVideo()?.currentTime || 0;
+  }
+
+  getDuration(): number {
+    const d = this.activeVideo()?.duration;
+    return d !== undefined && Number.isFinite(d) ? d : 0;
+  }
+
+  seek(t: number): void {
+    const v = this.activeVideo();
+    if (!v) return;
+    const d = this.getDuration();
+    v.currentTime = d > 0 ? Math.max(0, Math.min(t, d - 1e-3)) : 0;
+  }
+
   /** アーム（予約）中のパッド index（なしは null）。パッド点滅表示用。 */
   armedIndex(): number | null {
     return this.pending;
@@ -393,6 +432,8 @@ export const ClipLauncherNode: NodeTypeDef = {
   description: "node.ClipLauncher.desc",
   isSink: false,
   padGrid: { rows: CLIP_PAD_ROWS, cols: CLIP_PAD_COLS, accept: "video/*,image/*" },
+  // #281: アクティブクリップのトランスポート行（再生/一時停止＋シークバー・#99 の流用）。
+  transport: true,
   inputs: [
     { id: "sync", label: "sync", type: "trigger", description: "node.ClipLauncher.port.sync" },
   ],

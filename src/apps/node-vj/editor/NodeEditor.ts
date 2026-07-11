@@ -12,7 +12,7 @@ import {
   NODE_WIDTH, TITLE_H, ROW_H, PORT_R, nodeRect,
   inputPortPos, outputPortPos, paramRowY, paramPortPos, resolveInputPortPos,
   previewButtonRect, previewWindowRect, hasFileRow, fileRowRect, fileRowLabel,
-  transportRowRect, transportLayout, seekRatioAt, formatTime, randomRowRect,
+  hasTransportRow, transportRowRect, transportLayout, seekRatioAt, formatTime, randomRowRect,
   hasSceneRow, sceneRowRect, sceneRowLabel,
   outputScaleChipRect, CATEGORY_COLORS,
   hasPadGrid, padRect, padIndexAt, padExpandButtonRect, padStopButtonRect,
@@ -637,7 +637,10 @@ export class NodeEditor {
           this.openFileDialog(hit.node.id, def.fileInput.accept);
           return;
         }
-        // #99: transport 行（再生/停止ボタン・シークバー）。
+      }
+      // #99/#281: transport 行（再生/停止ボタン・シークバー）。fileInput 持ちに加え
+      // transport フラグ単体（ClipLauncher＝アクティブクリップの操作）でも有効。
+      if (def && hasTransportRow(def)) {
         const tr = transportRowRect(hit.node, def);
         if (tr && w.y >= tr.y && w.y <= tr.y + tr.h) {
           const { button, seek } = transportLayout(tr);
@@ -1774,8 +1777,10 @@ export class NodeEditor {
       ctx.fillStyle = selected ? "#cfe" : "#888";
       const maxW = fr.w - 38;
       ctx.fillText(ellipsizeEnd(ctx, label, maxW), fr.x + 30, fr.y + fr.h / 2);
-
-      // transport 行: 再生/停止ボタン・進捗付きシークバー・現在時刻。
+    }
+    // #99/#281: transport 行: 再生/停止ボタン・進捗付きシークバー・現在時刻
+    // （fileInput 持ちに加え transport フラグ単体＝ClipLauncher でも描く）。
+    if (hasTransportRow(def)) {
       const tr = transportRowRect(node, def)!;
       const { button, seek } = transportLayout(tr);
       const pb = this.playback?.get(node.id);

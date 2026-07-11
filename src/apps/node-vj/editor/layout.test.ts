@@ -2,6 +2,7 @@ import { expect, test, describe } from "bun:test";
 import {
   NODE_WIDTH, TITLE_H, ROW_H, nodeHeight, inputPortPos, outputPortPos,
   portIndex, nodeRect, hasRandomRow, randomRowRect,
+  hasTransportRow, transportRowRect,
   hasSceneRow, sceneRowRect, sceneRowLabel,
   hasPadGrid, padGridAccept, padGridMetrics, padGridHeight, padGridRect, padRect, padIndexAt,
   padExpandButtonRect, padStopButtonRect,
@@ -51,6 +52,24 @@ describe("editor layout", () => {
   test("nodeRect は position と幅高さ", () => {
     const r = nodeRect(node, def);
     expect(r).toEqual({ x: 100, y: 50, w: NODE_WIDTH, h: nodeHeight(def) });
+  });
+
+  test("#281: transport 単体（fileInput なし）はトランスポート行 1 行ぶん増え、最下行に置かれる", () => {
+    const tp: NodeTypeDef = {
+      type: "TP", inputs: [], outputs: [{ id: "o", label: "o", type: "texture" }],
+      params: [], transport: true, evaluate: () => ({}),
+    };
+    expect(hasTransportRow(tp)).toBe(true);
+    expect(hasTransportRow(def)).toBe(false);
+    // portRows=1（出力1）, params=0 → transport +1 行
+    expect(nodeHeight(tp)).toBe(TITLE_H + 1 * ROW_H + ROW_H + 8);
+    const tr = transportRowRect(node, tp)!;
+    expect(tr).toEqual({ x: 100, y: 50 + nodeHeight(tp) - ROW_H, w: NODE_WIDTH, h: ROW_H });
+    expect(transportRowRect(node, def)).toBeNull();
+    // fileInput 持ちは従来どおり（transport フラグなしでも行が出る・高さ FILE_ROWS のまま）。
+    const fi: NodeTypeDef = { ...tp, transport: undefined, fileInput: { accept: "video/*" } };
+    expect(hasTransportRow(fi)).toBe(true);
+    expect(nodeHeight(fi)).toBe(TITLE_H + 1 * ROW_H + 2 * ROW_H + 8);
   });
 
   test("randomButton 持ちは行が1つ増え、ボタン行は params 直下に置かれる（#150）", () => {
