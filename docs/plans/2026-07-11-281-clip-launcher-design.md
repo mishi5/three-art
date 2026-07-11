@@ -102,9 +102,13 @@ VideoFileInput の #116 パターン（`createMediaElementSource` → WebAudio �
 - **`SIGNAL_OUTPUT`（audio）出力を追加**。AudioOutput/AudioMix へ接続して発音する。
   port の description は共通キー `node.common.audioSignal.audio`（SIGNAL_OUTPUT 定義に内蔵・
   AudioFileInput/VideoFileInput と同じ）なので専用キーは追加しない。
-- **音響特徴量（bass/onset 等）は付けない**: `AUDIO_FEATURE_OUTPUTS` は onset の
-  `trigger` ポートを含み、ClipLauncher 既存の `trigger`（切替発火）と port id が衝突するため。
-  特徴量が要る場合は AudioFileInput 等を使う（desc に明記）。
+- **VideoFileInput と同等のポート構成（ユーザ要望で拡張）**: `AUDIO_FEATURE_OUTPUTS`
+  （audio/volume/bass/mid/treble/trigger=onset）と `FADE_PARAM`（#241 の映像輝度＋音声ゲイン
+  同時フェード）・`ONSET_PARAMS`（onsetThreshold/onsetCooldown）を追加し、音付きクリップを
+  VideoFileInput の代替として使えるようにした。onset が VideoFileInput と同じ `trigger` port id を
+  使うため、**切替発火のポートは `launch` に改名**（PR 未マージのため互換性の影響なし）。
+  解析（AudioAnalyzer）は mixGain（fade 反映先）より上流に置き、特徴量が fade の影響を
+  受けない性質も VideoFileInput と同じ。
 - **音声グラフ（extractAudio 初回 on で遅延構築）**: 各 video 要素の
   `MediaElementAudioSourceNode`（**要素ごとに 1 度しか作れない**ため Map で保持）→
   共有 `mixGain`（= signal 出力ノード）→ gain 0 の keepalive → destination

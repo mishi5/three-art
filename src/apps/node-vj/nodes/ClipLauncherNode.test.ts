@@ -7,14 +7,41 @@ import {
 } from "./ClipLauncherNode";
 import { CLIP_PAD_COUNT, CLIP_PAD_ROWS, CLIP_PAD_COLS } from "./ClipLauncherNode";
 import type { EvalContext } from "../graph/node-type";
+import { DEFAULT_AUDIO_FEATURES } from "../../../core/types";
+
+/** gain.setTargetAtTime の呼び出し履歴（fade 検証用）。 */
+interface FadeCall { value: number; time: number; tc: number }
 
 /** createMediaElementSource の生成/切断履歴を記録する fake AudioContext（extractAudio 検証用）。 */
-function fakeAudioContext(): { ctx: AudioContext; mediaSources: { el: unknown; disconnects: number }[] } {
+function fakeAudioContext(): {
+  ctx: AudioContext;
+  mediaSources: { el: unknown; disconnects: number }[];
+  fadeCalls: FadeCall[];
+} {
   const mediaSources: { el: unknown; disconnects: number }[] = [];
+  const fadeCalls: FadeCall[] = [];
   const ctx = {
     destination: {},
+    sampleRate: 48000,
+    currentTime: 0,
     resume: () => Promise.resolve(),
-    createGain: () => ({ gain: { value: 1 }, connect() { /* no-op */ }, disconnect() { /* no-op */ } }),
+    createGain: () => ({
+      gain: {
+        value: 1,
+        setTargetAtTime(value: number, time: number, tc: number) { fadeCalls.push({ value, time, tc }); },
+      },
+      connect() { /* no-op */ },
+      disconnect() { /* no-op */ },
+    }),
+    // AudioAnalyzer 用（全 bin 128 を返す＝volume 128/255 ≈ 0.5 が読める）。
+    createAnalyser: () => ({
+      fftSize: 2048,
+      smoothingTimeConstant: 0.7,
+      frequencyBinCount: 1024,
+      getByteFrequencyData(arr: Uint8Array) { arr.fill(128); },
+      connect() { /* no-op */ },
+      disconnect() { /* no-op */ },
+    }),
     createMediaElementSource(el: unknown) {
       const rec = { el, disconnects: 0 };
       mediaSources.push(rec);
@@ -24,7 +51,7 @@ function fakeAudioContext(): { ctx: AudioContext; mediaSources: { el: unknown; d
       };
     },
   } as unknown as AudioContext;
-  return { ctx, mediaSources };
+  return { ctx, mediaSources, fadeCalls };
 }
 
 /** play/pause/remove の呼び出しを記録する fake video 要素。 */
@@ -84,21 +111,31 @@ describe("#281 ClipLauncherNode 定義", () => {
     expect(CLIP_PAD_COUNT).toBe(16);
   });
 
-  test("sync 入力（trigger）と texture / trigger / audio(signal) 出力を持つ", () => {
+  test("VideoFileInput と同等のポート構成（切替発火は launch・trigger は onset）", () => {
     expect(ClipLauncherNode.inputs.map((p) => p.id)).toEqual(["sync"]);
     expect(ClipLauncherNode.inputs[0]!.type).toBe("trigger");
-    expect(ClipLauncherNode.outputs.map((p) => p.id)).toEqual(["texture", "trigger", "audio"]);
-    expect(ClipLauncherNode.outputs[0]!.type).toBe("texture");
-    expect(ClipLauncherNode.outputs[1]!.type).toBe("trigger");
-    expect(ClipLauncherNode.outputs[2]!.type).toBe("audio");
+    // texture + launch（切替発火・旧 trigger の改名）+ 音響特徴量一式（trigger=onset）+ audio。
+    expect(ClipLauncherNode.outputs.map((p) => p.id)).toEqual([
+      "texture", "launch", "signal", "volume", "bass", "mid", "treble", "trigger", "audio",
+    ]);
+    expect(ClipLauncherNode.outputs.find((p) => p.id === "texture")?.type).toBe("texture");
+    expect(ClipLauncherNode.outputs.find((p) => p.id === "launch")?.type).toBe("trigger");
+    expect(ClipLauncherNode.outputs.find((p) => p.id === "signal")?.type).toBe("signal");
+    expect(ClipLauncherNode.outputs.find((p) => p.id === "trigger")?.type).toBe("trigger");
+    expect(ClipLauncherNode.outputs.find((p) => p.id === "audio")?.type).toBe("audio");
   });
 
-  test("loop / extractAudio param（enum on/off）と hidden の padAssets を持つ", () => {
-    expect(ClipLauncherNode.params.map((p) => p.id)).toEqual(["loop", "extractAudio", "padAssets"]);
+  test("params: loop / fade(#241) / extractAudio / onset しきい値・cooldown / padAssets", () => {
+    expect(ClipLauncherNode.params.map((p) => p.id)).toEqual([
+      "loop", "fade", "extractAudio", "onsetThreshold", "onsetCooldown", "padAssets",
+    ]);
     const loop = ClipLauncherNode.params.find((p) => p.id === "loop")!;
     expect(loop.kind).toBe("enum");
     expect(loop.options).toEqual(["on", "off"]);
     expect(loop.default).toBe("on");
+    const fade = ClipLauncherNode.params.find((p) => p.id === "fade")!;
+    expect(fade.kind).toBe("number");
+    expect(fade.default).toBe(1);
     const ex = ClipLauncherNode.params.find((p) => p.id === "extractAudio")!;
     expect(ex.kind).toBe("enum");
     expect(ex.options).toEqual(["off", "on"]);
@@ -109,7 +146,7 @@ describe("#281 ClipLauncherNode 定義", () => {
     expect(pad.default).toEqual([]);
   });
 
-  test("state 無しの evaluate は texture 無し・trigger false・audio 未出力（headless 安全）", () => {
+  test("state 無しの evaluate は texture 無し・launch false・特徴量デフォルト・audio 未出力", () => {
     const ctx: EvalContext = {
       timeSec: 0,
       input: () => undefined,
@@ -118,7 +155,10 @@ describe("#281 ClipLauncherNode 定義", () => {
     };
     const out = ClipLauncherNode.evaluate(ctx);
     expect(out.texture).toBeUndefined();
-    expect(out.trigger).toBe(false);
+    expect(out.launch).toBe(false);
+    expect(out.signal).toBe(DEFAULT_AUDIO_FEATURES);
+    expect(out.volume).toBe(0);
+    expect(out.trigger).toBe(false); // onset
     expect(out.audio).toBeUndefined();
   });
 });
@@ -482,7 +522,7 @@ describe("#281 extractAudio（アクティブクリップの音声出力）", ()
     const evalCtx = (extractAudio: string): EvalContext => ({
       timeSec: 0,
       input: () => undefined,
-      param: (id) => (id === "extractAudio" ? extractAudio : "on"),
+      param: (id) => (id === "extractAudio" ? extractAudio : id === "loop" ? "on" : undefined),
       node: { id: "x", type: "ClipLauncher", params: {} },
       state: rt,
     });
@@ -490,6 +530,93 @@ describe("#281 extractAudio（アクティブクリップの音声出力）", ()
     expect(off.audio).toBeUndefined();
     const on = ClipLauncherNode.evaluate(evalCtx("on"));
     expect(on.audio).toBeDefined();
+  });
+
+  test("evaluate: off は特徴量デフォルト・on は analyzer の値（volume>0）を出力する", async () => {
+    const { deps } = makeDeps();
+    const { ctx: audioCtx } = fakeAudioContext();
+    const rt = new ClipLauncherRuntime(audioCtx, deps);
+    await rt.loadPadFile(0, videoFile());
+    const evalCtx = (extractAudio: string): EvalContext => ({
+      timeSec: 0,
+      input: () => undefined,
+      param: (id) => (id === "extractAudio" ? extractAudio : id === "loop" ? "on" : undefined),
+      node: { id: "x", type: "ClipLauncher", params: {} },
+      state: rt,
+    });
+    const off = ClipLauncherNode.evaluate(evalCtx("off"));
+    expect(off.signal).toBe(DEFAULT_AUDIO_FEATURES);
+    expect(off.volume).toBe(0);
+    expect(off.trigger).toBe(false); // onset
+    const on = ClipLauncherNode.evaluate(evalCtx("on"));
+    expect(on.volume as number).toBeCloseTo(128 / 255); // fake analyser は全 bin 128
+    expect(on.bass as number).toBeCloseTo(128 / 255);
+  });
+
+  test("evaluate: 切替フレームは launch=true で発火する（onset の trigger とは別ポート）", async () => {
+    const { deps } = makeDeps();
+    const { ctx: audioCtx } = fakeAudioContext();
+    const rt = new ClipLauncherRuntime(audioCtx, deps);
+    await rt.loadPadFile(0, videoFile());
+    const evalCtx = (): EvalContext => ({
+      timeSec: 0,
+      input: () => undefined,
+      param: (id) => (id === "extractAudio" ? "off" : id === "loop" ? "on" : undefined),
+      node: { id: "x", type: "ClipLauncher", params: {} },
+      state: rt,
+    });
+    rt.playPad(0);
+    const out = ClipLauncherNode.evaluate(evalCtx());
+    expect(out.launch).toBe(true);
+    const next = ClipLauncherNode.evaluate(evalCtx());
+    expect(next.launch).toBe(false);
+  });
+
+  test("detectOnset: extractAudio=off では常に false", async () => {
+    const { deps } = makeDeps();
+    const { ctx } = fakeAudioContext();
+    const rt = new ClipLauncherRuntime(ctx, deps);
+    rt.setAudioEnabled(false);
+    expect(rt.detectOnset(0.5, 1, 0.05, 0.1)).toBe(false);
+    expect(rt.detectOnset(0.9, 2, 0.05, 0.1)).toBe(false); // delta 大でも off なら発火しない
+  });
+});
+
+describe("#281 setAudioFade（音声フェード #241 パターン）", () => {
+  test("mixGain へ setTargetAtTime で反映し、同値の再設定はスケジュールしない", async () => {
+    const { deps } = makeDeps();
+    const { ctx, fadeCalls } = fakeAudioContext();
+    const rt = new ClipLauncherRuntime(ctx, deps);
+    rt.setAudioEnabled(true); // mixGain 構築
+    rt.setAudioFade(0.5);
+    expect(fadeCalls.length).toBe(1);
+    expect(fadeCalls[0]!.value).toBe(0.5);
+    expect(fadeCalls[0]!.tc).toBeGreaterThan(0);
+    rt.setAudioFade(0.5); // 同値は再スケジュールしない（target キャッシュ）
+    expect(fadeCalls.length).toBe(1);
+    rt.setAudioFade(0.25);
+    expect(fadeCalls.length).toBe(2);
+  });
+
+  test("範囲外・NaN はクランプして反映する", async () => {
+    const { deps } = makeDeps();
+    const { ctx, fadeCalls } = fakeAudioContext();
+    const rt = new ClipLauncherRuntime(ctx, deps);
+    rt.setAudioEnabled(true);
+    rt.setAudioFade(2);      // → 1（既定と同値なのでスケジュールなし）
+    expect(fadeCalls.length).toBe(0);
+    rt.setAudioFade(-1);     // → 0
+    expect(fadeCalls[fadeCalls.length - 1]!.value).toBe(0);
+    rt.setAudioFade(Number.NaN); // → 既定 1
+    expect(fadeCalls[fadeCalls.length - 1]!.value).toBe(1);
+  });
+
+  test("音声グラフ未構築（extractAudio=off のまま）は no-op", () => {
+    const { deps } = makeDeps();
+    const { ctx, fadeCalls } = fakeAudioContext();
+    const rt = new ClipLauncherRuntime(ctx, deps);
+    rt.setAudioFade(0.3);
+    expect(fadeCalls.length).toBe(0);
   });
 });
 

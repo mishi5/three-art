@@ -4,6 +4,7 @@
 // （VideoTextureSurface と同じ方針。VideoTexture でなく静止の THREE.Texture を使う）。
 import * as THREE from "three";
 import { containScale } from "../editor/fit";
+import { perceptualFade } from "../nodes/video-fade-logic";
 
 export class ImageTextureSurface {
   private scene = new THREE.Scene();
@@ -21,11 +22,16 @@ export class ImageTextureSurface {
     this.scene.add(this.mesh);
   }
 
-  /** 画像を contain で RT に描いて texture を返す（未読込/サイズ0 は null）。 */
-  render(renderer: THREE.WebGLRenderer, image: HTMLImageElement): THREE.Texture | null {
+  /**
+   * 画像を contain で RT に描いて texture を返す（未読込/サイズ0 は null）。
+   * #281: fade は VideoTextureSurface #241 と同じ知覚補正付き黒フェード（perceptualFade の
+   * 輝度乗算）。省略時 1＝従来と同一（既存呼び出し元 ImageFileInput は挙動不変）。
+   */
+  render(renderer: THREE.WebGLRenderer, image: HTMLImageElement, fade = 1): THREE.Texture | null {
     const srcW = image.naturalWidth;
     const srcH = image.naturalHeight;
     if (srcW === 0 || srcH === 0) return null;
+    this.material.color.setScalar(perceptualFade(fade));
     // 画像要素が変わったときのみ texture を作り直す（静止画は毎フレーム更新不要）。
     if (this.sourceImage !== image) {
       this.texture?.dispose();
