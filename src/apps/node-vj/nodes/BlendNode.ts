@@ -18,6 +18,12 @@ uniform sampler2D tA;
 uniform sampler2D tB;
 uniform float uMode;
 uniform float uMix;
+// overlay (#280): a<0.5 は multiply 系(2ab)・a>=0.5 は screen 系。step でチャネル毎に選択。
+vec3 overlayBlend(vec3 a, vec3 b) {
+  vec3 lo = 2.0 * a * b;
+  vec3 hi = 1.0 - 2.0 * (1.0 - a) * (1.0 - b);
+  return mix(lo, hi, step(vec3(0.5), a));
+}
 void main() {
   vec3 a = texture2D(tA, vUv).rgb;
   vec3 b = texture2D(tB, vUv).rgb;
@@ -28,8 +34,18 @@ void main() {
     blended = min(a + b, vec3(1.0));               // add
   } else if (uMode < 2.5) {
     blended = a * b;                               // multiply
-  } else {
+  } else if (uMode < 3.5) {
     blended = 1.0 - (1.0 - a) * (1.0 - b);         // screen
+  } else if (uMode < 4.5) {
+    blended = overlayBlend(a, b);                  // overlay (#280)
+  } else if (uMode < 5.5) {
+    blended = abs(a - b);                          // difference (#280)
+  } else if (uMode < 6.5) {
+    blended = max(a - b, vec3(0.0));               // subtract (#280)
+  } else if (uMode < 7.5) {
+    blended = min(a, b);                           // darken (#280)
+  } else {
+    blended = max(a, b);                           // lighten (#280)
   }
   gl_FragColor = vec4(mix(a, blended, clamp(uMix, 0.0, 1.0)), 1.0);
 }

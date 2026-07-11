@@ -944,8 +944,8 @@ export const NODE_CATALOG = {
     en: "Blended texture.",
   },
   "node.Blend.param.mode": {
-    ja: "合成モード。normal=上書き / add=加算 / multiply=乗算 / screen=スクリーン。",
-    en: "Blend mode. normal = overwrite / add / multiply / screen.",
+    ja: "合成モード。normal=上書き / add=加算 / multiply=乗算 / screen=スクリーン / overlay=オーバーレイ / difference=差分 / subtract=減算 / darken=暗い方 / lighten=明るい方。",
+    en: "Blend mode. normal = overwrite / add / multiply / screen / overlay / difference / subtract / darken / lighten.",
   },
   "node.Blend.param.mix": {
     ja: "合成の強さ。0 で a そのまま、1 で完全合成（a と合成結果の補間）。",
