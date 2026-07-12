@@ -194,6 +194,21 @@ export const CATALOG = {
   },
   "controls.outAudio.none": { ja: "🔈 出力音声: 分離しない", en: "🔈 Output audio: not separated" },
   "controls.monAudio.none": { ja: "🎧 モニター音声: 既定デバイス", en: "🎧 Monitor audio: default device" },
+  // #283: クリーンフィード（OBS ブラウザソース向け WebRTC ミラー）
+  "controls.cleanFeed.copy": { ja: "📡 OBS 用 URL をコピー", en: "📡 Copy OBS source URL" },
+  "controls.cleanFeed.copyActive": {
+    ja: "📡 OBS 用 URL をコピー（配信中: {count}）",
+    en: "📡 Copy OBS source URL (live: {count})",
+  },
+  "controls.cleanFeed.copied": { ja: "✅ コピーしました", en: "✅ Copied" },
+  "controls.cleanFeed.title": {
+    ja: "クリーンフィード（UI なしのライブ出力）ページの URL をコピーします。OBS のブラウザソースに貼り付けてください（docs/obs-integration.md）",
+    en: "Copy the clean feed (UI-free live output) page URL. Paste it into an OBS browser source (see docs/obs-integration.md)",
+  },
+  "controls.cleanFeed.prompt": {
+    ja: "この URL を OBS のブラウザソースへ:",
+    en: "Paste this URL into an OBS browser source:",
+  },
 
   // --- グラフ preset / プロジェクト保存読込（graph-io-controls） ---
   "graphIo.presetName": { ja: "preset 名", en: "Preset name" },

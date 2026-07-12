@@ -14,6 +14,7 @@ import { History } from "./graph/history";
 import { previewSize } from "./preview-size";
 import { OutputWindow, OUTPUT_RENDER_W, OUTPUT_RENDER_H } from "./output-window";
 import { ScreenOutputs, domScreenOutputDeps } from "./screen-outputs";
+import { CleanFeedPublisher, domCleanFeedDeps } from "./clean-feed";
 import { clampWarpValue, parseWarpMessage } from "./warp-messages";
 import { cornerParamIds } from "./warp-logic";
 import { Recorder, pickRecorderMimeType, recordingFileName } from "./recorder";
@@ -87,9 +88,25 @@ const recorder = new Recorder();
 // メイン合成前に runtime からフックされ、開いている Screen の texture をワープ転写する。
 const screenOutputs = new ScreenOutputs(domScreenOutputDeps(runtime.renderer));
 runtime.onRenderScreenOutputs = (g, outputs) => screenOutputs.renderFrame(g, outputs);
+// #283: クリーンフィード（OBS ブラウザソース向け WebRTC ミラー配信）。viewer が 1 人でも
+// いる間は出力ウィンドウと同様に keepAlive・outputActive・高解像度描画を維持する。
+const cleanFeed = new CleanFeedPublisher(domCleanFeedDeps(runtime));
+// mountOutputControls がボタン表示（viewer 数）の更新関数を差し込む。
+let syncCleanFeedBtn: (() => void) | null = null;
+cleanFeed.onViewersChange = () => {
+  syncKeepAlive();
+  syncOutputActive();
+  applyPreviewSize(); // 出力状態に応じて描画解像度（高解像度⇄表示サイズ）を切り替える
+  syncCleanFeedBtn?.();
+};
+// #174/#283: 出力 canvas を毎フレーム更新すべきか（出力ウィンドウ表示中 or viewer あり）の OR 合成。
+function syncOutputActive(): void {
+  runtime.setOutputActive(output.isOpen() || cleanFeed.hasViewers());
+}
 // #148/#282: いずれかの出力ウィンドウ表示中は本体が隠れても描画を回し続ける。
+// #283: クリーンフィードの viewer がいる間も維持する。
 function syncKeepAlive(): void {
-  runtime.setKeepAliveWhileHidden(output.isOpen() || screenOutputs.anyOpen());
+  runtime.setKeepAliveWhileHidden(output.isOpen() || screenOutputs.anyOpen() || cleanFeed.hasViewers());
 }
 screenOutputs.onOpenStateChange = () => {
   syncKeepAlive();
@@ -123,7 +140,8 @@ function applyPreviewSize(): void {
   // #148/#179: 出力ウィンドウ表示中・録画中は PiP の見た目サイズに依らず高解像度で描き、
   // 出力/録画を鮮明にする（PiP は CSS で縮小表示＝同じ映像の縮小ビュー）。通常は表示サイズ×dpr。
   // #282: Screen 別出力ウィンドウの表示中も同様（drawImage 転写元の解像度を確保する）。
-  if (output.isOpen() || recorder.recording || screenOutputs.anyOpen()) {
+  // #283: クリーンフィード配信中も同様（captureStream 元の出力 canvas を高解像度に保つ）。
+  if (output.isOpen() || recorder.recording || screenOutputs.anyOpen() || cleanFeed.hasViewers()) {
     runtime.setRenderSize(OUTPUT_RENDER_W, OUTPUT_RENDER_H, 1);
   } else {
     runtime.setRenderSize(w, h, Math.min(window.devicePixelRatio, 2));
@@ -684,6 +702,8 @@ function mountInputControls(host: HTMLElement): void {
 // #214: ページ離脱時にカメラトラックを解放（リーク防止）。beforeunload/pagehide 両方で保険。
 window.addEventListener("beforeunload", () => sharedCamera.stop());
 window.addEventListener("pagehide", () => sharedCamera.stop());
+// #283: クリーンフィードの片付け（viewer へ bye を送り即再試行へ移らせる）。
+window.addEventListener("pagehide", () => cleanFeed.dispose());
 
 /** 録画した Blob を webm としてダウンロードする。 */
 function downloadRecording(blob: Blob): void {
@@ -711,8 +731,8 @@ function mountOutputControls(host: HTMLElement): void {
     // #148: 出力ウィンドウ表示中は本体が隠れても描画を回し続ける（全画面で固まらないように）。
     // #282: Screen 別出力ウィンドウが開いている間も維持する（OR 判定）。
     syncKeepAlive();
-    // #174: 出力ウィンドウ表示中だけ出力 canvas を更新する。
-    runtime.setOutputActive(output.isOpen());
+    // #174: 出力ウィンドウ表示中だけ出力 canvas を更新する（#283: クリーンフィードと OR 合成）。
+    syncOutputActive();
     applyPreviewSize();   // 出力状態に応じて描画解像度（高解像度⇄表示サイズ）を切り替える
   }
   output.onClose = syncOutBtn;
@@ -723,6 +743,31 @@ function mountOutputControls(host: HTMLElement): void {
     syncOutBtn();
   });
   syncOutBtn();
+
+  // #283: クリーンフィード（OBS ブラウザソース）URL のコピー。接続中 viewer 数をラベルに出す。
+  const obsBtn = document.createElement("button");
+  obsBtn.style.cssText = PANEL_BTN_CSS;
+  obsBtn.title = t("controls.cleanFeed.title");
+  function syncObsBtn(): void {
+    const n = cleanFeed.viewerCount();
+    obsBtn.textContent = n > 0
+      ? t("controls.cleanFeed.copyActive", { count: n })
+      : t("controls.cleanFeed.copy");
+  }
+  syncCleanFeedBtn = syncObsBtn;
+  obsBtn.addEventListener("click", () => {
+    const url = location.origin + "/obs.html";
+    if (navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(url).then(() => {
+        obsBtn.textContent = t("controls.cleanFeed.copied");
+        window.setTimeout(syncObsBtn, 1500);
+      }).catch((e) => console.warn("[node-vj] clipboard write failed:", e));
+    } else {
+      // clipboard API が使えない環境（非 secure context 等）は手動コピー用に表示する。
+      window.prompt(t("controls.cleanFeed.prompt"), url);
+    }
+  });
+  syncObsBtn();
 
   // #179: 出力（出力 canvas = 出力シーンに追従）をビデオ録画して保存する（recorder は上部で生成済み）。
   const recBtn = document.createElement("button");
@@ -736,6 +781,9 @@ function mountOutputControls(host: HTMLElement): void {
     if (recorder.recording) {
       void recorder.stop().then((blob) => {
         runtime.setRecording(false);
+        // #283: setRecording(false) は録画前の outputActive を復元するため、録画中に
+        // クリーンフィード viewer が現れたケースでは現状の OR で上書きし直す。
+        syncOutputActive();
         applyPreviewSize();          // #179: 録画終了で描画解像度を通常へ戻す
         if (blob.size > 0) downloadRecording(blob);
         syncRecBtn();
@@ -846,7 +894,7 @@ function mountOutputControls(host: HTMLElement): void {
     navigator.mediaDevices.addEventListener?.("devicechange", () => void refreshAudioOutputs());
   }
 
-  host.append(outBtn, recBtn, monAudioSel, outAudioSel);
+  host.append(outBtn, obsBtn, recBtn, monAudioSel, outAudioSel);
 }
 
 // #177: AI 操作インターフェース。型付きコマンド API（window.nodeVj.api）と
