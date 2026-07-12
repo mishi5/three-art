@@ -94,8 +94,8 @@ const relay = Bun.spawn(["bun", join(REPO_ROOT, "scripts", "vj-relay.ts"), Strin
   stderr: relayLog,
 });
 relay.unref();
-// 注意: --port は html ファイルより前に置く（後置は無視され既定 3000 で立つ）。
-const dev = Bun.spawn(["bun", "--hot", "--port", String(devPort), join(REPO_ROOT, "node-vj.html")], {
+// #283: dev サーバは明示ルート版（scripts/vj-dev.ts）。/ に node-vj、/obs.html にクリーンフィード。
+const dev = Bun.spawn(["bun", "--hot", join(REPO_ROOT, "scripts", "vj-dev.ts"), String(devPort)], {
   cwd: REPO_ROOT,
   stdin: "ignore",
   stdout: devLog,
