@@ -148,6 +148,12 @@ export interface NodeTypeDef {
    * 描く目印（BeatClock）。ランタイム state に tapNow/status を持つ前提。
    */
   beatClock?: boolean;
+  /**
+   * #282: ノード上に「⧉ 出力」トグル行（Screen 専用の出力ウィンドウの開閉）を描く目印
+   * （Screen）。開閉の実体はエディタ外（main.ts の ScreenOutputs）が持ち、NodeEditor は
+   * onScreenOutputToggle / screenOutputInfo コールバックで連携する。
+   */
+  screenOutput?: boolean;
   /** visual/sink ノードの初期化（THREE オブジェクト生成・scene 追加等）。1 度だけ呼ばれる。 */
   createState?(env: NodeEnv): NodeState;
   /**
