@@ -21,7 +21,9 @@ function sampleSet(): SceneSet {
 
   const g2 = createGraph();
   addNode(g2, { id: "rv", type: "RainVisual", params: { baseSpeed: 0.7, count: 2000, ampGain: 1, length: 0.06, areaWidth: 2, areaHeight: 2.4 }, position: { x: 40, y: 30 } });
-  addNode(g2, { id: "sc", type: "Screen", params: {}, position: { x: 300, y: 30 } });
+  // #282: Screen はワープ 4 隅 param を持つため、default 全埋めで round-trip 一致させる。
+  const screenDefaults = Object.fromEntries(r.require("Screen").params.map((p) => [p.id, p.default]));
+  addNode(g2, { id: "sc", type: "Screen", params: screenDefaults, position: { x: 300, y: 30 } });
   addConnection(g2, r, { id: "c2", from: { node: "rv", port: "texture" }, to: { node: "sc", port: "texture" } });
 
   return {

@@ -20,6 +20,7 @@ import {
   hasAutomationRows, automationSeekRowRect, automationControlRowRect, automationControlLayout,
   automationSeekFraction, automationStatusLabel,
   hasBeatClockRow, beatClockRowRect, beatClockRowLayout, beatClockStatusLabel,
+  hasScreenOutputRow, screenOutputRowRect, screenOutputRowLayout, screenOutputStatusLabel,
 } from "./layout";
 import { getOutputScale, setOutputScale, formatScale, DEFAULT_OUTPUT_SCALE } from "../graph/output-scale";
 import { randomInRange } from "./random-value";
@@ -208,6 +209,10 @@ export class NodeEditor {
   onBeatClockTap?: (nodeId: string) => void;
   /** #270: BeatClock の状態（BPM・拍内位相・タップ受付中）を引く。任意。 */
   beatClockInfo?: (nodeId: string) => { bpm: number; phase: number; tapActive: boolean } | undefined;
+  /** #282: Screen の「⧉ 出力」トグルボタン（専用出力ウィンドウの開閉）。任意。 */
+  onScreenOutputToggle?: (nodeId: string) => void;
+  /** #282: Screen 専用出力ウィンドウの開閉状態を引く（main.ts の ScreenOutputs）。任意。 */
+  screenOutputInfo?: (nodeId: string) => { open: boolean } | undefined;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -618,6 +623,18 @@ export class NodeEditor {
           const { tap } = beatClockRowLayout(br);
           if (w.x >= tap.x && w.x <= tap.x + tap.w && w.y >= tap.y && w.y <= tap.y + tap.h) {
             this.onBeatClockTap?.(hit.node.id);
+            return;
+          }
+        }
+      }
+      // #282: Screen の「⧉ 出力」トグルボタン（専用出力ウィンドウの開閉。pointerdown の
+      // user gesture 内で window.open するため、ここから同期的にコールバックする）。
+      if (def?.screenOutput) {
+        const sr = screenOutputRowRect(hit.node, def);
+        if (sr) {
+          const { button } = screenOutputRowLayout(sr);
+          if (w.x >= button.x && w.x <= button.x + button.w && w.y >= button.y && w.y <= button.y + button.h) {
+            this.onScreenOutputToggle?.(hit.node.id);
             return;
           }
         }
@@ -1954,6 +1971,35 @@ export class NodeEditor {
       ctx.textAlign = "left"; ctx.font = "10px system-ui";
       ctx.fillText(
         ellipsizeEnd(ctx, beatClockStatusLabel(info), status.w - (textX - status.x) - 4),
+        textX, status.y + status.h / 2,
+      );
+      ctx.font = "11px system-ui";
+      ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    }
+    // #282: Screen の「⧉ 出力」トグル行（開いている間はボタンを明るく・状態ラベル）。
+    if (hasScreenOutputRow(def)) {
+      const open = this.screenOutputInfo?.(node.id)?.open ?? false;
+      const sr = screenOutputRowRect(node, def)!;
+      const { button, status } = screenOutputRowLayout(sr);
+      ctx.fillStyle = open ? "#2a3a4a" : "#262630";
+      roundRect(ctx, button.x, button.y, button.w, button.h, 4);
+      ctx.fill();
+      ctx.strokeStyle = open ? "#7fb3d5" : "#4a5566";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = open ? "#cde" : "#9ab";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "11px system-ui";
+      ctx.fillText(t("node.screen.outputBtn"), button.x + button.w / 2, button.y + button.h / 2);
+      // 状態ラベル（出力中はインジケータ ● を明るく）。
+      const textX = status.x + 16;
+      ctx.fillStyle = open ? "#6fc" : "#3a4048";
+      ctx.beginPath();
+      ctx.arc(status.x + 8, status.y + status.h / 2, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = open ? "#bde" : "#9ab";
+      ctx.textAlign = "left"; ctx.font = "10px system-ui";
+      ctx.fillText(
+        ellipsizeEnd(ctx, screenOutputStatusLabel(open), status.w - (textX - status.x) - 4),
         textX, status.y + status.h / 2,
       );
       ctx.font = "11px system-ui";

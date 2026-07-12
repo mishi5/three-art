@@ -11,6 +11,7 @@ import {
   hasAutomationRows, automationSeekRowRect, automationControlRowRect, automationControlLayout,
   automationSeekFraction, automationStatusLabel,
   hasBeatClockRow, beatClockRowRect, beatClockRowLayout, beatClockStatusLabel,
+  hasScreenOutputRow, screenOutputRowRect, screenOutputRowLayout, screenOutputStatusLabel,
   CATEGORY_COLORS,
 } from "./layout";
 import { NODE_CATEGORIES, type NodeTypeDef } from "../graph/node-type";
@@ -396,5 +397,59 @@ describe("#227 CATEGORY_COLORS", () => {
     for (const cat of NODE_CATEGORIES) {
       expect(CATEGORY_COLORS[cat]).toMatch(/^#[0-9a-f]{6}$/i);
     }
+  });
+});
+
+describe("#282 Screen 出力トグル行 layout", () => {
+  // 実 Screen ノードの形: texture 入力 1・出力 0・可視 param 8（ワープ 4 隅）・screenOutput フラグ。
+  const soDef: NodeTypeDef = {
+    type: "Screen", category: "output",
+    inputs: [{ id: "texture", label: "tex", type: "texture" }],
+    outputs: [],
+    params: [
+      { id: "tlX", label: "tl.x", kind: "number", default: 0, noInput: true },
+      { id: "tlY", label: "tl.y", kind: "number", default: 0, noInput: true },
+      { id: "trX", label: "tr.x", kind: "number", default: 1, noInput: true },
+      { id: "trY", label: "tr.y", kind: "number", default: 0, noInput: true },
+      { id: "blX", label: "bl.x", kind: "number", default: 0, noInput: true },
+      { id: "blY", label: "bl.y", kind: "number", default: 1, noInput: true },
+      { id: "brX", label: "br.x", kind: "number", default: 1, noInput: true },
+      { id: "brY", label: "br.y", kind: "number", default: 1, noInput: true },
+    ],
+    isSink: true, screenOutput: true, evaluate: () => ({}),
+  };
+  const soNode: NodeInstance = { id: "s", type: "Screen", params: {}, position: { x: 100, y: 50 } };
+
+  test("hasScreenOutputRow 判定", () => {
+    expect(hasScreenOutputRow(soDef)).toBe(true);
+    expect(hasScreenOutputRow(def)).toBe(false);
+  });
+
+  test("nodeHeight はトグル行の 1 行ぶん増える", () => {
+    // portRows = max(1 texture入力, 0 出力) = 1・可視 param = 8 → base + 1 行
+    const base = TITLE_H + 1 * ROW_H + 8 * ROW_H + 8;
+    expect(nodeHeight(soDef)).toBe(base + 1 * ROW_H);
+  });
+
+  test("screenOutputRowRect は params 直下（screenOutput 無しは null）", () => {
+    const sr = screenOutputRowRect(soNode, soDef)!;
+    expect(sr).toEqual({ x: 100, y: 50 + TITLE_H + 1 * ROW_H + 8 * ROW_H, w: NODE_WIDTH, h: ROW_H });
+    expect(screenOutputRowRect(soNode, def)).toBeNull();
+  });
+
+  test("screenOutputRowLayout: トグルボタンと状態ラベルが行内に収まり重ならない", () => {
+    const sr = screenOutputRowRect(soNode, soDef)!;
+    const { button, status } = screenOutputRowLayout(sr);
+    expect(button.x).toBeGreaterThanOrEqual(sr.x);
+    expect(button.x + button.w).toBeLessThanOrEqual(status.x);
+    expect(status.x + status.w).toBeLessThanOrEqual(sr.x + sr.w);
+    expect(button.y).toBeGreaterThanOrEqual(sr.y);
+    expect(button.y + button.h).toBeLessThanOrEqual(sr.y + sr.h);
+    expect(status.y + status.h).toBeLessThanOrEqual(sr.y + sr.h);
+  });
+
+  test("screenOutputStatusLabel: 開いている間は出力中・それ以外は未出力", () => {
+    expect(screenOutputStatusLabel(true)).toBe("出力中");
+    expect(screenOutputStatusLabel(false)).toBe("未出力");
   });
 });

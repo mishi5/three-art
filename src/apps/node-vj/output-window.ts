@@ -41,8 +41,21 @@ export function buildOutputHtml(): string {
 }
 
 /**
+ * #282: OutputWindow のカスタマイズ（Screen 専用出力ウィンドウ用）。
+ * 省略時は #148 従来（name "node-vj-output"・buildOutputHtml）のまま。
+ */
+export interface OutputWindowOptions {
+  /** window.open の name（同 name は同じウィンドウを再利用する。ユニーク化して多重出力）。 */
+  name?: string;
+  /** ウィンドウへ書き込む HTML（video#out を持つこと）。 */
+  html?: string;
+}
+
+/**
  * 出力ウィンドウの管理。open() で別ウィンドウを開き、ソース canvas の captureStream を
  * <video> に流す。close()/本体終了でクリーンアップ。再 open は前ウィンドウを閉じてから。
+ * #282: options で window name とウィンドウ HTML を差し替えられる汎用ミラー
+ * （Screen 専用出力ウィンドウが再利用する）。
  */
 export class OutputWindow {
   private win: Window | null = null;
@@ -51,18 +64,25 @@ export class OutputWindow {
   onClose: (() => void) | null = null;
   private pollTimer: number | null = null;
 
+  constructor(private readonly options: OutputWindowOptions = {}) {}
+
   isOpen(): boolean {
     return !!this.win && !this.win.closed;
+  }
+
+  /** #282: postMessage の e.source 検証・親→子送信用に内部 Window を公開する（未 open は null）。 */
+  contentWindow(): Window | null {
+    return this.isOpen() ? this.win : null;
   }
 
   /** ソース canvas をミラーする出力ウィンドウを開く（既に開いていれば前面化のみ）。 */
   open(source: HTMLCanvasElement): void {
     if (this.isOpen()) { this.win!.focus(); return; }
-    const win = window.open("", "node-vj-output", "width=1280,height=720");
+    const win = window.open("", this.options.name ?? "node-vj-output", "width=1280,height=720");
     if (!win) return;   // ポップアップブロック時
     this.win = win;
     win.document.open();
-    win.document.write(buildOutputHtml());
+    win.document.write(this.options.html ?? buildOutputHtml());
     win.document.close();
     const video = win.document.getElementById("out") as HTMLVideoElement | null;
     const canStream = (source as HTMLCanvasElement & { captureStream?: (fps?: number) => MediaStream }).captureStream;

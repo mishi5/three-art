@@ -1503,6 +1503,39 @@ export const NODE_CATALOG = {
     ja: "画面に表示するテクスチャ。",
     en: "Texture to display on screen.",
   },
+  // #282: コーナーピンワープの 4 隅（専用出力ウィンドウの描画にのみ掛かる正規化座標）。
+  "node.Screen.param.tlX": {
+    ja: "ワープ左上隅の X（正規化・0=左端 1=右端）。専用出力ウィンドウにのみ適用。",
+    en: "Warp top-left corner X (normalized; 0 = left, 1 = right). Applies only to the dedicated output window.",
+  },
+  "node.Screen.param.tlY": {
+    ja: "ワープ左上隅の Y（正規化・0=上端 1=下端）。専用出力ウィンドウにのみ適用。",
+    en: "Warp top-left corner Y (normalized; 0 = top, 1 = bottom). Applies only to the dedicated output window.",
+  },
+  "node.Screen.param.trX": {
+    ja: "ワープ右上隅の X（正規化）。",
+    en: "Warp top-right corner X (normalized).",
+  },
+  "node.Screen.param.trY": {
+    ja: "ワープ右上隅の Y（正規化）。",
+    en: "Warp top-right corner Y (normalized).",
+  },
+  "node.Screen.param.blX": {
+    ja: "ワープ左下隅の X（正規化）。",
+    en: "Warp bottom-left corner X (normalized).",
+  },
+  "node.Screen.param.blY": {
+    ja: "ワープ左下隅の Y（正規化）。",
+    en: "Warp bottom-left corner Y (normalized).",
+  },
+  "node.Screen.param.brX": {
+    ja: "ワープ右下隅の X（正規化）。",
+    en: "Warp bottom-right corner X (normalized).",
+  },
+  "node.Screen.param.brY": {
+    ja: "ワープ右下隅の Y（正規化）。",
+    en: "Warp bottom-right corner Y (normalized).",
+  },
 } as const satisfies Catalog;
 
 /** ノード文言カタログのキー型。 */

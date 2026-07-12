@@ -99,6 +99,14 @@ export function hasBeatClockRow(def: NodeTypeDef): boolean {
 /** #270: BeatClock が追加する行数（TAP ボタン＋ステータスの 1 行）。 */
 const BEATCLOCK_ROWS = 1;
 
+/** #282: Screen の「⧉ 出力」トグル行（専用出力ウィンドウの開閉）を出すか。 */
+export function hasScreenOutputRow(def: NodeTypeDef): boolean {
+  return !!def.screenOutput;
+}
+
+/** #282: Screen 出力トグルが追加する行数（トグルボタン＋状態ラベルの 1 行）。 */
+const SCREEN_OUTPUT_ROWS = 1;
+
 /** #154: ノード UI に行を描く param の数（hidden を除く）。末尾の hidden param 行は詰める。 */
 export function visibleParamCount(def: NodeTypeDef): number {
   return def.params.reduce((n, p) => (p.hidden ? n : n + 1), 0);
@@ -119,8 +127,10 @@ export function nodeHeight(def: NodeTypeDef): number {
   const automationRows = hasAutomationRows(def) ? AUTOMATION_ROWS * ROW_H : 0;
   // #270: BeatClock のビートクロック UI（TAP ボタン＋ステータス行）。
   const beatClockRows = hasBeatClockRow(def) ? BEATCLOCK_ROWS * ROW_H : 0;
+  // #282: Screen の「⧉ 出力」トグル行。
+  const screenOutputRows = hasScreenOutputRow(def) ? SCREEN_OUTPUT_ROWS * ROW_H : 0;
   return TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H + randomRow + fileRows + transportRow
-    + sceneRow + padRows + tapRows + automationRows + beatClockRows + PADDING;
+    + sceneRow + padRows + tapRows + automationRows + beatClockRows + screenOutputRows + PADDING;
 }
 
 export function nodePos(node: NodeInstance): { x: number; y: number } {
@@ -454,6 +464,37 @@ export function beatClockStatusLabel(
 ): string {
   if (!s) return t("node.beatclock.none");
   return t("node.beatclock.status", { bpm: s.bpm.toFixed(1) });
+}
+
+/** #282: Screen の「⧉ 出力」トグル行の領域（params 直下・screenOutput 無しは null）。 */
+export function screenOutputRowRect(
+  node: NodeInstance, def: NodeTypeDef,
+): { x: number; y: number; w: number; h: number } | null {
+  if (!hasScreenOutputRow(def)) return null;
+  const p = nodePos(node);
+  return { x: p.x, y: p.y + TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H, w: NODE_WIDTH, h: ROW_H };
+}
+
+/**
+ * #282: 出力トグル行を「⧉ 出力ボタン」「状態ラベル」の 2 分割にする
+ * （寸法は beatClockRowLayout と同じ感覚: pad 6・gap 6・ボタン幅 64）。
+ */
+export function screenOutputRowLayout(rect: { x: number; y: number; w: number; h: number }): {
+  button: { x: number; y: number; w: number; h: number };
+  status: { x: number; y: number; w: number; h: number };
+} {
+  const pad = 6, gap = 6, btnW = 64;
+  const button = { x: rect.x + pad, y: rect.y + 2, w: btnW, h: rect.h - 4 };
+  const status = {
+    x: button.x + btnW + gap, y: rect.y + 2,
+    w: rect.w - 2 * pad - btnW - gap, h: rect.h - 4,
+  };
+  return { button, status };
+}
+
+/** #282: 出力トグル行の状態ラベル（開いている間は「出力中」・それ以外は「未出力」）。 */
+export function screenOutputStatusLabel(open: boolean): string {
+  return t(open ? "node.screen.outputOn" : "node.screen.outputOff");
 }
 
 /** #152: シーン選択行の領域（params 直下・sceneInput 無しは null）。 */
