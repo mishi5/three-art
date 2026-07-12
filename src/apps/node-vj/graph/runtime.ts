@@ -78,6 +78,15 @@ export class GraphRuntime {
   // 出力先を既定デバイス（ctx.destination）⇄ モニター選択デバイス（monitorAudioDest 経由）で繋ぎ替える。
   private monitorBus: GainNode | null = null;
   private monitorAudioDest: MediaStreamAudioDestinationNode | null = null;
+  /**
+   * #282: Screen 別出力（専用ウィンドウ）の描画フック。評価後・メイン合成前に呼ぶ。
+   * フック側（ScreenOutputs）はメイン canvas（default framebuffer）を一時使用して
+   * ワープ描画→出力 canvas へ GPU コピーしてよい。この後に必ず従来のメイン合成を
+   * 描き直すため、フレーム末尾のメイン canvas は従来どおりの見た目になる。
+   */
+  onRenderScreenOutputs:
+    | ((graph: GraphDoc, outputs: ReadonlyMap<string, Record<string, unknown>>) => void)
+    | null = null;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -598,6 +607,10 @@ export class GraphRuntime {
     } else if (this.activeRT && this.sceneTextureCache.get(this.activeSceneId) === this.activeRT.texture) {
       this.sceneTextureCache.delete(this.activeSceneId);
     }
+    // #282: Screen 別出力（専用ウィンドウ）。各 Screen の texture をワープ付きでメイン canvas へ
+    // 一時描画→出力 canvas へ GPU コピーする。この後の #174/メイン合成が必ずフレーム末尾に来る
+    // （メイン canvas の最終状態は従来どおり）。
+    this.onRenderScreenOutputs?.(this.graph, this.lastOutputs);
     // #174: 出力シーンが編集と別シーンのとき、先に出力シーンの合成結果を canvas に描いて
     // 出力 canvas へコピーし、その後アクティブシーンを描き直す（画面プレビューはアクティブ）。
     const outId = this.outputActive ? this.effectiveOutputId() : this.activeSceneId;
