@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>node-vj clean feed</title>
+  <style>
+    /* #283: OBS ブラウザソース用クリーンフィード。UI なし・黒背景・映像のみ全画面。 */
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+    #out { width: 100vw; height: 100vh; object-fit: contain; background: #000; display: block; }
+    #status {
+      position: fixed; left: 0; right: 0; bottom: 12px; text-align: center;
+      color: #555; font: 12px system-ui; pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <video id="out" autoplay muted playsinline></video>
+  <div id="status">node-vj の起動を待っています… / waiting for node-vj…</div>
+  <script type="module" src="./src/apps/node-vj/obs-main.ts"></script>
+</body>
+</html>
