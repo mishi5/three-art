@@ -3,7 +3,7 @@
 // 既定グラフ: Number→Multiply←Number → RainVisual.baseSpeed、RainVisual.tex → Screen。
 // #98: 画面に出すには Screen への接続が必須（自動表示フォールバックは廃止）。
 import { createDefaultRegistry } from "./nodes/registry";
-import { addConnection, addNode, createGraph, replaceGraph, type GraphDoc } from "./graph/graph-doc";
+import { addConnection, addNode, createGraph, findNode, replaceGraph, type GraphDoc } from "./graph/graph-doc";
 import { GraphRuntime } from "./graph/runtime";
 import { NodeEditor } from "./editor/NodeEditor";
 import { openPadOverlay } from "./editor/pad-overlay";
@@ -13,6 +13,9 @@ import { GraphStore, localStorageAdapter } from "./graph/graph-store";
 import { History } from "./graph/history";
 import { previewSize } from "./preview-size";
 import { OutputWindow, OUTPUT_RENDER_W, OUTPUT_RENDER_H } from "./output-window";
+import { ScreenOutputs, domScreenOutputDeps } from "./screen-outputs";
+import { clampWarpValue, parseWarpMessage } from "./warp-messages";
+import { cornerParamIds } from "./warp-logic";
 import { Recorder, pickRecorderMimeType, recordingFileName } from "./recorder";
 import { audioOutputOptions, type AudioOutputOption } from "./scene/output-audio";
 import { stopIfPlaying, type PlaybackControl } from "./nodes/playback";
@@ -79,6 +82,18 @@ const runtime = new GraphRuntime(previewCanvas, registry, graph);
 const output = new OutputWindow();
 // #179: 録画器。applyPreviewSize が録画中も高解像度で描くため先に生成しておく。
 const recorder = new Recorder();
+// #282: Screen ノード別の専用出力ウィンドウ（コーナーピンワープ付き）。毎フレーム評価後・
+// メイン合成前に runtime からフックされ、開いている Screen の texture をワープ転写する。
+const screenOutputs = new ScreenOutputs(domScreenOutputDeps(runtime.renderer));
+runtime.onRenderScreenOutputs = (g, outputs) => screenOutputs.renderFrame(g, outputs);
+// #148/#282: いずれかの出力ウィンドウ表示中は本体が隠れても描画を回し続ける。
+function syncKeepAlive(): void {
+  runtime.setKeepAliveWhileHidden(output.isOpen() || screenOutputs.anyOpen());
+}
+screenOutputs.onOpenStateChange = () => {
+  syncKeepAlive();
+  applyPreviewSize(); // 出力状態に応じて描画解像度（高解像度⇄表示サイズ）を切り替える
+};
 // #179: 録画ビットレート（1080p を鮮明に保つ。既定の自動値は低すぎることがある）。
 const RECORD_VIDEO_BITRATE = 16_000_000;
 
@@ -106,7 +121,8 @@ function applyPreviewSize(): void {
   }
   // #148/#179: 出力ウィンドウ表示中・録画中は PiP の見た目サイズに依らず高解像度で描き、
   // 出力/録画を鮮明にする（PiP は CSS で縮小表示＝同じ映像の縮小ビュー）。通常は表示サイズ×dpr。
-  if (output.isOpen() || recorder.recording) {
+  // #282: Screen 別出力ウィンドウの表示中も同様（drawImage 転写元の解像度を確保する）。
+  if (output.isOpen() || recorder.recording || screenOutputs.anyOpen()) {
     runtime.setRenderSize(OUTPUT_RENDER_W, OUTPUT_RENDER_H, 1);
   } else {
     runtime.setRenderSize(w, h, Math.min(window.devicePixelRatio, 2));
@@ -381,6 +397,27 @@ type BeatClockControl = {
 };
 editor.onBeatClockTap = (id) => (runtime.getState(id) as BeatClockControl | undefined)?.tapNow?.();
 editor.beatClockInfo = (id) => (runtime.getState(id) as BeatClockControl | undefined)?.status?.();
+
+// #282: Screen の「⧉ 出力」トグル（pointerdown の user gesture 内で window.open される）と開閉状態。
+editor.onScreenOutputToggle = (id) => screenOutputs.toggle(id);
+editor.screenOutputInfo = (id) => ({ open: screenOutputs.isOpen(id) });
+
+// #282: 出力ウィンドウのコーナードラッグを受けて Screen の 4 隅 param を更新する。
+// 出力ウィンドウは window.open("") の書き込み文書（同一オリジン）のため、origin 文字列でなく
+// e.source が管理中の出力ウィンドウの Window であることで検証する。phase:"start" で 1 回だけ
+// 履歴記録（ドラッグ 1 回＝undo 1 段）。値はクランプ＋step 相当へ丸めて書く（次フレームの
+// homography に即反映されるので、投影を見ながら合わせ込める）。
+window.addEventListener("message", (e) => {
+  const msg = parseWarpMessage(e.data);
+  if (!msg) return;
+  if (!screenOutputs.ownsWindow(e.source)) return;
+  const node = findNode(graph, msg.screenId);
+  if (!node || !registry.get(node.type)?.screenOutput) return;
+  if (msg.phase === "start") history.record(graph);
+  const ids = cornerParamIds(msg.corner);
+  node.params[ids.x] = clampWarpValue(msg.x);
+  node.params[ids.y] = clampWarpValue(msg.y);
+});
 // #205: アセットをパッド上にドロップ → そのパッドへ割当（再割当も上書き）。
 editor.onDropAssetToPad = (id, idx, assetId) => {
   runtime.resumeAudio();
@@ -671,7 +708,8 @@ function mountOutputControls(host: HTMLElement): void {
   function syncOutBtn(): void {
     outBtn.textContent = output.isOpen() ? t("controls.outputWindow.close") : t("controls.outputWindow.open");
     // #148: 出力ウィンドウ表示中は本体が隠れても描画を回し続ける（全画面で固まらないように）。
-    runtime.setKeepAliveWhileHidden(output.isOpen());
+    // #282: Screen 別出力ウィンドウが開いている間も維持する（OR 判定）。
+    syncKeepAlive();
     // #174: 出力ウィンドウ表示中だけ出力 canvas を更新する。
     runtime.setOutputActive(output.isOpen());
     applyPreviewSize();   // 出力状態に応じて描画解像度（高解像度⇄表示サイズ）を切り替える

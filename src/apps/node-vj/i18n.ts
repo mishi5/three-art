@@ -286,6 +286,10 @@ export const CATALOG = {
   "node.beatclock.tapBtn": { ja: "TAP", en: "TAP" },
   "node.beatclock.status": { ja: "{bpm} BPM", en: "{bpm} BPM" },
   "node.beatclock.none": { ja: "BPM --", en: "BPM --" },
+  // #282: Screen の「⧉ 出力」トグル行（専用出力ウィンドウの開閉＋状態ラベル）。
+  "node.screen.outputBtn": { ja: "⧉ 出力", en: "⧉ Output" },
+  "node.screen.outputOn": { ja: "出力中", en: "Live" },
+  "node.screen.outputOff": { ja: "未出力", en: "Off" },
   "node.randomBtn": { ja: "🎲 ランダム", en: "🎲 Random" },
   "label.default": { ja: "ラベル", en: "Label" },
 
