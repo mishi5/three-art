@@ -67,7 +67,8 @@ addNode(graph, { id: "speed", type: "Number", params: { value: 0.4 }, position: 
 addNode(graph, { id: "scale", type: "Number", params: { value: 1.0 }, position: { x: 40, y: 240 } });
 addNode(graph, { id: "mul", type: "Multiply", params: defaults("Multiply"), position: { x: 280, y: 150 } });
 addNode(graph, { id: "rain", type: "RainVisual", params: defaults("RainVisual"), position: { x: 520, y: 110 } });
-addNode(graph, { id: "screen", type: "Screen", params: {}, position: { x: 800, y: 110 } });
+// #282: Screen もワープ 4 隅 param を持つため defaults で初期化する。
+addNode(graph, { id: "screen", type: "Screen", params: defaults("Screen"), position: { x: 800, y: 110 } });
 addConnection(graph, registry, { id: "c1", from: { node: "speed", port: "out" }, to: { node: "mul", port: "a" } });
 addConnection(graph, registry, { id: "c2", from: { node: "scale", port: "out" }, to: { node: "mul", port: "b" } });
 addConnection(graph, registry, { id: "c3", from: { node: "mul", port: "out" }, to: { node: "rain", port: "baseSpeed" } });
