@@ -59,7 +59,8 @@ function makeFakes(transportCount = 2): {
         onicecandidate: null,
         onconnectionstatechange: null,
         ontrack: null,
-        addTrack() { /* viewer は送信しない */ },
+        // viewer は送信しない（インターフェース都合のダミー sender を返す）
+        addTrack: () => ({ getParameters: () => ({}), setParameters: () => Promise.resolve() }),
         createOffer: () => Promise.resolve({ type: "offer" as const, sdp: "offer-sdp" }),
         createAnswer: () => Promise.resolve({ type: "answer" as const, sdp: "answer-sdp" }),
         setLocalDescription(d) { this.localDesc = d ?? null; return Promise.resolve(); },

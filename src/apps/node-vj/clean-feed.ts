@@ -19,13 +19,33 @@ import { OUTPUT_CAPTURE_FPS } from "./output-window";
  */
 export const HELLO_DEDUPE_MS = 1000;
 
+/**
+ * 映像 sender のビットレート上限（bps）。Chrome/CEF の WebRTC は既定の上限が低く
+ * （〜2.5Mbps 程度）、収まらない場合は解像度を落とす。パーティクル系の高エントロピー映像は
+ * 既定値では 1080p を維持できず 480p 相当まで劣化するため、ローカル完結（帯域制約なし）
+ * 前提で大きく引き上げる。degradationPreference "maintain-resolution" と併用する。
+ */
+export const CLEAN_FEED_MAX_BITRATE = 40_000_000;
+
+/** RTCRtpSendParameters の最小サーフェス（degradation/ビットレート設定に使う分だけ）。 */
+export interface CleanFeedSendParameters {
+  degradationPreference?: string;
+  encodings?: { maxBitrate?: number }[];
+}
+
+/** RTCRtpSender の最小サーフェス（テストではフェイクを注入する）。 */
+export interface CleanFeedSenderLike {
+  getParameters(): CleanFeedSendParameters;
+  setParameters(params: CleanFeedSendParameters): Promise<void>;
+}
+
 /** RTCPeerConnection の最小サーフェス（publisher/viewer 共用・テストではフェイクを注入する）。 */
 export interface CleanFeedPeerLike {
   connectionState: string;
   onicecandidate: ((ev: { candidate: RTCIceCandidate | null }) => void) | null;
   onconnectionstatechange: (() => void) | null;
   ontrack: ((ev: RTCTrackEvent) => void) | null;
-  addTrack(track: MediaStreamTrack, stream: MediaStream): unknown;
+  addTrack(track: MediaStreamTrack, stream: MediaStream): CleanFeedSenderLike;
   createOffer(): Promise<RTCSessionDescriptionInit>;
   createAnswer(): Promise<RTCSessionDescriptionInit>;
   setLocalDescription(desc: RTCSessionDescriptionInit): Promise<void>;
@@ -67,6 +87,26 @@ function toCandidateInit(c: RTCIceCandidate): RTCIceCandidateInit {
 
 /** 切断とみなす connectionState（片付けの対象）。 */
 const GONE_STATES = new Set(["failed", "disconnected", "closed"]);
+
+/**
+ * 映像 sender に画質優先のエンコーダ設定を適用する。
+ * - degradationPreference "maintain-resolution": 負荷/帯域が足りないときは解像度でなく fps を
+ *   落とす（既定 balanced だと 1080p が 480p 相当までダウンスケールされる）。
+ * - maxBitrate CLEAN_FEED_MAX_BITRATE: 既定の低いビットレート上限（〜2.5Mbps）を引き上げる。
+ * negotiation 前は setParameters が失敗する環境があるため、呼び出し側は offer 直後に加えて
+ * connectionState "connected" 後にも再適用する（失敗は warn のみ・接続自体は続行）。
+ */
+async function applySenderQuality(sender: CleanFeedSenderLike): Promise<void> {
+  try {
+    const params = sender.getParameters();
+    params.degradationPreference = "maintain-resolution";
+    if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
+    for (const enc of params.encodings) enc.maxBitrate = CLEAN_FEED_MAX_BITRATE;
+    await sender.setParameters(params);
+  } catch (e) {
+    console.warn("[clean-feed] setParameters failed:", e);
+  }
+}
 
 interface ViewerEntry {
   pc: CleanFeedPeerLike;
@@ -164,10 +204,28 @@ export class CleanFeedPublisher {
         type: "cf:ice", viewerId, from: "pub", candidate: toCandidateInit(ev.candidate),
       });
     };
+    // #283: 画質劣化対策。映像トラックに解像度優先ヒントを付け、映像 sender の
+    // degradation/ビットレート上限を引き上げる（applySenderQuality 参照）。
+    const videoSenders: CleanFeedSenderLike[] = [];
+    for (const track of this.stream.getTracks()) {
+      if (track.kind === "video") {
+        track.contentHint = "detail";   // 解像度優先（fps より精細さを保つ）
+        videoSenders.push(pc.addTrack(track, this.stream));
+      } else {
+        pc.addTrack(track, this.stream);
+      }
+    }
     pc.onconnectionstatechange = () => {
-      if (GONE_STATES.has(pc.connectionState)) this.removeViewer(viewerId);
+      if (GONE_STATES.has(pc.connectionState)) {
+        this.removeViewer(viewerId);
+        return;
+      }
+      // negotiation 前の setParameters が無効/失敗する環境向けの防御: 接続確立後に再適用する。
+      if (pc.connectionState === "connected") {
+        for (const s of videoSenders) void applySenderQuality(s);
+      }
     };
-    for (const track of this.stream.getTracks()) pc.addTrack(track, this.stream);
+    for (const s of videoSenders) await applySenderQuality(s);
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);

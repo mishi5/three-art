@@ -89,6 +89,27 @@ BroadcastChannel のチャンネル名: `node-vj:clean-feed`（定数 `CLEAN_FEE
 音声トラックを取り出せる。注意: 音声トラックは録画と**同一トラック**の共有なので、クリーンフィード
 の片付けでは **video トラックのみ stop** する（`stopStream` の実装で担保）。
 
+### エンコーダ設定（画質維持）
+
+> **改訂の経緯**: OBS 実機確認で「プレビューを引き伸ばしたような」画質劣化が発覚。
+> Chrome/CEF の WebRTC は既定のビットレート上限が低く（〜2.5Mbps 程度）、収まらない場合は
+> 解像度を落とす（degradation の既定は balanced）。パーティクル系の高エントロピー映像では
+> 1080p を維持できず 480p 相当までダウンスケールされていた。ローカル完結のため帯域制約は
+> 気にしなくてよい。
+
+publisher が hello ごとに映像トラック/sender へ以下を適用する:
+
+- 映像トラックに `contentHint = "detail"`（fps より精細さを優先するヒント）
+- 映像 sender の `RTCRtpSendParameters`:
+  - `degradationPreference = "maintain-resolution"`（足りないときは解像度でなく fps を落とす）
+  - `encodings[].maxBitrate = CLEAN_FEED_MAX_BITRATE`（40Mbps・定数エクスポート）
+- negotiation 前の `setParameters` が失敗/無効な環境向けの防御として、
+  `connectionState "connected"` 後にも再適用する。
+- captureStream は `onViewersChange`（親が描画解像度を 1920×1080 へ引き上げる）より**後**に
+  開始する（ユニットテストで順序を検証）。
+- E2E（別ブラウザ構成）では受信側 video が 1920×1080 に到達し、10 秒後も維持されることを assert
+  する（ダウンスケールは時間経過で起きるため）。
+
 ## viewer（`obs.html` ＋ `obs-main.ts` / `clean-feed-viewer.ts`）
 
 - UI なし・黒背景・`<video autoplay muted playsinline>` 全画面（object-fit: contain）。

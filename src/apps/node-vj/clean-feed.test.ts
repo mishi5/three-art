@@ -5,15 +5,30 @@
 // 返信は hello が届いた transport へ返す（OBS の別ブラウザ問題対応）。
 import { describe, expect, test } from "bun:test";
 import {
+  CLEAN_FEED_MAX_BITRATE,
   CleanFeedPublisher,
   HELLO_DEDUPE_MS,
   type CleanFeedPeerLike,
   type CleanFeedPublisherDeps,
+  type CleanFeedSenderLike,
+  type CleanFeedSendParameters,
 } from "./clean-feed";
 import type { CleanFeedTransport } from "./clean-feed-transport";
 
+interface FakeTrack {
+  kind: string;
+  contentHint?: string;
+}
+
+interface FakeSender extends CleanFeedSenderLike {
+  trackKind: string;
+  /** setParameters の呼び出しを深いコピーで記録する。 */
+  applied: CleanFeedSendParameters[];
+}
+
 interface FakePeer extends CleanFeedPeerLike {
   addedTracks: { track: unknown; stream: unknown }[];
+  senders: FakeSender[];
   localDesc: RTCSessionDescriptionInit | null;
   remoteDesc: RTCSessionDescriptionInit | null;
   iceCandidates: RTCIceCandidateInit[];
@@ -54,6 +69,7 @@ function makeFakes(transportCount = 1): {
     createPeerConnection: () => {
       const p: FakePeer = {
         addedTracks: [],
+        senders: [],
         localDesc: null,
         remoteDesc: null,
         iceCandidates: [],
@@ -62,7 +78,21 @@ function makeFakes(transportCount = 1): {
         onicecandidate: null,
         onconnectionstatechange: null,
         ontrack: null,
-        addTrack(track, stream) { this.addedTracks.push({ track, stream }); },
+        addTrack(track, stream) {
+          this.addedTracks.push({ track, stream });
+          const sender: FakeSender = {
+            trackKind: (track as unknown as FakeTrack).kind,
+            applied: [],
+            // 実 RTCRtpSender と同様、getParameters は現在値のコピーを返す（初期は空 encodings）。
+            getParameters: () => ({ encodings: [] }),
+            setParameters(params) {
+              this.applied.push(structuredClone(params));
+              return Promise.resolve();
+            },
+          };
+          this.senders.push(sender);
+          return sender;
+        },
         createOffer: () => Promise.resolve({ type: "offer" as const, sdp: "offer-sdp" }),
         createAnswer: () => Promise.resolve({ type: "answer" as const, sdp: "answer-sdp" }),
         setLocalDescription(d) { this.localDesc = d ?? null; return Promise.resolve(); },
@@ -304,6 +334,53 @@ describe("CleanFeedPublisher (#283)", () => {
     transports[0]!.onMessage?.(hello("v1"));
     await Bun.sleep(0);
     expect(pub.viewerCount()).toBe(1);
+  });
+
+  test("画質設定: 映像トラックに contentHint=detail・映像 sender に maintain-resolution と maxBitrate", async () => {
+    const { deps, transports, peers, streams } = makeFakes();
+    const pub = new CleanFeedPublisher(deps);
+    await pub.handleMessage(hello("v1"), transports[0]!);
+
+    // 映像トラックのみ contentHint=detail（音声には付けない）
+    const tracks = (streams[0]!.stream.getTracks() as unknown as FakeTrack[]);
+    expect(tracks.find((t) => t.kind === "video")?.contentHint).toBe("detail");
+    expect(tracks.find((t) => t.kind === "audio")?.contentHint).toBeUndefined();
+
+    // 映像 sender のみ degradation/ビットレート設定を適用（音声 sender は触らない）
+    const video = peers[0]!.senders.find((s) => s.trackKind === "video")!;
+    const audio = peers[0]!.senders.find((s) => s.trackKind === "audio")!;
+    expect(video.applied).toHaveLength(1);
+    expect(video.applied[0]!.degradationPreference).toBe("maintain-resolution");
+    expect(video.applied[0]!.encodings).toEqual([{ maxBitrate: CLEAN_FEED_MAX_BITRATE }]);
+    expect(audio.applied).toHaveLength(0);
+  });
+
+  test("画質設定: 接続確立（connected）後にも再適用する（negotiation 前失敗の防御）", async () => {
+    const { deps, transports, peers } = makeFakes();
+    const pub = new CleanFeedPublisher(deps);
+    await pub.handleMessage(hello("v1"), transports[0]!);
+    const video = peers[0]!.senders.find((s) => s.trackKind === "video")!;
+    expect(video.applied).toHaveLength(1);
+
+    peers[0]!.simulateState("connected");
+    await Bun.sleep(0);   // applySenderQuality は非同期
+    expect(video.applied).toHaveLength(2);
+    expect(video.applied[1]!.degradationPreference).toBe("maintain-resolution");
+    expect(video.applied[1]!.encodings).toEqual([{ maxBitrate: CLEAN_FEED_MAX_BITRATE }]);
+  });
+
+  test("captureStream 開始（createStream）は onViewersChange の後（高解像度化してから掴む）", async () => {
+    const { deps, transports } = makeFakes();
+    const order: string[] = [];
+    const origCreate = deps.createStream;
+    deps.createStream = () => {
+      order.push("createStream");
+      return origCreate();
+    };
+    const pub = new CleanFeedPublisher(deps);
+    pub.onViewersChange = () => { order.push("viewersChange"); };
+    await pub.handleMessage(hello("v1"), transports[0]!);
+    expect(order).toEqual(["viewersChange", "createStream"]);
   });
 
   test("不正メッセージ・未知 viewer 宛ては無視する", async () => {
