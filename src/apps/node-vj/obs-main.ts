@@ -4,8 +4,11 @@
 // ステータステキストを出し、接続したら消す。切断時は自動で再接続を試みる
 // （メインタブのリロードにも追従）。video は autoplay 許可のため muted（OBS 側は
 // 「ページの音声を OBS で制御する」でページ内の WebRTC 音声を取り込める）。
-import { CLEAN_FEED_CHANNEL } from "./clean-feed-protocol";
+// シグナリングは dev サーバの WS リレー（/cf-signal）を主経路に（OBS のブラウザソースは
+// OBS 内蔵の別ブラウザで動くため BroadcastChannel はメインタブへ届かない）、
+// BroadcastChannel を同一ブラウザ内のフォールバックとして併用する。
 import { asPeerLike } from "./clean-feed";
+import { BroadcastChannelTransport, WsSignalTransport, wsSignalUrl } from "./clean-feed-transport";
 import { CleanFeedViewer, newViewerId } from "./clean-feed-viewer";
 
 const video = document.getElementById("out");
@@ -14,7 +17,10 @@ if (!(video instanceof HTMLVideoElement)) throw new Error("clean feed video not 
 
 const viewer = new CleanFeedViewer(
   {
-    channel: new BroadcastChannel(CLEAN_FEED_CHANNEL),
+    transports: [
+      new WsSignalTransport(wsSignalUrl(location)),
+      new BroadcastChannelTransport(),
+    ],
     createPeerConnection: () => asPeerLike(new RTCPeerConnection({ iceServers: [] })),
     onStream: (stream) => {
       video.srcObject = stream;
