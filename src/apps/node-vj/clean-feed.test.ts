@@ -5,13 +5,17 @@
 // 返信は hello が届いた transport へ返す（OBS の別ブラウザ問題対応）。
 import { describe, expect, test } from "bun:test";
 import {
+  CLEAN_FEED_DEGRADATION,
   CLEAN_FEED_MAX_BITRATE,
   CleanFeedPublisher,
   HELLO_DEDUPE_MS,
+  preferH264,
+  type CleanFeedCodec,
   type CleanFeedPeerLike,
   type CleanFeedPublisherDeps,
   type CleanFeedSenderLike,
   type CleanFeedSendParameters,
+  type CleanFeedTransceiverLike,
 } from "./clean-feed";
 import type { CleanFeedTransport } from "./clean-feed-transport";
 
@@ -26,9 +30,16 @@ interface FakeSender extends CleanFeedSenderLike {
   applied: CleanFeedSendParameters[];
 }
 
+interface FakeTransceiver extends CleanFeedTransceiverLike {
+  trackKind: string;
+  /** setCodecPreferences の呼び出しを記録する。 */
+  prefs: CleanFeedCodec[][];
+}
+
 interface FakePeer extends CleanFeedPeerLike {
   addedTracks: { track: unknown; stream: unknown }[];
   senders: FakeSender[];
+  transceivers: FakeTransceiver[];
   localDesc: RTCSessionDescriptionInit | null;
   remoteDesc: RTCSessionDescriptionInit | null;
   iceCandidates: RTCIceCandidateInit[];
@@ -52,24 +63,40 @@ function makeTransport(): FakeTransport {
   };
 }
 
+/** 既定の fake capabilities（VP8 が先・H264 は pm=0 → pm=1 の順で混ぜてある）。 */
+function defaultCodecs(): CleanFeedCodec[] {
+  return [
+    { mimeType: "video/VP8" },
+    { mimeType: "video/H264", sdpFmtpLine: "profile-level-id=42001f;packetization-mode=0" },
+    { mimeType: "video/H264", sdpFmtpLine: "profile-level-id=42e01f;packetization-mode=1" },
+    { mimeType: "video/VP9", sdpFmtpLine: "profile-id=0" },
+    { mimeType: "video/rtx" },
+  ];
+}
+
 function makeFakes(transportCount = 1): {
   deps: CleanFeedPublisherDeps;
   transports: FakeTransport[];
   peers: FakePeer[];
   streams: { stream: MediaStream; stopped: boolean }[];
   clock: { now: number };
+  /** getVideoCodecCapabilities の返り値（テストから差し替え可能）。 */
+  capsBox: { value: { codecs: CleanFeedCodec[] } | null };
 } {
   const peers: FakePeer[] = [];
   const streams: { stream: MediaStream; stopped: boolean }[] = [];
   const transports = Array.from({ length: transportCount }, makeTransport);
   const clock = { now: 100_000 };
+  const capsBox: { value: { codecs: CleanFeedCodec[] } | null } = { value: { codecs: defaultCodecs() } };
   const deps: CleanFeedPublisherDeps = {
     transports,
     now: () => clock.now,
+    getVideoCodecCapabilities: () => capsBox.value,
     createPeerConnection: () => {
       const p: FakePeer = {
         addedTracks: [],
         senders: [],
+        transceivers: [],
         localDesc: null,
         remoteDesc: null,
         iceCandidates: [],
@@ -91,8 +118,16 @@ function makeFakes(transportCount = 1): {
             },
           };
           this.senders.push(sender);
+          // 実 RTCPeerConnection と同様、addTrack で transceiver も増える（sender は同一参照）。
+          this.transceivers.push({
+            trackKind: sender.trackKind,
+            sender,
+            prefs: [],
+            setCodecPreferences(codecs) { this.prefs.push([...codecs]); },
+          });
           return sender;
         },
+        getTransceivers() { return this.transceivers; },
         createOffer: () => Promise.resolve({ type: "offer" as const, sdp: "offer-sdp" }),
         createAnswer: () => Promise.resolve({ type: "answer" as const, sdp: "answer-sdp" }),
         setLocalDescription(d) { this.localDesc = d ?? null; return Promise.resolve(); },
@@ -122,7 +157,7 @@ function makeFakes(transportCount = 1): {
       if (rec) rec.stopped = true;
     },
   };
-  return { deps, transports, peers, streams, clock };
+  return { deps, transports, peers, streams, clock, capsBox };
 }
 
 const hello = (viewerId: string): unknown => ({ type: "cf:hello", viewerId });
@@ -130,6 +165,22 @@ const hello = (viewerId: string): unknown => ({ type: "cf:hello", viewerId });
 function sentOfType(t: FakeTransport, type: string): unknown[] {
   return t.sent.filter((m) => (m as { type: string }).type === type);
 }
+
+describe("preferH264 (#283)", () => {
+  test("H264 を先頭へ（packetization-mode=1 優先・各グループ内は元の順）", () => {
+    const sorted = preferH264(defaultCodecs());
+    expect(sorted.map((c) => c.mimeType)).toEqual([
+      "video/H264", "video/H264", "video/VP8", "video/VP9", "video/rtx",
+    ]);
+    expect(sorted[0]!.sdpFmtpLine).toContain("packetization-mode=1");
+    expect(sorted[1]!.sdpFmtpLine).toContain("packetization-mode=0");
+  });
+
+  test("H264 が無ければ元の順のまま", () => {
+    const codecs: CleanFeedCodec[] = [{ mimeType: "video/VP8" }, { mimeType: "video/VP9" }];
+    expect(preferH264(codecs)).toEqual(codecs);
+  });
+});
 
 describe("CleanFeedPublisher (#283)", () => {
   test("hello で PC を張り offer を返す（track 追加・viewer 数 1・変更通知）", async () => {
@@ -350,7 +401,7 @@ describe("CleanFeedPublisher (#283)", () => {
     const video = peers[0]!.senders.find((s) => s.trackKind === "video")!;
     const audio = peers[0]!.senders.find((s) => s.trackKind === "audio")!;
     expect(video.applied).toHaveLength(1);
-    expect(video.applied[0]!.degradationPreference).toBe("maintain-resolution");
+    expect(video.applied[0]!.degradationPreference).toBe(CLEAN_FEED_DEGRADATION);
     expect(video.applied[0]!.encodings).toEqual([{ maxBitrate: CLEAN_FEED_MAX_BITRATE }]);
     expect(audio.applied).toHaveLength(0);
   });
@@ -365,8 +416,39 @@ describe("CleanFeedPublisher (#283)", () => {
     peers[0]!.simulateState("connected");
     await Bun.sleep(0);   // applySenderQuality は非同期
     expect(video.applied).toHaveLength(2);
-    expect(video.applied[1]!.degradationPreference).toBe("maintain-resolution");
+    expect(video.applied[1]!.degradationPreference).toBe(CLEAN_FEED_DEGRADATION);
     expect(video.applied[1]!.encodings).toEqual([{ maxBitrate: CLEAN_FEED_MAX_BITRATE }]);
+  });
+
+  test("コーデック優先: 映像 transceiver に H264 先頭の並びを適用（音声は触らない）", async () => {
+    const { deps, transports, peers } = makeFakes();
+    const pub = new CleanFeedPublisher(deps);
+    await pub.handleMessage(hello("v1"), transports[0]!);
+
+    const video = peers[0]!.transceivers.find((t) => t.trackKind === "video")!;
+    const audio = peers[0]!.transceivers.find((t) => t.trackKind === "audio")!;
+    expect(video.prefs).toHaveLength(1);
+    expect(video.prefs[0]!.map((c) => c.mimeType).slice(0, 2)).toEqual(["video/H264", "video/H264"]);
+    expect(video.prefs[0]![0]!.sdpFmtpLine).toContain("packetization-mode=1");
+    expect(audio.prefs).toHaveLength(0);
+  });
+
+  test("コーデック優先: capabilities が無い環境ではスキップする（従来動作）", async () => {
+    const { deps, transports, peers, capsBox } = makeFakes();
+    capsBox.value = null;
+    const pub = new CleanFeedPublisher(deps);
+    await pub.handleMessage(hello("v1"), transports[0]!);
+    expect(peers[0]!.transceivers.every((t) => t.prefs.length === 0)).toBe(true);
+    // 接続自体は従来どおり成立する（offer は送られる）
+    expect(sentOfType(transports[0]!, "cf:offer")).toHaveLength(1);
+  });
+
+  test("コーデック優先: H264 が capabilities に無ければスキップする", async () => {
+    const { deps, transports, peers, capsBox } = makeFakes();
+    capsBox.value = { codecs: [{ mimeType: "video/VP8" }, { mimeType: "video/VP9" }] };
+    const pub = new CleanFeedPublisher(deps);
+    await pub.handleMessage(hello("v1"), transports[0]!);
+    expect(peers[0]!.transceivers.every((t) => t.prefs.length === 0)).toBe(true);
   });
 
   test("captureStream 開始（createStream）は onViewersChange の後（高解像度化してから掴む）", async () => {

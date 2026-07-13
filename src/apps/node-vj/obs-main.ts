@@ -21,7 +21,12 @@ const viewer = new CleanFeedViewer(
       new WsSignalTransport(wsSignalUrl(location)),
       new BroadcastChannelTransport(),
     ],
-    createPeerConnection: () => asPeerLike(new RTCPeerConnection({ iceServers: [] })),
+    createPeerConnection: () => {
+      const pc = new RTCPeerConnection({ iceServers: [] });
+      // デバッグ/E2E 用: 最新の PC を公開し、getStats で受信コーデック・fps・解像度を確認できるようにする。
+      (window as unknown as { __cfPeer?: RTCPeerConnection }).__cfPeer = pc;
+      return asPeerLike(pc);
+    },
     onStream: (stream) => {
       video.srcObject = stream;
       void video.play().catch(() => { /* muted なので通常は autoplay 可。失敗しても track 到着で再生される */ });

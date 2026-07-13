@@ -110,6 +110,23 @@ publisher が hello ごとに映像トラック/sender へ以下を適用する:
 - E2E（別ブラウザ構成）では受信側 video が 1920×1080 に到達し、10 秒後も維持されることを assert
   する（ダウンスケールは時間経過で起きるため）。
 
+### コーデック: H.264 最優先（fps 維持）
+
+> **改訂の経緯（2 回目）**: maintain-resolution 適用後の OBS 実機確認で今度は「fps がカクカク」
+> と発覚。原因はブラウザ既定の VP8 が**ソフトウェアエンコード**で、1080p60 の高エントロピー映像の
+> リアルタイム圧縮に CPU が間に合わず、解像度維持のしわ寄せが全部 fps に行っていたため。
+> 「解像度 vs fps」のトレードオフに見えるが実体はエンコーダ選択の問題。
+
+- offer 作成前に映像 transceiver へ `setCodecPreferences(preferH264(caps.codecs))` を適用し、
+  **H.264（packetization-mode=1 優先）を最優先**にする。macOS では VideoToolbox の
+  **ハードウェアエンコード**が使われ、CPU 律速が外れて解像度と fps を両立できる。
+- `getCapabilities`/`setCodecPreferences` 非対応・H.264 なしの環境では並べ替えをスキップして
+  従来動作（例外は warn のみ）。
+- **実測（別ブラウザ構成・実 GPU の publisher）**: 受信コーデック H264・1920×1080 維持・
+  送信 60fps・受信平均 52fps（計測側ヘッドレスのデコード都合込み）・
+  `qualityLimitationReason: "none"`（エンコーダ律速なし）。VP8 時代は同条件で 480×270 まで
+  ダウンスケール（修正 1 前）→ 1080p だが低 fps（修正 1 後）だった。
+
 ## viewer（`obs.html` ＋ `obs-main.ts` / `clean-feed-viewer.ts`）
 
 - UI なし・黒背景・`<video autoplay muted playsinline>` 全画面（object-fit: contain）。

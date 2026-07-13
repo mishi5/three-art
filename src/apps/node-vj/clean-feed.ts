@@ -27,6 +27,13 @@ export const HELLO_DEDUPE_MS = 1000;
  */
 export const CLEAN_FEED_MAX_BITRATE = 40_000_000;
 
+/**
+ * 映像 sender の degradationPreference。"maintain-resolution" は負荷/帯域不足時に解像度でなく
+ * fps を落とす（既定 balanced だと 1080p が 480p 相当までダウンスケールされる）。
+ * fps と解像度のバランスを変えたくなったらここを一箇所変更する。
+ */
+export const CLEAN_FEED_DEGRADATION = "maintain-resolution";
+
 /** RTCRtpSendParameters の最小サーフェス（degradation/ビットレート設定に使う分だけ）。 */
 export interface CleanFeedSendParameters {
   degradationPreference?: string;
@@ -39,6 +46,19 @@ export interface CleanFeedSenderLike {
   setParameters(params: CleanFeedSendParameters): Promise<void>;
 }
 
+/** RTCRtpCodecCapability の最小サーフェス（コーデック優先順の並べ替えに使う分だけ）。 */
+export interface CleanFeedCodec {
+  mimeType: string;
+  sdpFmtpLine?: string;
+}
+
+/** RTCRtpTransceiver の最小サーフェス（コーデック優先順の適用に使う分だけ）。 */
+export interface CleanFeedTransceiverLike {
+  /** この transceiver の sender（addTrack が返した sender と同一性比較する）。 */
+  sender: unknown;
+  setCodecPreferences(codecs: CleanFeedCodec[]): void;
+}
+
 /** RTCPeerConnection の最小サーフェス（publisher/viewer 共用・テストではフェイクを注入する）。 */
 export interface CleanFeedPeerLike {
   connectionState: string;
@@ -46,6 +66,7 @@ export interface CleanFeedPeerLike {
   onconnectionstatechange: (() => void) | null;
   ontrack: ((ev: RTCTrackEvent) => void) | null;
   addTrack(track: MediaStreamTrack, stream: MediaStream): CleanFeedSenderLike;
+  getTransceivers(): CleanFeedTransceiverLike[];
   createOffer(): Promise<RTCSessionDescriptionInit>;
   createAnswer(): Promise<RTCSessionDescriptionInit>;
   setLocalDescription(desc: RTCSessionDescriptionInit): Promise<void>;
@@ -67,6 +88,11 @@ export interface CleanFeedPublisherDeps {
    * 共有するため、実装（domCleanFeedDeps）では video トラックのみ stop する。
    */
   stopStream(stream: MediaStream): void;
+  /**
+   * 映像コーデックの capabilities（`RTCRtpSender.getCapabilities("video")`）。
+   * 未対応環境は null（コーデック並べ替えをスキップして従来動作）。省略可（テスト互換）。
+   */
+  getVideoCodecCapabilities?(): { codecs: CleanFeedCodec[] } | null;
   /** hello デデュープ用の現在時刻（テスト用に注入可能・既定 Date.now）。 */
   now?: () => number;
 }
@@ -88,10 +114,28 @@ function toCandidateInit(c: RTCIceCandidate): RTCIceCandidateInit {
 /** 切断とみなす connectionState（片付けの対象）。 */
 const GONE_STATES = new Set(["failed", "disconnected", "closed"]);
 
+const H264_RE = /H264/i;
+
+/**
+ * コーデック一覧を H.264 最優先（その中でも packetization-mode=1 を先）に並べ替える。
+ * VP8 ソフトウェアエンコードは 1080p60 の高エントロピー映像（パーティクル等）に間に合わず
+ * fps が崩壊する。H.264 なら macOS では VideoToolbox のハードウェアエンコードが使われ、
+ * 解像度（maintain-resolution）と fps を両立できる。元の相対順は各グループ内で維持する。
+ */
+export function preferH264(codecs: readonly CleanFeedCodec[]): CleanFeedCodec[] {
+  const isH264 = (c: CleanFeedCodec): boolean => H264_RE.test(c.mimeType);
+  const isPm1 = (c: CleanFeedCodec): boolean => (c.sdpFmtpLine ?? "").includes("packetization-mode=1");
+  return [
+    ...codecs.filter((c) => isH264(c) && isPm1(c)),
+    ...codecs.filter((c) => isH264(c) && !isPm1(c)),
+    ...codecs.filter((c) => !isH264(c)),
+  ];
+}
+
 /**
  * 映像 sender に画質優先のエンコーダ設定を適用する。
- * - degradationPreference "maintain-resolution": 負荷/帯域が足りないときは解像度でなく fps を
- *   落とす（既定 balanced だと 1080p が 480p 相当までダウンスケールされる）。
+ * - degradationPreference CLEAN_FEED_DEGRADATION（"maintain-resolution"）: 負荷/帯域が足りない
+ *   ときは解像度でなく fps を落とす（既定 balanced だと 1080p が 480p 相当までダウンスケールされる）。
  * - maxBitrate CLEAN_FEED_MAX_BITRATE: 既定の低いビットレート上限（〜2.5Mbps）を引き上げる。
  * negotiation 前は setParameters が失敗する環境があるため、呼び出し側は offer 直後に加えて
  * connectionState "connected" 後にも再適用する（失敗は warn のみ・接続自体は続行）。
@@ -99,7 +143,7 @@ const GONE_STATES = new Set(["failed", "disconnected", "closed"]);
 async function applySenderQuality(sender: CleanFeedSenderLike): Promise<void> {
   try {
     const params = sender.getParameters();
-    params.degradationPreference = "maintain-resolution";
+    params.degradationPreference = CLEAN_FEED_DEGRADATION;
     if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
     for (const enc of params.encodings) enc.maxBitrate = CLEAN_FEED_MAX_BITRATE;
     await sender.setParameters(params);
@@ -226,6 +270,9 @@ export class CleanFeedPublisher {
       }
     };
     for (const s of videoSenders) await applySenderQuality(s);
+    // #283: VP8 ソフトエンコードで fps が崩壊するため H.264（HW エンコード）を最優先にする。
+    // setCodecPreferences は offer 作成前に適用する必要がある。
+    this.preferVideoCodecs(pc, videoSenders);
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
@@ -233,6 +280,26 @@ export class CleanFeedPublisher {
     } catch (e) {
       console.warn("[clean-feed] offer failed:", e);
       this.removeViewer(viewerId);
+    }
+  }
+
+  /**
+   * 映像 transceiver へ H.264 最優先のコーデック順を適用する（offer 作成前に呼ぶ）。
+   * getCapabilities/setCodecPreferences が無い環境・H.264 が無い環境ではスキップして
+   * 従来動作（ブラウザ既定＝多くは VP8）のまま。例外は warn のみで接続は続行する。
+   */
+  private preferVideoCodecs(pc: CleanFeedPeerLike, videoSenders: readonly CleanFeedSenderLike[]): void {
+    try {
+      const caps = this.deps.getVideoCodecCapabilities?.() ?? null;
+      if (!caps || !caps.codecs.some((c) => H264_RE.test(c.mimeType))) return;
+      const preferred = preferH264(caps.codecs);
+      for (const tr of pc.getTransceivers()) {
+        if ((videoSenders as readonly unknown[]).includes(tr.sender)) {
+          tr.setCodecPreferences(preferred);
+        }
+      }
+    } catch (e) {
+      console.warn("[clean-feed] setCodecPreferences failed:", e);
     }
   }
 
@@ -287,10 +354,26 @@ export function domCleanFeedDeps(
       new WsSignalTransport(wsSignalUrl(location)),
       new BroadcastChannelTransport(),
     ],
-    createPeerConnection: () => asPeerLike(new RTCPeerConnection({ iceServers: [] })),
+    createPeerConnection: () => {
+      const pc = new RTCPeerConnection({ iceServers: [] });
+      // デバッグ/E2E 用: 最新の PC を公開し、getStats で送信コーデック・encode fps・
+      // qualityLimitationReason・encoderImplementation（HW/SW）を確認できるようにする。
+      (window as unknown as { __cfPubPeer?: RTCPeerConnection }).__cfPubPeer = pc;
+      return asPeerLike(pc);
+    },
     createStream: () => source.getRecordingStream(OUTPUT_CAPTURE_FPS, true),
     stopStream: (stream) => {
       for (const t of stream.getVideoTracks()) t.stop();
+    },
+    getVideoCodecCapabilities: () => {
+      try {
+        if (typeof RTCRtpSender === "undefined" || typeof RTCRtpSender.getCapabilities !== "function") {
+          return null;
+        }
+        return RTCRtpSender.getCapabilities("video");
+      } catch {
+        return null;   // 未対応環境はコーデック並べ替えをスキップ
+      }
     },
   };
 }
