@@ -1207,6 +1207,42 @@ export const NODE_CATALOG = {
     ja: "色階調の段数。2 以上で量子化、0/1 で無効。",
     en: "Number of color levels. 2 or more quantizes; 0/1 disables.",
   },
+  "node.ScreenTone.desc": {
+    ja: "入力の明るさに応じて漫画のスクリーントーン（網点/多線/クロスハッチ）へ変換するエフェクト。auto は暗部=ベタ/クロスハッチ→中間=多線→明部=網点→ハイライト=白と段階的に切り替わる。",
+    en: "Converts the input into comic screentone (halftone dots / parallel lines / crosshatch) by luminance. auto steps through solid ink, crosshatch, lines, dots, and white as the image gets brighter.",
+  },
+  "node.ScreenTone.port.in": {
+    ja: "トーン化する元のテクスチャ。",
+    en: "Source texture to tone.",
+  },
+  "node.ScreenTone.port.texture": {
+    ja: "スクリーントーン適用後のテクスチャ。",
+    en: "Texture after the screentone.",
+  },
+  "node.ScreenTone.param.mode": {
+    ja: "トーンの種類。auto は輝度帯で自動選択、dot/line/cross は固定。",
+    en: "Tone type. auto picks per luminance band; dot/line/cross are fixed.",
+  },
+  "node.ScreenTone.param.scale": {
+    ja: "トーンの細かさ（画面高さあたりのセル数）。大きいほど細かい。",
+    en: "Tone fineness (cells per screen height). Larger = finer.",
+  },
+  "node.ScreenTone.param.angle": {
+    ja: "トーンの角度（度）。",
+    en: "Tone angle in degrees.",
+  },
+  "node.ScreenTone.param.gamma": {
+    ja: "トーン応答。輝度を pow(L, gamma) で補正する（>1 で暗め＝トーン濃いめ）。",
+    en: "Tone response. Corrects luminance with pow(L, gamma) (>1 = darker, heavier tone).",
+  },
+  "node.ScreenTone.param.color": {
+    ja: "出力色。mono は白地に黒インク、color はインクに元画像の色を使う。",
+    en: "Output color. mono is black ink on white; color keeps the source colors in the ink.",
+  },
+  "node.ScreenTone.param.mix": {
+    ja: "元画像とのブレンド量。0 で元画像のまま、1 でトーンのみ。",
+    en: "Blend with the source image. 0 = source only, 1 = tone only.",
+  },
   "node.ColorGrade.desc": {
     ja: "色相回転・彩度・明度・コントラストを調整するカラーコレクション。hueShift を Time/Sine で回すと色が巡回する。",
     en: "Color correction for hue rotation, saturation, brightness, and contrast. Rotate hueShift with Time/Sine to cycle colors.",

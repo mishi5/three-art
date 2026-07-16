@@ -36,6 +36,7 @@ import { BlurNode } from "./BlurNode";
 import { BloomNode } from "./BloomNode";
 import { RgbShiftNode } from "./RgbShiftNode";
 import { PixelateNode } from "./PixelateNode";
+import { ScreenToneNode } from "./ScreenToneNode";
 import { ColorGradeNode } from "./ColorGradeNode";
 import { CrtNode } from "./CrtNode";
 import { KaleidoscopeNode } from "./KaleidoscopeNode";
@@ -117,6 +118,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(KaleidoscopeNode);
   r.register(PixelateNode);
   r.register(RgbShiftNode);
+  r.register(ScreenToneNode);
   r.register(TextureTransformNode);
   // output（最終出力）
   r.register(ScreenNode);
