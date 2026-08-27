@@ -1572,6 +1572,115 @@ export const NODE_CATALOG = {
     ja: "ワープ右下隅の Y（正規化）。",
     en: "Warp bottom-right corner Y (normalized).",
   },
+  // #272: MIDI 入力ブリッジノード（MidiCC / MidiNote / MidiPad）と TriggerRouter。
+  "node.MidiCC.desc": {
+    ja: "実機 MIDI コントローラのノブ/フェーダー（Control Change）1 本を number 出力に変換する。LEARN ボタンを押してからノブを動かすと ch と CC 番号が自動で割り当たる。値が階段状に感じるときは後段に Smooth を繋ぐ。",
+    en: "Converts one knob/fader (Control Change) of a physical MIDI controller into a number output. Press LEARN and move a knob to assign the channel and CC number automatically. Add a Smooth node after it if the value feels steppy.",
+  },
+  "node.MidiCC.port.value": {
+    ja: "受信した CC 値を min〜max へ写像した number。未受信のあいだは min。",
+    en: "The received CC value mapped to min..max. Stays at min until the first message arrives.",
+  },
+  "node.MidiCC.param.channel": {
+    ja: "受信する MIDI チャンネル（1〜16）。0 は omni で全チャンネルを受ける。",
+    en: "MIDI channel to listen on (1-16). 0 means omni (any channel).",
+  },
+  "node.MidiCC.param.cc": {
+    ja: "受信する CC 番号（0〜127）。LEARN で自動設定される。",
+    en: "CC number to listen for (0-127). Set automatically by LEARN.",
+  },
+  "node.MidiCC.param.min": {
+    ja: "出力レンジの下限（ノブを絞りきったときの値）。max より大きくすると出力が反転する。",
+    en: "Lower bound of the output range (value when the knob is at minimum). Setting it above max inverts the output.",
+  },
+  "node.MidiCC.param.max": {
+    ja: "出力レンジの上限（ノブを回しきったときの値）。",
+    en: "Upper bound of the output range (value when the knob is at maximum).",
+  },
+  "node.MidiNote.desc": {
+    ja: "実機 MIDI のパッド/鍵盤 1 つを trigger・gate・velocity に変換する。LEARN ボタンを押してからパッドを叩くと ch と note 番号が自動で割り当たる。パッドごとに違う動作をさせたいときは、このノードを必要な数だけ置く。",
+    en: "Converts one pad/key of a physical MIDI device into trigger, gate and velocity. Press LEARN and hit a pad to assign the channel and note number automatically. Place one node per pad when each pad should do something different.",
+  },
+  "node.MidiNote.port.trigger": {
+    ja: "押された瞬間に 1 フレームだけ発火する trigger。",
+    en: "Trigger that fires for one frame when the pad is pressed.",
+  },
+  "node.MidiNote.port.gate": {
+    ja: "押されているあいだ 1、離すと 0 になる number。",
+    en: "Number that is 1 while the pad is held down and 0 once released.",
+  },
+  "node.MidiNote.port.velocity": {
+    ja: "叩いた強さ 0〜1（離すと 0）。",
+    en: "How hard the pad was hit, 0..1 (0 once released).",
+  },
+  "node.MidiNote.param.channel": {
+    ja: "受信する MIDI チャンネル（1〜16）。0 は omni で全チャンネルを受ける。",
+    en: "MIDI channel to listen on (1-16). 0 means omni (any channel).",
+  },
+  "node.MidiNote.param.note": {
+    ja: "受信する note 番号（0〜127）。LEARN で自動設定される。",
+    en: "Note number to listen for (0-127). Set automatically by LEARN.",
+  },
+  "node.MidiPad.desc": {
+    ja: "実機 MIDI パッドコントローラの 4×4 を 1 ノードで受ける。baseNote から 16 個連番で拾い、叩かれたパッドの番号を index に出す。index と trigger を SamplePad / ClipLauncher の padIdx / padTrig へ繋ぐと実機パッドでそれらを叩ける。パッドごとに別の動作をさせたいときは TriggerRouter を挟む。",
+    en: "Receives a 4x4 physical MIDI pad controller in a single node. Picks up 16 consecutive notes starting at baseNote and outputs the index of the pad that was hit. Wire index and trigger into a SamplePad / ClipLauncher padIdx / padTrig to play those from real pads, or insert a TriggerRouter to give each pad its own action.",
+  },
+  "node.MidiPad.port.index": {
+    ja: "最後に叩かれたパッドの番号 0〜15（次に叩かれるまで保持される）。",
+    en: "Index 0-15 of the pad that was hit last (held until the next hit).",
+  },
+  "node.MidiPad.port.trigger": {
+    ja: "いずれかのパッドが叩かれた瞬間に 1 フレームだけ発火する trigger。",
+    en: "Trigger that fires for one frame whenever any pad is hit.",
+  },
+  "node.MidiPad.port.velocity": {
+    ja: "最後に叩いたパッドの強さ 0〜1（次に叩かれるまで保持される）。",
+    en: "How hard the last pad was hit, 0..1 (held until the next hit).",
+  },
+  "node.MidiPad.param.channel": {
+    ja: "受信する MIDI チャンネル（1〜16）。0 は omni で全チャンネルを受ける。",
+    en: "MIDI channel to listen on (1-16). 0 means omni (any channel).",
+  },
+  "node.MidiPad.param.baseNote": {
+    ja: "左上パッドの note 番号。ここから 16 個連番で拾う。既定 36 は多くのパッドコントローラの左上。LEARN で左上パッドを叩くと自動設定される。",
+    en: "Note number of the top-left pad; 16 consecutive notes are picked up from here. The default 36 matches most pad controllers. Press LEARN and hit the top-left pad to set it automatically.",
+  },
+  "node.TriggerRouter.desc": {
+    ja: "index を受けて、対応する 1 本の trigger だけを発火させる分配ノード。MidiPad の index / trig を繋ぐとパッドごとに別の動作へ配線できる。MIDI 専用ではなく TapSequencer や BeatClock の分配にも使える。",
+    en: "Router that takes an index and fires only the matching trigger output. Wire a MidiPad index/trig into it to give each pad its own action. Not MIDI-specific: it also works for distributing TapSequencer or BeatClock output.",
+  },
+  "node.TriggerRouter.port.index": {
+    ja: "どの出力を発火させるかの番号（四捨五入・offset を足して振り分ける）。",
+    en: "Which output to fire. Rounded, then offset is added before routing.",
+  },
+  "node.TriggerRouter.port.trig": {
+    ja: "発火のきっかけ。接続時はこの立ち上がりで発火する。未接続なら index が変化した瞬間に発火する。",
+    en: "Fire source. When connected, output fires on its rising edge; when left unconnected, output fires whenever index changes.",
+  },
+  "node.TriggerRouter.port.out": {
+    ja: "index に対応するとき 1 フレームだけ発火する trigger。範囲外の index では何も発火しない。",
+    en: "Trigger that fires for one frame when index matches it. An out-of-range index fires nothing.",
+  },
+  "node.TriggerRouter.param.offset": {
+    ja: "index に足すずらし幅。17 個目以降を 2 台目の TriggerRouter で受けるときに使う（offset -16 で index 16〜31 を t1〜t16 に割り当てる）。",
+    en: "Shift added to index. Use it to handle the 17th and later entries with a second TriggerRouter (offset -16 maps index 16-31 onto t1-t16).",
+  },
+  "node.SamplePad.port.padIndex": {
+    ja: "外部から鳴らすパッドの番号 0〜15。padTrig と併せて MidiPad の index / trig を繋ぐ。",
+    en: "Index 0-15 of the pad to play from outside. Wire it together with padTrig from a MidiPad index/trig.",
+  },
+  "node.SamplePad.port.padTrig": {
+    ja: "外部からの発音トリガ。立ち上がりで padIdx のパッドを鳴らす（クリックと同じ経路）。",
+    en: "External play trigger. On its rising edge the pad at padIdx is played, exactly as a click would.",
+  },
+  "node.ClipLauncher.port.padIndex": {
+    ja: "外部から起動するパッドの番号 0〜15。padTrig と併せて MidiPad の index / trig を繋ぐ。",
+    en: "Index 0-15 of the pad to launch from outside. Wire it together with padTrig from a MidiPad index/trig.",
+  },
+  "node.ClipLauncher.port.padTrig": {
+    ja: "外部からの起動トリガ。立ち上がりで padIdx のパッドを起動する（sync のクオンタイズ挙動はクリックと同じ）。",
+    en: "External launch trigger. On its rising edge the pad at padIdx is launched, following the same sync quantization as a click.",
+  },
 } as const satisfies Catalog;
 
 /** ノード文言カタログのキー型。 */

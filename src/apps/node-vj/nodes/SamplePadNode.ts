@@ -31,6 +31,8 @@ export class SamplePadRuntime {
   private active = new Map<AudioBufferSourceNode, number>();
   /** #205: いずれかのパッドが押された（playPad された）ことを示すラッチ。evaluate で消費し 1 フレームだけ true を返す。 */
   private pressed = false;
+  /** #272: padTrig 入力のエッジ検出用（前フレームの値）。 */
+  private prevPadTrig = false;
 
   constructor(ctx: AudioContext) {
     this.ctx = ctx;
@@ -76,6 +78,19 @@ export class SamplePadRuntime {
     };
     this.active.set(src, index);
     src.start(0);
+  }
+
+  /**
+   * #272: padTrig 入力の立ち上がりで padIndex のパッドを鳴らす（MidiPad からの配線用）。
+   * マウスクリック経路（main.ts）と同じ playPad を通るので、発音・trigger 出力の振る舞いは同じ。
+   */
+  padTriggerFromInput(index: unknown, trig: unknown): void {
+    const now = Boolean(trig);
+    const rising = now && !this.prevPadTrig;
+    this.prevPadTrig = now;
+    if (!rising) return;
+    const i = Math.round(Number(index));
+    if (Number.isFinite(i)) this.playPad(i);
   }
 
   /** #205: 指定パッドで発音中の音だけを停止する（再割当/解除のタイミングで古い音を切る）。 */
@@ -140,7 +155,12 @@ export const SamplePadNode: NodeTypeDef = {
   description: "node.SamplePad.desc",
   isSink: false,
   padGrid: { rows: PAD_ROWS, cols: PAD_COLS },
-  inputs: [],
+  // #272: 実機 MIDI パッド（MidiPad）や BeatClock/TapSequencer から外部起動するための口。
+  // padTrig の立ち上がりで padIndex のパッドを鳴らす。
+  inputs: [
+    { id: "padIndex", label: "padIdx", type: "number", description: "node.SamplePad.port.padIndex" },
+    { id: "padTrig", label: "padTrig", type: "trigger", description: "node.SamplePad.port.padTrig" },
+  ],
   outputs: [
     SIGNAL_OUTPUT,
     // #205: いずれかのパッド押下時に 1 フレームだけ発火する trigger（boolean）。Envelope/Flash 等へ繋げる。
@@ -158,6 +178,8 @@ export const SamplePadNode: NodeTypeDef = {
     const s = ctx.state as SamplePadRuntime | undefined;
     if (!s) return { ...signalOutput(null), trigger: false };
     s.setVolume(Number(ctx.param("volume") ?? 1));
+    // #272: 外部からのパッド起動（発音は下の押下ラッチ経由で trigger 出力にも乗る）。
+    s.padTriggerFromInput(ctx.input("padIndex"), ctx.input("padTrig"));
     // #205: 押下ラッチを消費して trigger（boolean）として出力する（PulseNode と同じ表現）。
     return { ...signalOutput(s.mixGain), trigger: s.consumeTrigger() };
   },

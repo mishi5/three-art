@@ -112,8 +112,11 @@ describe("#281 ClipLauncherNode 定義", () => {
   });
 
   test("VideoFileInput と同等のポート構成（切替発火は launch・trigger は onset）", () => {
-    expect(ClipLauncherNode.inputs.map((p) => p.id)).toEqual(["sync"]);
+    expect(ClipLauncherNode.inputs.map((p) => p.id)).toEqual(["sync", "padIndex", "padTrig"]);
     expect(ClipLauncherNode.inputs[0]!.type).toBe("trigger");
+    // #272: 実機 MIDI パッド等からの外部起動用。
+    expect(ClipLauncherNode.inputs.find((p) => p.id === "padIndex")!.type).toBe("number");
+    expect(ClipLauncherNode.inputs.find((p) => p.id === "padTrig")!.type).toBe("trigger");
     // texture + launch（切替発火・旧 trigger の改名）+ 音響特徴量一式（trigger=onset）+ audio。
     expect(ClipLauncherNode.outputs.map((p) => p.id)).toEqual([
       "texture", "launch", "signal", "volume", "bass", "mid", "treble", "trigger", "audio",
@@ -700,5 +703,41 @@ describe("#281 PlaybackControl（トランスポート行＝アクティブク�
     rt.playPad(0);
     rt.step(undefined, true);
     expect(rt.getDuration()).toBe(0);
+  });
+});
+
+describe("#272 padTrig 外部起動（MidiPad からの配線）", () => {
+  test("立ち上がりで pending が立ち、次の step で切り替わる", async () => {
+    const { deps } = makeDeps();
+    const rt = new ClipLauncherRuntime(null, deps);
+    await rt.loadPadFile(2, videoFile());
+    rt.padTriggerFromInput(2, false);
+    expect(rt.step(undefined, true).switched).toBe(false);
+    rt.padTriggerFromInput(2, true);
+    expect(rt.step(undefined, true).switched).toBe(true);
+    expect(rt.activeIndex()).toBe(2);
+  });
+
+  test("押しっぱなしでは連続起動しない（立ち上がりのみ）", async () => {
+    const { deps } = makeDeps();
+    const rt = new ClipLauncherRuntime(null, deps);
+    await rt.loadPadFile(0, videoFile());
+    await rt.loadPadFile(1, videoFile());
+    rt.padTriggerFromInput(0, true);
+    expect(rt.step(undefined, true).switched).toBe(true);
+    // trig を保ったまま index だけ変えても再起動しない。
+    rt.padTriggerFromInput(1, true);
+    expect(rt.step(undefined, true).switched).toBe(false);
+    expect(rt.activeIndex()).toBe(0);
+  });
+
+  test("padIndex / padTrig 未接続では何も起こらない", async () => {
+    const { deps } = makeDeps();
+    const rt = new ClipLauncherRuntime(null, deps);
+    await rt.loadPadFile(0, videoFile());
+    rt.padTriggerFromInput(undefined, true);
+    expect(rt.step(undefined, true).switched).toBe(false);
+    rt.padTriggerFromInput(0, undefined);
+    expect(rt.step(undefined, true).switched).toBe(false);
   });
 });

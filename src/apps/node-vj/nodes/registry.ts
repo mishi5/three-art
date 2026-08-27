@@ -55,6 +55,10 @@ import { AudioReverbNode } from "./AudioReverbNode";
 import { AudioOutputNode } from "./AudioOutputNode";
 import { ScreenNode } from "./ScreenNode";
 import { SceneInputNode } from "./SceneInputNode";
+import { MidiCCNode } from "./MidiCCNode";
+import { MidiNoteNode } from "./MidiNoteNode";
+import { MidiPadNode } from "./MidiPadNode";
+import { TriggerRouterNode } from "./TriggerRouterNode";
 
 /** 既定ノードを登録したレジストリを返す。
  *  #227: 登録順はメニュー内の表示順（カテゴリ内）になるため、NODE_CATEGORIES の並びで揃える。 */
@@ -70,6 +74,10 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(SceneInputNode);
   r.register(SamplePadNode);
   r.register(ClipLauncherNode);
+  // #272: 実機 MIDI コントローラ入力。
+  r.register(MidiCCNode);
+  r.register(MidiNoteNode);
+  r.register(MidiPadNode);
   r.register(TextureGeneratorNode);
   r.register(NumberNode);
   r.register(TimeNode);
@@ -82,6 +90,7 @@ export function createDefaultRegistry(): NodeRegistry {
   r.register(TapSequencerNode);
   r.register(AutomationNode);
   r.register(FlipFlopNode);
+  r.register(TriggerRouterNode);
   r.register(EnvelopeNode);
   r.register(AddNode);
   r.register(MultiplyNode);
