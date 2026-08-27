@@ -21,7 +21,12 @@ describe("#205 SamplePadNode 定義", () => {
     expect(SamplePadNode.outputs.map((o) => o.id)).toEqual(["audio", "trigger"]);
     expect(SamplePadNode.outputs[0]!.type).toBe("audio");
     expect(SamplePadNode.outputs[1]!.type).toBe("trigger");
-    expect(SamplePadNode.inputs).toEqual([]);
+  });
+
+  test("#272 外部起動用の padIndex / padTrig 入力を持つ", () => {
+    expect(SamplePadNode.inputs.map((p) => p.id)).toEqual(["padIndex", "padTrig"]);
+    expect(SamplePadNode.inputs.find((p) => p.id === "padIndex")!.type).toBe("number");
+    expect(SamplePadNode.inputs.find((p) => p.id === "padTrig")!.type).toBe("trigger");
   });
 
   test("volume param（0..1 既定1）と hidden の padAssets を持つ", () => {
@@ -111,5 +116,51 @@ describe("#205 SamplePadRuntime stopPad / clearPad", () => {
     expect(rt.hasPad(2)).toBe(false);
     expect(rt.padLabel(2)).toBeNull();
     expect(active.size).toBe(0);
+  });
+});
+
+describe("#272 SamplePadRuntime padTrig 外部起動", () => {
+  /** playPad の呼び出しを記録する（実バッファ無しでも配線の振る舞いを検証できる）。 */
+  function spyRuntime(): { rt: SamplePadRuntime; played: number[] } {
+    const rt = new SamplePadRuntime(fakeAudioContext());
+    const played: number[] = [];
+    rt.playPad = (index: number) => { played.push(index); };
+    return { rt, played };
+  }
+
+  test("立ち上がりで 1 回だけ playPad を呼ぶ（押しっぱなしで連打しない）", () => {
+    const { rt, played } = spyRuntime();
+    rt.padTriggerFromInput(3, false);
+    expect(played).toEqual([]);
+    rt.padTriggerFromInput(3, true);
+    expect(played).toEqual([3]);
+    rt.padTriggerFromInput(3, true);
+    expect(played).toEqual([3]);
+  });
+
+  test("下がってから上がれば再発音する", () => {
+    const { rt, played } = spyRuntime();
+    rt.padTriggerFromInput(0, true);
+    rt.padTriggerFromInput(0, false);
+    rt.padTriggerFromInput(0, true);
+    expect(played).toEqual([0, 0]);
+  });
+
+  test("padIndex は四捨五入する", () => {
+    const { rt, played } = spyRuntime();
+    rt.padTriggerFromInput(2.6, true);
+    expect(played).toEqual([3]);
+  });
+
+  test("padIndex 未接続（undefined）では発音しない", () => {
+    const { rt, played } = spyRuntime();
+    rt.padTriggerFromInput(undefined, true);
+    expect(played).toEqual([]);
+  });
+
+  test("padTrig 未接続（undefined）では発音しない", () => {
+    const { rt, played } = spyRuntime();
+    rt.padTriggerFromInput(0, undefined);
+    expect(played).toEqual([]);
   });
 });

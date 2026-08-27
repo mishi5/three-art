@@ -7,7 +7,7 @@ import { addConnection, addNode, createGraph, findNode, replaceGraph, type Graph
 import { GraphRuntime } from "./graph/runtime";
 import { NodeEditor } from "./editor/NodeEditor";
 import { openPadOverlay } from "./editor/pad-overlay";
-import { padGridAccept } from "./editor/layout";
+import { padGridAccept, type MidiLearnInfo } from "./editor/layout";
 import { mountGraphPresetControls, mountProjectControls, type ProjectIoHooks } from "./editor/graph-io-controls";
 import { GraphStore, localStorageAdapter } from "./graph/graph-store";
 import { History } from "./graph/history";
@@ -398,6 +398,17 @@ type BeatClockControl = {
 };
 editor.onBeatClockTap = (id) => (runtime.getState(id) as BeatClockControl | undefined)?.tapNow?.();
 editor.beatClockInfo = (id) => (runtime.getState(id) as BeatClockControl | undefined)?.status?.();
+
+// #272: Midi 系ランタイムの duck-type（LEARN ボタン・割当ステータス・パッド押下インジケータ）。
+// BeatClock と同じ流儀で、UI からノード param を辿らずランタイムに表示情報を持たせている。
+type MidiControl = {
+  toggleLearn?: () => void;
+  learnInfo?: () => MidiLearnInfo;
+  padGates?: () => boolean[];
+};
+editor.onMidiLearnToggle = (id) => (runtime.getState(id) as MidiControl | undefined)?.toggleLearn?.();
+editor.midiLearnInfo = (id) => (runtime.getState(id) as MidiControl | undefined)?.learnInfo?.();
+editor.midiPadGates = (id) => (runtime.getState(id) as MidiControl | undefined)?.padGates?.();
 
 // #282: Screen の「⧉ 出力」トグル（pointerdown の user gesture 内で window.open される）と開閉状態。
 editor.onScreenOutputToggle = (id) => screenOutputs.toggle(id);

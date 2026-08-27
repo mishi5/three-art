@@ -154,6 +154,19 @@ export interface NodeTypeDef {
    * onScreenOutputToggle / screenOutputInfo コールバックで連携する。
    */
   screenOutput?: boolean;
+  /**
+   * #272: ノード上に MIDI Learn 行（LEARN ボタン＋割当ステータス）を描く目印
+   * （MidiCC/MidiNote/MidiPad）。ランタイム state に MidiLearn（learn.toggle/learn.waiting）を
+   * 持つ前提。learn は「受信した ch/番号を param へ書き戻す」だけなので、param は手編集も
+   * YAML 永続化もそのまま効く（待ち受けるイベント種別はノード自身が知っている）。
+   */
+  midiLearn?: boolean;
+  /**
+   * #272: ノード本体に MIDI パッドの押下インジケータ（rows×cols）を描く目印（MidiPad）。
+   * padGrid はファイル割当前提（クリックでダイアログ・Stop/拡大ボタン付き）で意味が違うため
+   * 流用せず別マーカーにする。ランタイム state に padGates(): boolean[] を持つ前提。
+   */
+  midiPad?: { rows: number; cols: number };
   /** visual/sink ノードの初期化（THREE オブジェクト生成・scene 追加等）。1 度だけ呼ばれる。 */
   createState?(env: NodeEnv): NodeState;
   /**

@@ -83,6 +83,8 @@ export class ClipLauncherRuntime implements PlaybackControl {
   private pending: number | null = null;
   private active: number | null = null;
   private prevSync = false;
+  /** #272: padTrig 入力のエッジ検出用（前フレームの値）。 */
+  private prevPadTrig = false;
   private videoSurface = new VideoTextureSurface();
   private imageSurface = new ImageTextureSurface();
   private previewCanvas: HTMLCanvasElement | null = null;
@@ -156,6 +158,20 @@ export class ClipLauncherRuntime implements PlaybackControl {
   playPad(index: number): void {
     if (!this.hasPad(index)) return;
     this.pending = index;
+  }
+
+  /**
+   * #272: padTrig 入力の立ち上がりで padIndex のパッドを起動する（MidiPad からの配線用）。
+   * マウスクリック経路（main.ts）と同じ playPad を通るので、sync のクオンタイズ挙動も同じ。
+   * step より前に呼ぶこと（pending を立ててから resolveLaunch に渡すため）。
+   */
+  padTriggerFromInput(index: unknown, trig: unknown): void {
+    const now = Boolean(trig);
+    const rising = now && !this.prevPadTrig;
+    this.prevPadTrig = now;
+    if (!rising) return;
+    const i = Math.round(Number(index));
+    if (Number.isFinite(i)) this.playPad(i);
   }
 
   /**
@@ -436,6 +452,9 @@ export const ClipLauncherNode: NodeTypeDef = {
   transport: true,
   inputs: [
     { id: "sync", label: "sync", type: "trigger", description: "node.ClipLauncher.port.sync" },
+    // #272: 実機 MIDI パッド（MidiPad）等から外部起動するための口。
+    { id: "padIndex", label: "padIdx", type: "number", description: "node.ClipLauncher.port.padIndex" },
+    { id: "padTrig", label: "padTrig", type: "trigger", description: "node.ClipLauncher.port.padTrig" },
   ],
   outputs: [
     { id: "texture", label: "tex", type: "texture", description: "node.ClipLauncher.port.texture" },
@@ -471,6 +490,8 @@ export const ClipLauncherNode: NodeTypeDef = {
     // #241: fade は映像（texture 輝度）と音声（mixGain）へ同時に掛ける（VideoFileInput と同じ）。
     const fade = readFade(ctx.param);
     s.setAudioFade(fade);
+    // #272: 外部からのパッド起動は step より前（pending を立ててから resolveLaunch に渡す）。
+    s.padTriggerFromInput(ctx.input("padIndex"), ctx.input("padTrig"));
     const { switched } = s.step(ctx.input("sync"), ctx.param("loop") !== "off");
     const texture = (ctx.env ? s.getTexture(ctx.env.renderer, fade) : null) ?? undefined;
     if (!audioOn) {
