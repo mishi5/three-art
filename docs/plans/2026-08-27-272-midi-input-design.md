@@ -91,7 +91,10 @@ class ControlBus {
 - `access.onstatechange` でデバイスの抜き差しに追従（新規ポートへ購読を張り直す）。
   ライブ中にケーブルが抜けても再接続で復帰する
 - ステータス: `idle` / `unsupported`（`navigator.requestMIDIAccess` 無し）/ `denied`（権限拒否）/
-  `no-device`（接続 0）/ `ready`。いずれも例外にせずステータス行に出し、ノードは既定値を出し続ける
+  `no-device`（接続 0）/ `ready`。いずれも例外にせずステータス行に出し、ノードは既定値を出し続ける。
+  **`no-device` の判定は `inputs.size` ではなく `state === "connected"` の数で行う**（切断済みポートは
+  `inputs` に残り続けるため、数だけで見ると BLE MIDI が切れた後も「デバイスあり」のままになり、
+  ステータス行に割当が出続けて「合っているのに効かない」状態になる）
 - **ノードの `disposeState` では止めない**。シーン切替で MIDI が切れないように、`SharedCamera` と同じ扱い
 
 ## ノード仕様
@@ -199,6 +202,17 @@ MIDI 専用ではなく、`TapSequencer` や `BeatClock` の出力を分配す�
 - **MIDI 出力**（パッドの LED を光らせ返す等）
 - **デバイス選択 param**。既定で全入力デバイスを受ける。デバイス名は接続順で変わりうるため
   param に持つとシーン保存の再現性が落ちる。複数台を使い分けたくなったら ch で分ける
+
+### Bluetooth MIDI について
+
+**追加実装は不要。** Web MIDI API は OS の MIDI ポート一覧を見せる API であり、macOS では
+BLE MIDI 機器を「Audio MIDI 設定」でペアリングすると CoreMIDI に通常の MIDI ポートとして
+登録される。USB 機器と区別なく `access.inputs` に現れるため、そのまま動く（Web Bluetooth API を
+使う実装は要らない）。後から接続された機器も `onstatechange` の張り直しで拾える。
+
+BLE は省電力で頻繁に切断・再接続するため、`no-device` 判定を `state` ベースにしてある（上記）。
+レイテンシは USB より大きい（接続間隔に律速され概ね 10ms 前後）が、パラメータ操作用途では実害は
+小さいと判断する。
 
 ### AudioContext についての既知の制約
 

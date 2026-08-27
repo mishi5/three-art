@@ -35,9 +35,9 @@ export class SharedMidi {
     return this.status;
   }
 
-  /** 接続中の入力デバイス数。 */
+  /** 接続中の入力デバイス数（切断済みポートは数えない）。 */
   deviceCount(): number {
-    return this.access ? this.access.inputs.size : 0;
+    return this.access ? connectedInputCount(this.access) : 0;
   }
 
   /**
@@ -85,8 +85,23 @@ export class SharedMidi {
         if (ev) this.bus.emit(ev);
       };
     }
-    this.status = access.inputs.size > 0 ? "ready" : "no-device";
+    // #272: inputs には切断済みのポートも state:"disconnected" として残り続ける。
+    // 数だけで判定すると BLE MIDI が切れた後も「デバイスあり」のままになり、
+    // ステータス行に割当が出続けて「合っているのに効かない」状態になる。
+    this.status = connectedInputCount(access) > 0 ? "ready" : "no-device";
   }
+}
+
+/**
+ * #272: 実際に繋がっている入力ポート数。inputs には切断済みポートも残るため state で絞る
+ * （BLE MIDI は省電力で頻繁に切れるので、ここを数だけで見ると表示が実態とずれる）。
+ */
+function connectedInputCount(access: MIDIAccess): number {
+  let n = 0;
+  for (const input of access.inputs.values()) {
+    if (input.state === "connected") n += 1;
+  }
+  return n;
 }
 
 /** 全 MIDI 系ノードが共有する単一インスタンス。 */
