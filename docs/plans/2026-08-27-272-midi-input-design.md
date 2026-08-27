@@ -239,5 +239,11 @@ src/apps/node-vj/editor/
   layout.ts / NodeEditor.ts               midiLearn 行・midiPad グリッドの描画
 src/apps/node-vj/main.ts                  runtime state ↔ エディタの連携
 src/apps/node-vj/i18n-nodes.ts            ja/en の説明文
-docs/vj-dj-feature-reference.md           6 節を ❌ → △（MIDI 対応・OSC 未対応）へ更新
 ```
+
+## 補足: 機能リファレンスの更新について
+
+Issue が参照している `docs/vj-dj-feature-reference.md` は main で未追跡（ローカル作業ファイル）
+のためこのブランチには存在せず、更新対象から外している。同ドキュメントの
+「6. MIDI / OSC コントローラ対応 ❌」と「`MidiPadNode` は名前に反して Web MIDI API を使わない」
+という記述は本対応で実態が変わるため、コミットされた時点で更新が必要。

@@ -3,6 +3,7 @@ import type { NodeInstance } from "../graph/graph-doc";
 import type { NodeTypeDef } from "../graph/node-type";
 import { signalInputs, isParamInput } from "../graph/node-ports";
 import { t } from "../i18n";
+import type { MidiLearnDisplay } from "../nodes/midi-node-logic";
 
 export const NODE_WIDTH = 168;
 export const TITLE_H = 26;
@@ -99,6 +100,19 @@ export function hasBeatClockRow(def: NodeTypeDef): boolean {
 /** #270: BeatClock が追加する行数（TAP ボタン＋ステータスの 1 行）。 */
 const BEATCLOCK_ROWS = 1;
 
+/** #272: MIDI Learn 行（LEARN ボタン＋割当ステータス）を出すか。 */
+export function hasMidiLearnRow(def: NodeTypeDef): boolean {
+  return !!def.midiLearn;
+}
+
+/** #272: MIDI Learn が追加する行数（LEARN ボタン＋ステータスの 1 行）。 */
+const MIDI_LEARN_ROWS = 1;
+
+/** #272: MIDI パッドの押下インジケータ（rows×cols）を出すか。 */
+export function hasMidiPadGrid(def: NodeTypeDef): boolean {
+  return !!def.midiPad;
+}
+
 /** #282: Screen の「⧉ 出力」トグル行（専用出力ウィンドウの開閉）を出すか。 */
 export function hasScreenOutputRow(def: NodeTypeDef): boolean {
   return !!def.screenOutput;
@@ -129,8 +143,12 @@ export function nodeHeight(def: NodeTypeDef): number {
   const beatClockRows = hasBeatClockRow(def) ? BEATCLOCK_ROWS * ROW_H : 0;
   // #282: Screen の「⧉ 出力」トグル行。
   const screenOutputRows = hasScreenOutputRow(def) ? SCREEN_OUTPUT_ROWS * ROW_H : 0;
+  // #272: MIDI Learn 行と、その下に来る MidiPad の押下インジケータ。
+  const midiLearnRows = hasMidiLearnRow(def) ? MIDI_LEARN_ROWS * ROW_H : 0;
+  const midiPadRows = hasMidiPadGrid(def) ? PAD_MARGIN_TOP + midiPadGridHeight(def) : 0;
   return TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H + randomRow + fileRows + transportRow
-    + sceneRow + padRows + tapRows + automationRows + beatClockRows + screenOutputRows + PADDING;
+    + sceneRow + padRows + tapRows + automationRows + beatClockRows + screenOutputRows
+    + midiLearnRows + midiPadRows + PADDING;
 }
 
 export function nodePos(node: NodeInstance): { x: number; y: number } {
@@ -572,4 +590,105 @@ import { PREVIEW_W, PREVIEW_H } from "../graph/preview";
 export function previewWindowRect(node: NodeInstance): { x: number; y: number; w: number; h: number } {
   const p = nodePos(node);
   return { x: p.x, y: p.y - PREVIEW_H - 8, w: PREVIEW_W, h: PREVIEW_H };
+}
+
+/** #272: MidiPad の押下インジケータ 1 マスの寸法（padGridMetrics と同じ算出）。midiPad 無しは null。 */
+export function midiPadGridMetrics(def: NodeTypeDef): {
+  rows: number; cols: number; padW: number; padH: number; gap: number; innerW: number;
+} | null {
+  if (!def.midiPad) return null;
+  const { rows, cols } = def.midiPad;
+  const innerW = NODE_WIDTH - 2 * PAD_MARGIN_X;
+  const padW = (innerW - (cols - 1) * PAD_GAP) / cols;
+  return { rows, cols, padW, padH: padW, gap: PAD_GAP, innerW };
+}
+
+/** #272: 押下インジケータ全体の高さ（全マス＋ギャップ）。midiPad 無しは 0。 */
+export function midiPadGridHeight(def: NodeTypeDef): number {
+  const m = midiPadGridMetrics(def);
+  if (!m) return 0;
+  return m.rows * m.padH + (m.rows - 1) * m.gap;
+}
+
+/** #272: params 直下の追加行が始まる y（ノード原点からの相対）。 */
+function extraRowTop(def: NodeTypeDef): number {
+  return TITLE_H + portRows(def) * ROW_H + visibleParamCount(def) * ROW_H;
+}
+
+/** #272: MIDI Learn 行（LEARN ボタン＋割当ステータス）の領域（params 直下・midiLearn 無しは null）。 */
+export function midiLearnRowRect(
+  node: NodeInstance, def: NodeTypeDef,
+): { x: number; y: number; w: number; h: number } | null {
+  if (!hasMidiLearnRow(def)) return null;
+  const p = nodePos(node);
+  return { x: p.x, y: p.y + extraRowTop(def), w: NODE_WIDTH, h: ROW_H };
+}
+
+/**
+ * #272: MIDI Learn 行を「LEARN ボタン」「割当ステータス」の 2 分割にする
+ * （寸法は beatClockRowLayout と同じ感覚: pad 6・gap 6・ボタン幅 54）。
+ */
+export function midiLearnRowLayout(rect: { x: number; y: number; w: number; h: number }): {
+  learn: { x: number; y: number; w: number; h: number };
+  status: { x: number; y: number; w: number; h: number };
+} {
+  const pad = 6, gap = 6, learnW = 54;
+  const learn = { x: rect.x + pad, y: rect.y + 2, w: learnW, h: rect.h - 4 };
+  const status = {
+    x: learn.x + learnW + gap, y: rect.y + 2,
+    w: rect.w - 2 * pad - learnW - gap, h: rect.h - 4,
+  };
+  return { learn, status };
+}
+
+/** #272: MIDI Learn 行のステータス表示に必要な情報（実体は各 Midi ランタイムが返す）。 */
+export type MidiLearnInfo = MidiLearnDisplay;
+
+/**
+ * #272: MIDI Learn 行のステータスラベル。
+ * 待機中 → 接続の問題 → 割当内容、の順で優先する（デバイスが無いのに割当だけ出ても
+ * 「なぜ効かないのか」が分からないため、接続の問題を先に見せる）。
+ */
+export function midiLearnStatusLabel(info: MidiLearnInfo | null | undefined): string {
+  if (!info) return t("node.midi.starting");
+  if (info.waiting) return t("node.midi.learning");
+  if (info.status === "unsupported") return t("node.midi.unsupported");
+  if (info.status === "denied") return t("node.midi.denied");
+  if (info.status === "no-device") return t("node.midi.noDevice");
+  if (info.status === "idle" || info.status === "starting") return t("node.midi.starting");
+  const ch = info.channel === 0
+    ? t("node.midi.omni")
+    : t("node.midi.channel", { n: info.channel });
+  const key = info.kind === "cc" ? "node.midi.assignedCc" : "node.midi.assignedNote";
+  return t(key, { ch, num: info.number });
+}
+
+/** #272: MidiPad の押下インジケータ全体の領域（MIDI Learn 行の直下・midiPad 無しは null）。 */
+export function midiPadGridRect(
+  node: NodeInstance, def: NodeTypeDef,
+): { x: number; y: number; w: number; h: number } | null {
+  const m = midiPadGridMetrics(def);
+  if (!m) return null;
+  const p = nodePos(node);
+  const learnRow = hasMidiLearnRow(def) ? ROW_H : 0;
+  const top = extraRowTop(def) + learnRow + PAD_MARGIN_TOP;
+  return { x: p.x + PAD_MARGIN_X, y: p.y + top, w: m.innerW, h: midiPadGridHeight(def) };
+}
+
+/** #272: 押下インジケータ 1 マスの領域（index は 0 始まり・範囲外は null）。 */
+export function midiPadRect(
+  node: NodeInstance, def: NodeTypeDef, index: number,
+): { x: number; y: number; w: number; h: number } | null {
+  const m = midiPadGridMetrics(def);
+  const grid = midiPadGridRect(node, def);
+  if (!m || !grid) return null;
+  if (index < 0 || index >= m.rows * m.cols) return null;
+  const col = index % m.cols;
+  const row = Math.floor(index / m.cols);
+  return {
+    x: grid.x + col * (m.padW + m.gap),
+    y: grid.y + row * (m.padH + m.gap),
+    w: m.padW,
+    h: m.padH,
+  };
 }

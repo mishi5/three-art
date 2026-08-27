@@ -4,16 +4,36 @@
 import type { NodeState, NodeTypeDef } from "../graph/node-type";
 import type { ControlBus } from "../midi/control-bus";
 import { sharedMidi } from "../midi/shared-midi";
-import { MidiLearn, scaleCc } from "./midi-node-logic";
+import { MidiLearn, scaleCc, type MidiLearnDisplay } from "./midi-node-logic";
 
 /** #272: MidiCC の永続状態。learn の待機状態を保持するだけで、値は ControlBus 側が持つ。 */
 export class MidiCCRuntime {
   readonly learn = new MidiLearn();
   readonly bus: ControlBus;
 
+  /** #272: 直近の評価で使った割当（UI 表示用。param を UI から辿らずに済ませる）。 */
+  private lastChannel = 0;
+  private lastNumber = 1;
+
   /** bus はテストで差し替えるために受け取る（既定は共有バス）。 */
   constructor(bus?: ControlBus) {
     this.bus = bus ?? sharedMidi.bus;
+  }
+
+  /** #272: LEARN ボタン（待機の開始/解除）。 */
+  toggleLearn(): void {
+    this.learn.toggle(this.bus);
+  }
+
+  /** #272: MIDI Learn 行の表示情報（NodeEditor が毎フレーム引く）。 */
+  learnInfo(): MidiLearnDisplay {
+    return {
+      waiting: this.learn.waiting,
+      status: sharedMidi.getStatus(),
+      channel: this.lastChannel,
+      number: this.lastNumber,
+      kind: "cc",
+    };
   }
 
   /**
@@ -29,6 +49,8 @@ export class MidiCCRuntime {
     if (learned) onLearn(learned.channel, learned.number);
     const ch = learned?.channel ?? channel;
     const num = learned?.number ?? cc;
+    this.lastChannel = ch;
+    this.lastNumber = num;
     const state = this.bus.cc(ch, num);
     return state ? scaleCc(state.value, min, max) : min;
   }

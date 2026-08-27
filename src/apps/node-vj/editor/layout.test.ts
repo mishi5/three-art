@@ -12,6 +12,8 @@ import {
   automationSeekFraction, automationStatusLabel,
   hasBeatClockRow, beatClockRowRect, beatClockRowLayout, beatClockStatusLabel,
   hasScreenOutputRow, screenOutputRowRect, screenOutputRowLayout, screenOutputStatusLabel,
+  hasMidiLearnRow, midiLearnRowRect, midiLearnRowLayout, midiLearnStatusLabel,
+  hasMidiPadGrid, midiPadGridMetrics, midiPadGridHeight, midiPadGridRect, midiPadRect,
   CATEGORY_COLORS,
 } from "./layout";
 import { NODE_CATEGORIES, type NodeTypeDef } from "../graph/node-type";
@@ -451,5 +453,136 @@ describe("#282 Screen 出力トグル行 layout", () => {
   test("screenOutputStatusLabel: 開いている間は出力中・それ以外は未出力", () => {
     expect(screenOutputStatusLabel(true)).toBe("出力中");
     expect(screenOutputStatusLabel(false)).toBe("未出力");
+  });
+});
+
+describe("#272 MIDI Learn 行", () => {
+  const learnDef: NodeTypeDef = {
+    type: "MidiCCLike",
+    midiLearn: true,
+    inputs: [],
+    outputs: [{ id: "value", label: "value", type: "number" }],
+    params: [{ id: "channel", label: "channel", kind: "int", default: 0, noInput: true }],
+    evaluate: () => ({}),
+  };
+  const learnNode: NodeInstance = { id: "n", type: "MidiCCLike", params: {}, position: { x: 10, y: 20 } };
+
+  test("midiLearn の有無で行の有無が決まる", () => {
+    expect(hasMidiLearnRow(learnDef)).toBe(true);
+    expect(hasMidiLearnRow(def)).toBe(false);
+    expect(midiLearnRowRect(node, def)).toBeNull();
+  });
+
+  test("行のぶんだけノードが高くなる", () => {
+    const withoutRow: NodeTypeDef = { ...learnDef, midiLearn: undefined };
+    expect(nodeHeight(learnDef) - nodeHeight(withoutRow)).toBe(ROW_H);
+  });
+
+  test("行は params 直下に置かれる（幅はノード幅いっぱい）", () => {
+    const r = midiLearnRowRect(learnNode, learnDef)!;
+    // portRows=1（value 出力）, 表示 param=1（channel）。
+    expect(r.y).toBe(20 + TITLE_H + 1 * ROW_H + 1 * ROW_H);
+    expect(r.x).toBe(10);
+    expect(r.w).toBe(NODE_WIDTH);
+    expect(r.h).toBe(ROW_H);
+  });
+
+  test("行は LEARN ボタンとステータスに分割され、重ならず行内に収まる", () => {
+    const r = midiLearnRowRect(learnNode, learnDef)!;
+    const { learn, status } = midiLearnRowLayout(r);
+    expect(learn.x).toBeGreaterThanOrEqual(r.x);
+    expect(status.x).toBeGreaterThanOrEqual(learn.x + learn.w);
+    expect(status.x + status.w).toBeLessThanOrEqual(r.x + r.w);
+    expect(status.w).toBeGreaterThan(0);
+  });
+});
+
+describe("#272 midiLearnStatusLabel", () => {
+  const base = { waiting: false, status: "ready" as const, channel: 1, number: 74, kind: "cc" as const };
+
+  test("待機中は接続状態や割当より優先して表示する", () => {
+    expect(midiLearnStatusLabel({ ...base, waiting: true })).toBe("操作待ち…");
+    expect(midiLearnStatusLabel({ ...base, waiting: true, status: "no-device" })).toBe("操作待ち…");
+  });
+
+  test("接続に問題があるときは割当より先にそれを見せる", () => {
+    expect(midiLearnStatusLabel({ ...base, status: "unsupported" })).toBe("MIDI 非対応");
+    expect(midiLearnStatusLabel({ ...base, status: "denied" })).toBe("MIDI 権限なし");
+    expect(midiLearnStatusLabel({ ...base, status: "no-device" })).toBe("デバイスなし");
+    expect(midiLearnStatusLabel({ ...base, status: "starting" })).toBe("接続中…");
+    expect(midiLearnStatusLabel({ ...base, status: "idle" })).toBe("接続中…");
+  });
+
+  test("接続できていれば割当内容を出す（channel 0 は omni）", () => {
+    expect(midiLearnStatusLabel(base)).toBe("ch1 CC74");
+    expect(midiLearnStatusLabel({ ...base, channel: 0 })).toBe("omni CC74");
+    expect(midiLearnStatusLabel({ ...base, kind: "note", number: 36 })).toBe("ch1 note36");
+  });
+
+  test("state 未生成（null）でも落ちない", () => {
+    expect(midiLearnStatusLabel(null)).toBe("接続中…");
+  });
+});
+
+describe("#272 MidiPad 押下インジケータ", () => {
+  const padDef: NodeTypeDef = {
+    type: "MidiPadLike",
+    midiLearn: true,
+    midiPad: { rows: 4, cols: 4 },
+    inputs: [],
+    outputs: [{ id: "index", label: "index", type: "number" }],
+    params: [{ id: "channel", label: "channel", kind: "int", default: 0, noInput: true }],
+    evaluate: () => ({}),
+  };
+  const padNode: NodeInstance = { id: "n", type: "MidiPadLike", params: {}, position: { x: 0, y: 0 } };
+
+  test("midiPad の有無でグリッドの有無が決まる", () => {
+    expect(hasMidiPadGrid(padDef)).toBe(true);
+    expect(hasMidiPadGrid(def)).toBe(false);
+    expect(midiPadGridMetrics(def)).toBeNull();
+    expect(midiPadGridHeight(def)).toBe(0);
+    expect(midiPadRect(node, def, 0)).toBeNull();
+  });
+
+  test("4×4 の正方マスがノード幅に収まる", () => {
+    const m = midiPadGridMetrics(padDef)!;
+    expect(m.rows).toBe(4);
+    expect(m.cols).toBe(4);
+    expect(m.padW).toBe(m.padH);
+    expect(m.innerW).toBe(NODE_WIDTH - 2 * PAD_MARGIN_X);
+    expect(m.cols * m.padW + (m.cols - 1) * m.gap).toBeCloseTo(m.innerW);
+  });
+
+  test("グリッドは MIDI Learn 行の下に置かれる（行と重ならない）", () => {
+    const learnRow = midiLearnRowRect(padNode, padDef)!;
+    const grid = midiPadGridRect(padNode, padDef)!;
+    expect(grid.y).toBe(learnRow.y + ROW_H + PAD_MARGIN_TOP);
+    expect(grid.x).toBe(PAD_MARGIN_X);
+  });
+
+  test("マスは左上から行優先で並び、範囲外は null", () => {
+    const grid = midiPadGridRect(padNode, padDef)!;
+    const m = midiPadGridMetrics(padDef)!;
+    const p0 = midiPadRect(padNode, padDef, 0)!;
+    expect(p0.x).toBe(grid.x);
+    expect(p0.y).toBe(grid.y);
+    const p4 = midiPadRect(padNode, padDef, 4)!; // 2 行目の先頭
+    expect(p4.x).toBe(grid.x);
+    expect(p4.y).toBeCloseTo(grid.y + m.padH + m.gap);
+    const p15 = midiPadRect(padNode, padDef, 15)!;
+    expect(p15.x + p15.w).toBeCloseTo(grid.x + grid.w);
+    expect(midiPadRect(padNode, padDef, 16)).toBeNull();
+    expect(midiPadRect(padNode, padDef, -1)).toBeNull();
+  });
+
+  test("ノード高さに Learn 行とグリッドの両方が含まれる", () => {
+    const plain: NodeTypeDef = { ...padDef, midiLearn: undefined, midiPad: undefined };
+    expect(nodeHeight(padDef) - nodeHeight(plain))
+      .toBeCloseTo(ROW_H + PAD_MARGIN_TOP + midiPadGridHeight(padDef));
+  });
+
+  test("グリッドがノード下端からはみ出さない", () => {
+    const grid = midiPadGridRect(padNode, padDef)!;
+    expect(grid.y + grid.h).toBeLessThanOrEqual(nodeHeight(padDef));
   });
 });

@@ -4,7 +4,7 @@
 import type { NodeState, NodeTypeDef } from "../graph/node-type";
 import type { ControlBus } from "../midi/control-bus";
 import { sharedMidi } from "../midi/shared-midi";
-import { MidiLearn, NoteEdge } from "./midi-node-logic";
+import { MidiLearn, NoteEdge, type MidiLearnDisplay } from "./midi-node-logic";
 
 /** step() の戻り値（出力ポート一式）。 */
 export interface MidiNoteOutputs {
@@ -19,8 +19,28 @@ export class MidiNoteRuntime {
   readonly bus: ControlBus;
   private edge = new NoteEdge();
 
+  /** #272: 直近の評価で使った割当（UI 表示用。param を UI から辿らずに済ませる）。 */
+  private lastChannel = 0;
+  private lastNumber = 36;
+
   constructor(bus?: ControlBus) {
     this.bus = bus ?? sharedMidi.bus;
+  }
+
+  /** #272: LEARN ボタン（待機の開始/解除）。 */
+  toggleLearn(): void {
+    this.learn.toggle(this.bus);
+  }
+
+  /** #272: MIDI Learn 行の表示情報（NodeEditor が毎フレーム引く）。 */
+  learnInfo(): MidiLearnDisplay {
+    return {
+      waiting: this.learn.waiting,
+      status: sharedMidi.getStatus(),
+      channel: this.lastChannel,
+      number: this.lastNumber,
+      kind: "note",
+    };
   }
 
   /**
@@ -35,6 +55,8 @@ export class MidiNoteRuntime {
     if (learned) onLearn(learned.channel, learned.number);
     const ch = learned?.channel ?? channel;
     const num = learned?.number ?? note;
+    this.lastChannel = ch;
+    this.lastNumber = num;
     const state = this.bus.note(ch, num);
     const trigger = this.edge.poll(`${ch}:${num}`, state?.onCount ?? 0);
     return {

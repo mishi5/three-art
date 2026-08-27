@@ -20,6 +20,8 @@ import {
   hasAutomationRows, automationSeekRowRect, automationControlRowRect, automationControlLayout,
   automationSeekFraction, automationStatusLabel,
   hasBeatClockRow, beatClockRowRect, beatClockRowLayout, beatClockStatusLabel,
+  hasMidiLearnRow, midiLearnRowRect, midiLearnRowLayout, midiLearnStatusLabel, type MidiLearnInfo,
+  hasMidiPadGrid, midiPadRect,
   hasScreenOutputRow, screenOutputRowRect, screenOutputRowLayout, screenOutputStatusLabel,
 } from "./layout";
 import { getOutputScale, setOutputScale, formatScale, DEFAULT_OUTPUT_SCALE } from "../graph/output-scale";
@@ -209,6 +211,12 @@ export class NodeEditor {
   onBeatClockTap?: (nodeId: string) => void;
   /** #270: BeatClock の状態（BPM・拍内位相・タップ受付中）を引く。任意。 */
   beatClockInfo?: (nodeId: string) => { bpm: number; phase: number; tapActive: boolean } | undefined;
+  /** #272: MIDI Learn ボタン（割当の待機開始/解除）。任意。 */
+  onMidiLearnToggle?: (nodeId: string) => void;
+  /** #272: MIDI Learn 行の表示情報（待機中か・接続状態・割当先）を引く。任意。 */
+  midiLearnInfo?: (nodeId: string) => MidiLearnInfo | undefined;
+  /** #272: MidiPad の押下インジケータ（16 マス分の gate）を引く。任意。 */
+  midiPadGates?: (nodeId: string) => boolean[] | undefined;
   /** #282: Screen の「⧉ 出力」トグルボタン（専用出力ウィンドウの開閉）。任意。 */
   onScreenOutputToggle?: (nodeId: string) => void;
   /** #282: Screen 専用出力ウィンドウの開閉状態を引く（main.ts の ScreenOutputs）。任意。 */
@@ -623,6 +631,17 @@ export class NodeEditor {
           const { tap } = beatClockRowLayout(br);
           if (w.x >= tap.x && w.x <= tap.x + tap.w && w.y >= tap.y && w.y <= tap.y + tap.h) {
             this.onBeatClockTap?.(hit.node.id);
+            return;
+          }
+        }
+      }
+      // #272: MIDI Learn ボタン（BeatClock の TAP と同じパターン・後続のノードドラッグへ流さない）。
+      if (def?.midiLearn) {
+        const mr = midiLearnRowRect(hit.node, def);
+        if (mr) {
+          const { learn } = midiLearnRowLayout(mr);
+          if (w.x >= learn.x && w.x <= learn.x + learn.w && w.y >= learn.y && w.y <= learn.y + learn.h) {
+            this.onMidiLearnToggle?.(hit.node.id);
             return;
           }
         }
@@ -1973,6 +1992,54 @@ export class NodeEditor {
         ellipsizeEnd(ctx, beatClockStatusLabel(info), status.w - (textX - status.x) - 4),
         textX, status.y + status.h / 2,
       );
+      ctx.font = "11px system-ui";
+      ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    }
+    // #272: MIDI Learn 行（LEARN ボタン＋割当ステータス）。待機中はボタン枠と文字を明るくする。
+    if (hasMidiLearnRow(def)) {
+      const info = this.midiLearnInfo?.(node.id);
+      const mr = midiLearnRowRect(node, def)!;
+      const { learn, status } = midiLearnRowLayout(mr);
+      const waiting = info?.waiting ?? false;
+      ctx.fillStyle = waiting ? "#3a3320" : "#262630";
+      roundRect(ctx, learn.x, learn.y, learn.w, learn.h, 4);
+      ctx.fill();
+      ctx.strokeStyle = waiting ? "#ffd27a" : "#4a5566";
+      ctx.lineWidth = waiting ? 2 : 1;
+      ctx.stroke();
+      ctx.fillStyle = waiting ? "#ffe6b0" : "#9ab";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "11px system-ui";
+      ctx.fillText(t("node.midi.learnBtn"), learn.x + learn.w / 2, learn.y + learn.h / 2);
+      // 割当できていない/接続に問題があるときは色を落として気付けるようにする。
+      const ok = info?.status === "ready";
+      ctx.fillStyle = waiting ? "#ffe6b0" : ok ? "#9ab" : "#e9a0a0";
+      ctx.textAlign = "left"; ctx.font = "10px system-ui";
+      ctx.fillText(
+        ellipsizeEnd(ctx, midiLearnStatusLabel(info), status.w - 8),
+        status.x + 4, status.y + status.h / 2,
+      );
+      ctx.font = "11px system-ui";
+      ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    }
+    // #272: MidiPad の押下インジケータ（叩かれているマスを光らせるだけ・クリック操作はしない）。
+    if (hasMidiPadGrid(def)) {
+      const gates = this.midiPadGates?.(node.id);
+      const { rows, cols } = def.midiPad!;
+      ctx.font = "9px system-ui";
+      for (let i = 0; i < rows * cols; i++) {
+        const pr = midiPadRect(node, def, i);
+        if (!pr) continue;
+        const on = gates?.[i] ?? false;
+        ctx.fillStyle = on ? "#3f7a58" : "#1e2228";
+        roundRect(ctx, pr.x, pr.y, pr.w, pr.h, 4);
+        ctx.fill();
+        ctx.strokeStyle = on ? "#a5f2cd" : "#3a4048";
+        ctx.lineWidth = on ? 2 : 1;
+        ctx.stroke();
+        ctx.fillStyle = on ? "#eafff3" : "#586068";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(String(i + 1), pr.x + pr.w / 2, pr.y + pr.h / 2);
+      }
       ctx.font = "11px system-ui";
       ctx.textAlign = "left"; ctx.textBaseline = "middle";
     }

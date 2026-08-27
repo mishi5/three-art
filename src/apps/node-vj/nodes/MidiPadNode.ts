@@ -7,7 +7,7 @@ import type { NodeState, NodeTypeDef } from "../graph/node-type";
 import type { ControlBus } from "../midi/control-bus";
 import { sharedMidi } from "../midi/shared-midi";
 import {
-  MIDI_PAD_COLS, MIDI_PAD_COUNT, MIDI_PAD_ROWS, MidiLearn, NoteEdge,
+  MIDI_PAD_COLS, MIDI_PAD_COUNT, MIDI_PAD_ROWS, MidiLearn, NoteEdge, type MidiLearnDisplay,
 } from "./midi-node-logic";
 
 /** step() の戻り値（出力ポート一式）。 */
@@ -28,8 +28,28 @@ export class MidiPadRuntime {
   private lastIndex = 0;
   private lastVelocity = 0;
 
+  /** #272: 直近の評価で使った割当（UI 表示用。param を UI から辿らずに済ませる）。 */
+  private lastChannel = 0;
+  private lastNumber = 36;
+
   constructor(bus?: ControlBus) {
     this.bus = bus ?? sharedMidi.bus;
+  }
+
+  /** #272: LEARN ボタン（待機の開始/解除）。 */
+  toggleLearn(): void {
+    this.learn.toggle(this.bus);
+  }
+
+  /** #272: MIDI Learn 行の表示情報（NodeEditor が毎フレーム引く）。 */
+  learnInfo(): MidiLearnDisplay {
+    return {
+      waiting: this.learn.waiting,
+      status: sharedMidi.getStatus(),
+      channel: this.lastChannel,
+      number: this.lastNumber,
+      kind: "note",
+    };
   }
 
   /** 押下中のパッド（rows×cols 分・NodeEditor のインジケータ用）。 */
@@ -50,6 +70,8 @@ export class MidiPadRuntime {
     if (learned) onLearn(learned.channel, learned.number);
     const ch = learned?.channel ?? channel;
     const base = learned?.number ?? baseNote;
+    this.lastChannel = ch;
+    this.lastNumber = base;
 
     let trigger = false;
     let bestSeq = -1;

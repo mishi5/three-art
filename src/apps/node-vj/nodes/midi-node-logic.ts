@@ -2,6 +2,25 @@
 // ノード本体（MidiCC/MidiNote/MidiPad/TriggerRouter）はここと ControlBus を組み合わせるだけにし、
 // 判断ロジックはすべてこの層でテストする。
 import type { ControlBus } from "../midi/control-bus";
+import type { MidiStatus } from "../midi/shared-midi";
+
+/**
+ * #272: MIDI Learn 行の表示情報（NodeEditor が毎フレーム引く）。
+ * 割当（channel/number）はノード param が持つが、UI から param を辿らずに済むよう
+ * ランタイムが直近の評価値をここに写して返す（BeatClock の status() と同じ流儀）。
+ */
+export interface MidiLearnDisplay {
+  /** LEARN 待機中か。 */
+  waiting: boolean;
+  /** MIDI 接続状態。 */
+  status: MidiStatus;
+  /** 割当チャンネル（0 = omni）。 */
+  channel: number;
+  /** 割当番号（CC 番号 / note 番号）。 */
+  number: number;
+  /** 表示形式の切り替え。 */
+  kind: "cc" | "note";
+}
 
 /** MidiPad のグリッド寸法（4×4）。 */
 export const MIDI_PAD_ROWS = 4;

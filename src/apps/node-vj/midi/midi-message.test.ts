@@ -19,8 +19,9 @@ describe("#272 parseMidiMessage: Control Change", () => {
   test("value 0 は 0、中間値は 0..1 の間に写像される", () => {
     expect(parseMidiMessage([0xb0, 74, 0])).toMatchObject({ value: 0 });
     const mid = parseMidiMessage([0xb0, 74, 64]);
-    expect(mid?.value).toBeGreaterThan(0.5);
-    expect(mid?.value).toBeLessThan(0.51);
+    const value = mid?.kind === "cc" ? mid.value : Number.NaN;
+    expect(value).toBeGreaterThan(0.5);
+    expect(value).toBeLessThan(0.51);
   });
 });
 

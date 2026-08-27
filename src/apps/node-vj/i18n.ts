@@ -290,6 +290,17 @@ export const CATALOG = {
   "node.screen.outputBtn": { ja: "⧉ 出力", en: "⧉ Output" },
   "node.screen.outputOn": { ja: "出力中", en: "Live" },
   "node.screen.outputOff": { ja: "未出力", en: "Off" },
+  // #272: MIDI Learn 行（LEARN ボタン＋割当ステータス）と MIDI 接続状態。
+  "node.midi.learnBtn": { ja: "LEARN", en: "LEARN" },
+  "node.midi.learning": { ja: "操作待ち…", en: "waiting..." },
+  "node.midi.assignedCc": { ja: "{ch} CC{num}", en: "{ch} CC{num}" },
+  "node.midi.assignedNote": { ja: "{ch} note{num}", en: "{ch} note{num}" },
+  "node.midi.omni": { ja: "omni", en: "omni" },
+  "node.midi.channel": { ja: "ch{n}", en: "ch{n}" },
+  "node.midi.unsupported": { ja: "MIDI 非対応", en: "MIDI unsupported" },
+  "node.midi.denied": { ja: "MIDI 権限なし", en: "MIDI denied" },
+  "node.midi.noDevice": { ja: "デバイスなし", en: "No device" },
+  "node.midi.starting": { ja: "接続中…", en: "connecting..." },
   "node.randomBtn": { ja: "🎲 ランダム", en: "🎲 Random" },
   "label.default": { ja: "ラベル", en: "Label" },
 
