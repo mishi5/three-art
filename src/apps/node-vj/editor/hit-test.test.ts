@@ -2,7 +2,11 @@ import { expect, test, describe } from "bun:test";
 import { hitTest } from "./hit-test";
 import { NodeRegistry, type NodeTypeDef } from "../graph/node-type";
 import type { NodeInstance } from "../graph/graph-doc";
-import { TITLE_H, ROW_H, NODE_WIDTH, inputPortPos, outputPortPos, paramPortPos, paramRowY } from "./layout";
+import {
+  TITLE_H, ROW_H, NODE_WIDTH, inputPortPos, outputPortPos, paramPortPos, paramRowY,
+  sceneRowRect, nodeHeight,
+} from "./layout";
+import { SceneInputNode } from "../nodes/SceneInputNode";
 
 // Number 風: 出力のみ・value は noInput（param ドットなし）
 const numberDef: NodeTypeDef = {
@@ -109,5 +113,41 @@ describe("hitTest のドット余白の通過", () => {
     const hit = hitTest([behind, front], r, out.x, out.y);
     expect(hit?.kind).toBe("port");
     expect(hit?.kind === "port" && hit.node.id).toBe("behind");
+  });
+});
+
+describe("#293 SceneInput のシーン行クリックが param に食われない（回帰）", () => {
+  // 実際のノード定義を使う。SceneInput は params が [sceneId(hidden), onsetThreshold, onsetCooldown]
+  // の順で、hidden が先頭にある唯一のノード。
+  const sceneReg = new NodeRegistry();
+  sceneReg.register(SceneInputNode);
+  const node: NodeInstance = { id: "si", type: "SceneInput", params: {}, position: { x: 0, y: 0 } };
+
+  test("シーン行の中心では param ではなく node を返す（onDown のシーン選択分岐へ届く）", () => {
+    // hitTest が param を返すと onDown はスライダのドラッグを開始して return してしまい、
+    // シーン選択のドロップダウンが開かない。
+    const sr = sceneRowRect(node, SceneInputNode)!;
+    const hit = hitTest([node], sceneReg, sr.x + sr.w / 2, sr.y + sr.h / 2);
+    expect(hit?.kind).toBe("node");
+  });
+
+  test("シーン行と最後の param 行が重ならない", () => {
+    const lastParamIndex = SceneInputNode.params.length - 1;
+    const lastParamY = paramRowY(node, SceneInputNode, lastParamIndex);
+    const sr = sceneRowRect(node, SceneInputNode)!;
+    expect(sr.y).toBeGreaterThanOrEqual(lastParamY + ROW_H / 2);
+  });
+
+  test("表示 param の行ではこれまで通り param を返す", () => {
+    // onsetThreshold（params[1]・表示 1 行目）。
+    const y = paramRowY(node, SceneInputNode, 1);
+    const hit = hitTest([node], sceneReg, NODE_WIDTH / 2, y);
+    expect(hit?.kind).toBe("param");
+    expect(hit?.kind === "param" && hit.paramIndex).toBe(1);
+  });
+
+  test("シーン行がノード高さに収まる", () => {
+    const sr = sceneRowRect(node, SceneInputNode)!;
+    expect(sr.y + sr.h).toBeLessThanOrEqual(nodeHeight(SceneInputNode));
   });
 });

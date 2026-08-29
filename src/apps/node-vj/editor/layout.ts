@@ -121,7 +121,7 @@ export function hasScreenOutputRow(def: NodeTypeDef): boolean {
 /** #282: Screen 出力トグルが追加する行数（トグルボタン＋状態ラベルの 1 行）。 */
 const SCREEN_OUTPUT_ROWS = 1;
 
-/** #154: ノード UI に行を描く param の数（hidden を除く）。末尾の hidden param 行は詰める。 */
+/** #154: ノード UI に行を描く param の数（hidden を除く）。#293: hidden はどの位置にあっても詰める。 */
 export function visibleParamCount(def: NodeTypeDef): number {
   return def.params.reduce((n, p) => (p.hidden ? n : n + 1), 0);
 }
@@ -189,9 +189,30 @@ export function outputScaleChipRect(node: NodeInstance, idx: number): { x: numbe
 }
 
 /** param 行の y 中心（行クリック判定用）。 */
+/**
+ * #293: params[i] が上から何行目に描かれるか（hidden を詰めた行番号）。
+ * hidden param は行を持たないので、それより後ろの param は詰めて並ぶ。
+ * hidden 自身を渡すと「次の表示 param と同じ行」を返すが、呼び出し側は
+ * いずれも hidden を除外してから呼ぶので実害はない。
+ */
+export function visibleParamRow(def: NodeTypeDef, i: number): number {
+  let row = 0;
+  for (let k = 0; k < i && k < def.params.length; k++) {
+    if (!def.params[k]!.hidden) row += 1;
+  }
+  return row;
+}
+
+/**
+ * params[i] の行の中心 y。
+ * #293: 絶対 index ではなく **hidden を詰めた行番号**で計算する。絶対 index で数えると、
+ * hidden が末尾以外にあるノード（SceneInput の sceneId）で表示 param が 1 行ずつ下へずれ、
+ * param 行の下に来る行（シーン行など・visibleParamCount 基準）と重なってしまう。
+ * 重なると hitTest が param を先に返し、シーン行のクリックがスライダのドラッグに食われる。
+ */
 export function paramRowY(node: NodeInstance, def: NodeTypeDef, i: number): number {
   const p = nodePos(node);
-  return p.y + TITLE_H + portRows(def) * ROW_H + i * ROW_H + ROW_H / 2;
+  return p.y + TITLE_H + portRows(def) * ROW_H + visibleParamRow(def, i) * ROW_H + ROW_H / 2;
 }
 
 export function portIndex(def: NodeTypeDef, kind: "input" | "output", portId: string): number {

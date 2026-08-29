@@ -12,6 +12,7 @@ import {
   automationSeekFraction, automationStatusLabel,
   hasBeatClockRow, beatClockRowRect, beatClockRowLayout, beatClockStatusLabel,
   hasScreenOutputRow, screenOutputRowRect, screenOutputRowLayout, screenOutputStatusLabel,
+  paramRowY,
   hasMidiLearnRow, midiLearnRowRect, midiLearnRowLayout, midiLearnStatusLabel,
   hasMidiPadGrid, midiPadGridMetrics, midiPadGridHeight, midiPadGridRect, midiPadRect,
   CATEGORY_COLORS,
@@ -584,5 +585,56 @@ describe("#272 MidiPad 押下インジケータ", () => {
   test("グリッドがノード下端からはみ出さない", () => {
     const grid = midiPadGridRect(padNode, padDef)!;
     expect(grid.y + grid.h).toBeLessThanOrEqual(nodeHeight(padDef));
+  });
+});
+
+describe("#293 hidden param が先頭・中間にあっても行がずれない", () => {
+  // SceneInput と同じ形: 先頭に hidden param、その後ろに表示 param が続く。
+  const leadingHiddenDef: NodeTypeDef = {
+    type: "LeadingHidden",
+    sceneInput: true,
+    inputs: [],
+    outputs: [{ id: "texture", label: "tex", type: "texture" }],
+    params: [
+      { id: "sceneId", label: "scene", kind: "string", default: "", hidden: true },
+      { id: "a", label: "a", kind: "number", default: 0, min: 0, max: 1 },
+      { id: "b", label: "b", kind: "number", default: 0, min: 0, max: 1 },
+    ],
+    evaluate: () => ({}),
+  };
+  const n: NodeInstance = { id: "n", type: "LeadingHidden", params: {}, position: { x: 0, y: 0 } };
+
+  test("表示 param は hidden を詰めた位置に来る（先頭に空行を作らない）", () => {
+    const top = TITLE_H + 1 * ROW_H; // portRows=1（texture 出力）
+    // params[1] が最初の表示行、params[2] が 2 行目。
+    expect(paramRowY(n, leadingHiddenDef, 1)).toBe(top + 0 * ROW_H + ROW_H / 2);
+    expect(paramRowY(n, leadingHiddenDef, 2)).toBe(top + 1 * ROW_H + ROW_H / 2);
+  });
+
+  test("param 行の下に来る行（シーン行）が最後の param 行と重ならない", () => {
+    // ここが崩れると、シーン行のクリックが param スライダのドラッグに食われる。
+    const lastParamY = paramRowY(n, leadingHiddenDef, 2);
+    const scene = sceneRowRect(n, leadingHiddenDef)!;
+    expect(scene.y).toBeGreaterThanOrEqual(lastParamY + ROW_H / 2);
+  });
+
+  test("すべての行がノード高さに収まる", () => {
+    const scene = sceneRowRect(n, leadingHiddenDef)!;
+    expect(scene.y + scene.h).toBeLessThanOrEqual(nodeHeight(leadingHiddenDef));
+  });
+
+  test("hidden が末尾のノード（従来ケース）は挙動が変わらない", () => {
+    const trailingHiddenDef: NodeTypeDef = {
+      type: "TrailingHidden",
+      inputs: [],
+      outputs: [{ id: "o", label: "o", type: "number" }],
+      params: [
+        { id: "a", label: "a", kind: "number", default: 0 },
+        { id: "assetId", label: "assetId", kind: "string", default: "", hidden: true },
+      ],
+      evaluate: () => ({}),
+    };
+    const t: NodeInstance = { id: "t", type: "TrailingHidden", params: {}, position: { x: 0, y: 0 } };
+    expect(paramRowY(t, trailingHiddenDef, 0)).toBe(TITLE_H + 1 * ROW_H + ROW_H / 2);
   });
 });
